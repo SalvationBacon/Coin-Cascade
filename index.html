@@ -1,0 +1,2637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Coin Cascade</title>
+<meta name="description" content="A pixel-art peg board that feeds a coin pusher. An incremental arcade game.">
+<meta name="theme-color" content="#11161f">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Coin Cascade">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Layout: full-screen low-res cabinet view scaled up with hard pixels; chunky pixel HUD boxes across the top. Single dark arcade look by choice. */
+:root {
+  --bg: #120c22;
+  --panel: #1d1236;
+  --fg: #f4efff;
+  --muted: #a99fc8;
+  --gold: #ffd34d;
+  --neon: #ff4fa3;
+  --cyan: #46e0ff;
+  --ink: #05030b;
+  --display: "Press Start 2P", "Courier New", monospace;
+  --body: "VT323", "Courier New", monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+#game { position: fixed; inset: 0; cursor: pointer; }
+#game canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+.box { background: var(--panel); border: 3px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge, #3a2668), 4px 4px 0 var(--ink); }
+
+.top {
+  position: fixed; top: calc(10px + env(safe-area-inset-top, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; pointer-events: none;
+}
+.marquee { font-family: var(--display); font-size: clamp(14px, 2.6vw, 22px); line-height: 1.1; color: var(--gold); text-shadow: 3px 3px 0 var(--ink), -1px -1px 0 #a05a10; }
+.marquee small { display: block; margin-top: 8px; font-size: 8px; letter-spacing: 0.1em; color: var(--neon); text-shadow: 2px 2px 0 var(--ink); }
+.counters { display: flex; gap: 10px; }
+.counter { padding: 6px 10px 4px; min-width: 70px; text-align: center; }
+.counter b { display: block; font-family: var(--display); font-size: 16px; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--fg); text-shadow: 2px 2px 0 var(--ink); }
+.counter span { display: block; margin-top: 4px; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.counter.bank b { color: var(--gold); }
+.counter.won b { color: var(--cyan); }
+
+.hint {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100vw - 32px); text-align: center; padding: 4px 14px; font-size: 19px; line-height: 1.15; color: var(--muted);
+}
+.hint kbd { font-family: var(--body); font-size: 18px; color: var(--ink); background: var(--muted); padding: 0 5px; }
+.bonusbar { margin-left: 8px; color: var(--gold); white-space: nowrap; }
+.touch-only { display: none; }
+@media (pointer: coarse) { .hint .desk { display: none; } .touch-only { display: inline; } }
+@media (max-width: 560px) { .counter { min-width: 54px; padding: 5px 6px 3px; } .counter b { font-size: 12px; } .counter span { font-size: 14px; } }
+
+.pop {
+  position: fixed; pointer-events: none; font-family: var(--display); font-size: 16px; color: var(--gold);
+  text-shadow: 3px 3px 0 var(--ink); transform: translate(-50%, -50%);
+  animation: rise 1s steps(8) forwards;
+}
+.pop.big { font-size: 22px; color: #fff; text-shadow: 3px 3px 0 var(--neon), 6px 6px 0 var(--ink); }
+.pop.lost { color: var(--muted); font-size: 10px; }
+.pop.calm { animation: fade 1s steps(4) forwards; }
+@keyframes fade { from { opacity: 1; } to { opacity: 0; } }
+@keyframes rise { from { opacity: 1; margin-top: 0; } 80% { opacity: 1; } to { opacity: 0; margin-top: -64px; } }
+
+.overlay {
+  position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8, 5, 18, 0.7);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card { padding: 20px 22px; text-align: center; max-width: 340px; }
+.card h2 { margin: 0 0 12px; font-family: var(--display); font-weight: 400; font-size: 16px; line-height: 1.4; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }
+.card p { margin: 0 0 16px; color: var(--muted); font-size: 20px; line-height: 1.15; }
+.card button {
+  font-family: var(--display); font-size: 11px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink); padding: 10px 14px; cursor: pointer;
+}
+.card button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.card button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+#loading .card h2 { color: var(--cyan); }
+.cool { height: 6px; margin: 4px auto 0; max-width: 260px; background: #0006; }
+.cool i { display: block; height: 100%; width: 100%; background: var(--gold); }
+.vault { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 8px 6px; text-align: center; pointer-events: none; }
+.vault canvas { display: block; width: 144px; height: 180px; image-rendering: pixelated; }
+.vault b { display: block; margin-top: 4px; font-family: var(--display); font-size: 14px; font-weight: 400; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); font-variant-numeric: tabular-nums; }
+.vault span { display: block; font-size: 15px; color: var(--muted); }
+/* upgrade tree */
+.treeBtn { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(88px + env(safe-area-inset-top, 0px));
+  font-family: var(--display); font-size: 11px; color: var(--ink); background: var(--gold); padding: 10px 14px; cursor: pointer; }
+.treeBtn i { position: absolute; top: -10px; right: -10px; font-style: normal; font-size: 10px; color: #fff; background: var(--neon); border: 2px solid var(--ink); padding: 3px 6px; }
+.treeBtn:focus-visible, .node:focus-visible, .treeInfo button:focus-visible, .treeClose:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.tree { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: rgba(6, 9, 15, 0.9);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); gap: 10px; }
+.treeHead { display: flex; align-items: center; gap: 12px; padding: 8px 12px; flex-wrap: wrap; }
+.treeHead h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 13px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+.treeCoins { font-family: var(--display); font-size: 11px; color: var(--fg); margin-right: auto; }
+.treeClose { font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); padding: 8px 10px; cursor: pointer; }
+.treeScroll { flex: 1; overflow: auto; min-height: 0; }
+.treeArea { position: relative; margin: 0 auto; }
+.treeArea svg { position: absolute; inset: 0; }
+.node { position: absolute; width: 104px; height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px; font-family: var(--body); color: var(--fg); background: var(--panel); border: 3px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge), 4px 4px 0 var(--ink); cursor: pointer; text-align: center; }
+.node .nm { font-family: var(--display); font-size: 8px; line-height: 1.5; color: var(--fg); }
+.node .lv { font-size: 16px; color: var(--muted); }
+.node.afford { box-shadow: inset 0 0 0 2px var(--gold), 4px 4px 0 var(--ink); }
+.node.afford .lv { color: var(--gold); }
+.node.maxed { box-shadow: inset 0 0 0 2px var(--cyan), 4px 4px 0 var(--ink); }
+.node.maxed .lv { color: var(--cyan); }
+.node.locked { cursor: default; opacity: 0.45; }
+.node.locked .nm { font-size: 18px; color: var(--muted); }
+.node.sel { outline: 3px solid var(--fg); outline-offset: 3px; }
+.treeInfo { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 10px 14px; }
+.treeInfo h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 11px; color: var(--gold); }
+.treeInfo p { margin: 0; grid-column: 1; font-size: 18px; line-height: 1.15; color: var(--muted); }
+.treeInfo .buy { grid-column: 2; grid-row: 1 / span 3; font-family: var(--display); font-size: 11px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 14px; cursor: pointer; }
+.treeInfo .buy:disabled { opacity: 0.45; cursor: default; }
+.treeInfo .tog { grid-column: 1; justify-self: start; font-family: var(--body); font-size: 16px; color: var(--fg); background: #ffffff14; border: 2px solid var(--ink); padding: 3px 8px; cursor: pointer; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { font-family: var(--display); font-size: 10px; color: var(--muted); background: #ffffff10; border: 3px solid var(--ink); padding: 8px 10px; cursor: pointer; }
+.tab.on { color: var(--ink); background: var(--gold); }
+.chips { display: flex; gap: 6px; grid-column: 1; flex-wrap: wrap; }
+.chips button { font-family: var(--body); font-size: 16px; color: var(--fg); background: #ffffff14; border: 2px solid var(--ink); padding: 2px 8px; cursor: pointer; }
+.chips button.on { color: var(--ink); background: var(--gold); }
+.rebirthBar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; flex-wrap: wrap; }
+.rebirthBar p { margin: 0; flex: 1; min-width: 220px; font-size: 18px; line-height: 1.15; color: var(--muted); }
+.rebBtn { font-family: var(--display); font-size: 11px; color: var(--ink); background: var(--neon); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 14px; cursor: pointer; }
+.rebBtn:disabled { opacity: 0.45; cursor: default; }
+.flipBtn { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(142px + env(safe-area-inset-top, 0px));
+  font-family: var(--display); font-size: 11px; color: var(--fg); background: var(--panel); padding: 10px 14px; cursor: pointer; }
+.flip, .wheelPanel { position: fixed; z-index: 6; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(250px + env(safe-area-inset-top, 0px)); width: 260px;
+  padding: 10px 12px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.flipHead { display: flex; width: 100%; align-items: center; justify-content: space-between; }
+.flipHead h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 10px; color: var(--gold); }
+#flipCoin { width: 128px; height: 168px; image-rendering: pixelated; }
+.flipPlay { margin: 0; font-family: var(--display); font-size: 12px; color: var(--gold); }
+.flipMsg { margin: 0; font-size: 17px; line-height: 1.15; color: var(--muted); min-height: 40px; }
+.stakes { display: flex; gap: 6px; }
+.stakes button { font-family: var(--body); font-size: 17px; color: var(--fg); background: #ffffff10; border: 2px solid var(--ink); padding: 2px 8px; cursor: pointer; }
+.stakes button.on { color: var(--ink); background: var(--gold); }
+.stakes button:disabled { opacity: 0.4; cursor: default; }
+.calls { display: flex; gap: 8px; width: 100%; }
+.call, .cash { flex: 1; font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 6px; cursor: pointer; }
+.cash { width: 100%; background: var(--cyan); }
+.call:disabled, .cash:disabled { opacity: 0.4; cursor: default; }
+.wheelBtn { top: calc(196px + env(safe-area-inset-top, 0px)); }
+.wheelBtn.ready { color: var(--ink); background: var(--gold); }
+.wheelPanel { width: 260px; padding: 10px 12px 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+#wheelCanvas { width: 200px; height: 200px; image-rendering: pixelated; }
+.reels { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); top: calc(76px + env(safe-area-inset-top, 0px)); padding: 6px 8px; text-align: center; pointer-events: none; }
+#reelCanvas { display: block; width: 168px; height: 60px; image-rendering: pixelated; }
+.reels p { margin: 4px 0 0; font-size: 16px; color: var(--muted); }
+.reels.win p { color: var(--gold); }
+.flipBtn:focus-visible, .tab:focus-visible, .call:focus-visible, .cash:focus-visible, .stakes button:focus-visible, .rebBtn:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .flipBtn { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+  .flip { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: auto; top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 12px; max-width: 980px; margin: 0 auto; padding: 4px; }
+.card { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 3px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge), 4px 4px 0 var(--ink); }
+.card h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 10px; line-height: 1.5; color: var(--gold); }
+.card p { margin: 0; font-size: 17px; line-height: 1.15; color: var(--muted); }
+.card p b { font-weight: 400; color: var(--fg); }
+.card.done { box-shadow: inset 0 0 0 2px var(--cyan), 4px 4px 0 var(--ink); }
+.card.done h3 { color: var(--cyan); }
+.card.locked { opacity: 0.5; }
+.card.active { box-shadow: inset 0 0 0 2px var(--neon), 4px 4px 0 var(--ink); }
+.prog { height: 8px; background: #0006; border: 2px solid var(--ink); }
+.prog i { display: block; height: 100%; background: var(--gold); }
+.card.done .prog i { background: var(--cyan); }
+.card button { align-self: flex-start; font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 8px 10px; cursor: pointer; }
+.card button.quit { background: #ffffff20; color: var(--fg); }
+.card button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.card .code { width: 100%; min-height: 64px; resize: vertical; font-family: var(--body); font-size: 14px; line-height: 1.1; color: var(--fg); background: #0008; border: 2px solid var(--ink); padding: 6px; overflow-wrap: anywhere; }
+.card .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.card .vol { font-size: 17px; color: var(--muted); }
+.card input[type=range] { width: 100%; accent-color: var(--gold); }
+.swatches { display: flex; gap: 4px; }
+.swatches i { width: 28px; height: 20px; border: 2px solid var(--ink); }
+.coinRow { display: flex; gap: 6px; }
+.coinRow canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+.card .using { background: var(--cyan); }
+.listHead { margin: 8px 0 0; font-family: var(--display); font-weight: 400; font-size: 11px; color: var(--fg); }
+.listNote { max-width: 980px; margin: 0 auto 10px; padding: 0 4px; font-size: 18px; line-height: 1.15; color: var(--muted); }
+.placeBanner { position: fixed; z-index: 8; left: 50%; transform: translateX(-50%); top: calc(84px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; max-width: calc(100vw - 32px); font-size: 18px; line-height: 1.15; color: var(--fg); }
+.title { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(6, 9, 15, 0.78);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.titleInner { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; width: min(420px, 100%); }
+.logo { margin: 0; display: flex; flex-direction: column; gap: 10px; font-family: var(--display); font-weight: 400; font-size: clamp(32px, 9vw, 64px); line-height: 1;
+  color: var(--gold); text-shadow: 4px 4px 0 var(--ink), 8px 8px 0 #00000066; }
+.logo span:last-child { color: var(--fg); }
+.tag { margin: 0; font-family: var(--display); font-size: 10px; letter-spacing: 0.12em; color: var(--neon); }
+.insert { margin: 6px 0; font-family: var(--display); font-size: 12px; color: var(--gold); animation: blink 1.2s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .insert { animation: none; } }
+.menu, .loadBox { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.mbtn { font-family: var(--display); font-size: 13px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 12px; cursor: pointer; }
+.mbtn.quiet, .mbtn.alt { background: var(--panel); color: var(--fg); }
+.mbtn:hover:not(:disabled), .mbtn:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.mbtn:disabled { opacity: 0.4; cursor: default; }
+.loadBox label { font-size: 18px; color: var(--muted); }
+.loadBox textarea { width: 100%; font-family: var(--body); font-size: 14px; color: var(--fg); background: #0008; border: 2px solid var(--ink); padding: 6px; resize: vertical; }
+.loadBox input[type=file] { font-family: var(--body); font-size: 16px; color: var(--muted); }
+.lrow { display: flex; gap: 10px; } .lrow .mbtn { flex: 1; }
+.tInfo { margin: 0; min-height: 20px; font-size: 18px; color: var(--muted); }
+.ver { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); font-family: var(--display); font-size: 9px; color: var(--muted); }
+.toast { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); top: calc(140px + env(safe-area-inset-top, 0px)); padding: 10px 16px; text-align: center; pointer-events: none; max-width: calc(100vw - 32px); }
+.toast b { display: block; font-family: var(--display); font-weight: 400; font-size: 12px; color: var(--cyan); text-shadow: 2px 2px 0 var(--ink); }
+.toast span { font-size: 18px; color: var(--fg); }
+.eventBanner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(84px + env(safe-area-inset-top, 0px)); padding: 6px 14px; text-align: center; pointer-events: none; }
+.eventBanner b { display: block; font-family: var(--display); font-weight: 400; font-size: 13px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+.eventBanner span { font-size: 17px; color: var(--fg); }
+@media (max-width: 760px) {
+  .treeBtn { top: auto; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .eventBanner { top: calc(150px + env(safe-area-inset-top, 0px)); }
+}
+.shop { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(84px + env(safe-area-inset-top, 0px));
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px)); width: 280px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.shopHead { display: flex; align-items: center; justify-content: space-between; }
+.shop h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 12px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+.shopClose, .shopToggle { display: none; }
+#shopList { display: flex; flex-direction: column; gap: 8px; }
+.up { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; text-align: left; width: 100%; padding: 8px 10px;
+  font-family: var(--body); font-size: 17px; line-height: 1.1; color: var(--fg); background: #ffffff0d; border: 2px solid var(--ink); cursor: pointer; }
+.up:hover:not(:disabled) { background: #ffffff1f; }
+.up:focus-visible { outline: 3px solid var(--cyan); outline-offset: 1px; }
+.up:disabled { cursor: default; opacity: 0.55; }
+.up .nm { font-family: var(--display); font-size: 9px; line-height: 1.6; color: var(--gold); }
+.up .lv { font-size: 15px; color: var(--muted); text-align: right; }
+.up .ds { grid-column: 1 / -1; color: var(--muted); }
+.up .cs { grid-column: 1 / -1; font-family: var(--display); font-size: 10px; color: var(--fg); }
+.up.maxed .cs { color: var(--cyan); }
+.up.toggle { background: #ffffff14; }
+.reset { margin-top: auto; padding: 6px; font-family: var(--body); font-size: 16px; color: var(--muted); background: none; border: 2px dashed #ffffff33; cursor: pointer; }
+.reset.armed { color: #ff8a8a; border-color: #ff8a8a; }
+@media (max-width: 760px) {
+  .vault { top: calc(78px + env(safe-area-inset-top, 0px)); bottom: auto; padding: 5px; }
+  .vault canvas { width: 96px; height: 120px; }
+  .vault b { font-size: 11px; } .vault span { font-size: 13px; }
+  .shopToggle { display: block; position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 12px; cursor: pointer; }
+  .shop { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); top: auto; width: auto;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 62vh; z-index: 5; }
+  .shop:not(.open) { display: none; }
+  .shopClose { display: block; font-family: var(--display); font-size: 14px; color: var(--fg); background: none; border: 0; padding: 4px 8px; cursor: pointer; }
+}
+#loading.failed .card h2 { color: var(--neon); }
+#loading.failed .bar { display: none; }
+#loadMsg { overflow-wrap: anywhere; }
+.bar { height: 12px; border: 3px solid var(--ink); background: #0006; }
+.bar i { display: block; height: 100%; width: 5%; background: var(--gold); }
+
+/* ---- phone layout: every control lives in the empty strip under the machine ---- */
+@media (max-width: 760px) {
+  .vault { top: auto; left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 4px 4px 3px; }
+  .vault canvas { width: 96px; height: 120px; }
+  .vault b { font-size: 11px; margin-top: 2px; }
+  .vault span { display: none; }
+  .hint { left: 122px; right: 112px; transform: none; max-width: none; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 4px 6px; font-size: 15px; }
+  .hint .bonusbar { display: block; margin: 2px 0 0; white-space: normal; }
+  .treeBtn { top: auto; right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); width: 94px; padding: 10px 4px; font-size: 9px; }
+  .flipBtn { top: auto; right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(62px + env(safe-area-inset-bottom, 0px)); width: 94px; padding: 10px 4px; font-size: 9px; }
+  .wheelBtn { bottom: calc(114px + env(safe-area-inset-bottom, 0px)); }
+  .wheelPanel { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: auto; top: auto; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #wheelCanvas { width: 160px; height: 160px; }
+  .reels.idle { display: none; } /* on phones the reels only show while spinning */
+  .reels { top: calc(112px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); padding: 4px 6px; }
+  #reelCanvas { width: 126px; height: 45px; }
+  .reels p { font-size: 14px; }
+  .flip { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: auto; top: auto;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 8px 10px 10px; gap: 6px; display: grid; grid-template-columns: 76px 1fr; align-items: center; text-align: left; }
+  .flip[hidden] { display: none !important; }
+  .flipHead, .stakes, .calls, .cash { grid-column: 1 / -1; }
+  #flipCoin { width: 64px; height: 84px; grid-row: span 2; }
+  .flipMsg { font-size: 15px; min-height: 0; }
+  .eventBanner { top: calc(118px + env(safe-area-inset-top, 0px)); }
+}
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+
+<div class="top">
+  <div class="marquee">Coin Cascade<small>PUSH YOUR LUCK</small></div>
+  <div class="counters">
+    <div class="counter bank box"><b id="bank">0</b><span>Coins</span></div>
+    <div class="counter won box"><b id="earned">0</b><span>Earned</span></div>
+    <div class="counter box"><b id="regen">FULL</b><span>Regen</span></div>
+    <div class="counter box" id="tokBox" hidden><b id="tokens">0</b><span>Tokens</span></div>
+    <div class="counter box" id="gemBox" hidden><b id="gems">0</b><span>Gems</span></div>
+  </div>
+</div>
+
+<div class="hint box" id="hint">
+  <span class="desk">Move the mouse to aim · <kbd>Click</kbd> or <kbd>Space</kbd> to drop · hold to keep dropping</span>
+  <span class="touch-only">Tap or hold where you want to drop</span>
+  <span class="bonusbar" id="bonusbar">×5 in the middle · ×3 on the edges</span>
+  <div class="cool" aria-hidden="true"><i id="coolBar"></i></div>
+</div>
+
+<div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the vault</span></div>
+
+<button class="treeBtn box" id="treeBtn" type="button">UPGRADES<i id="treeBadge" hidden>!</i></button>
+<button class="flipBtn box" id="flipBtn" type="button" hidden>FLIP</button>
+<button class="flipBtn wheelBtn box" id="wheelBtn" type="button" hidden>WHEEL</button>
+<div class="reels box" id="reels" hidden><canvas id="reelCanvas" width="84" height="30"></canvas><p id="reelMsg">Hit ×5 to spin</p></div>
+<div class="wheelPanel box" id="wheel" hidden>
+  <div class="flipHead"><h2>Prize Wheel</h2><button class="treeClose" id="wheelClose" type="button">CLOSE</button></div>
+  <canvas id="wheelCanvas" width="200" height="200"></canvas>
+  <p class="flipMsg" id="wheelMsg"></p>
+  <button class="call" id="wheelSpin" type="button">SPIN</button>
+</div>
+<div class="flip box" id="flip" hidden>
+  <div class="flipHead"><h2>Double or Nothing</h2><button class="treeClose" id="flipClose" type="button">CLOSE</button></div>
+  <canvas id="flipCoin" width="64" height="84"></canvas>
+  <p class="flipPlay" id="flipPlay">Bet: 1</p>
+  <p class="flipMsg" id="flipMsg">Bet coins, call heads or tails, and keep doubling. Cash out before you miss.</p>
+  <div class="stakes" id="stakes"></div>
+  <div class="calls"><button class="call" id="callH" type="button">HEADS</button><button class="call" id="callT" type="button">TAILS</button></div>
+  <button class="cash" id="cashOut" type="button" disabled>CASH OUT</button>
+</div>
+<div class="placeBanner box" id="placeBanner" hidden><span id="placeText"></span><button class="treeClose" id="placeDone" type="button">DONE</button></div>
+<div class="title" id="title" hidden>
+  <div class="titleInner">
+    <h1 class="logo"><span>COIN</span><span>CASCADE</span></h1>
+    <p class="tag">A PEG-BOARD COIN PUSHER</p>
+    <p class="insert" id="insert">INSERT COIN</p>
+    <div class="menu" id="menu" role="menu">
+      <button class="mbtn" id="tContinue" type="button" role="menuitem">CONTINUE</button>
+      <button class="mbtn" id="tNew" type="button" role="menuitem">NEW GAME</button>
+      <button class="mbtn" id="tLoad" type="button" role="menuitem">LOAD SAVE</button>
+      <button class="mbtn alt" id="tCopy" type="button" role="menuitem">COPY SAVE CODE</button>
+      <button class="mbtn alt" id="tMusic" type="button" role="menuitem">MUSIC: ON</button>
+      <button class="mbtn alt" id="tMini" type="button" role="menuitem" hidden>MINI WINDOW</button>
+      <button class="mbtn alt" id="tInstall" type="button" role="menuitem" hidden>INSTALL APP</button>
+    </div>
+    <div class="loadBox" id="loadBox" hidden>
+      <label for="tCode">Paste a save code, or pick a save file.</label>
+      <textarea id="tCode" rows="4" spellcheck="false"></textarea>
+      <input id="tFile" type="file" accept=".txt,.json,text/plain">
+      <div class="lrow"><button class="mbtn" id="tLoadGo" type="button">LOAD</button><button class="mbtn quiet" id="tBack" type="button">BACK</button></div>
+    </div>
+    <p class="tInfo" id="tInfo"></p>
+  </div>
+  <span class="ver" id="ver"></span>
+</div>
+<div class="overlay" id="away" hidden><div class="card box"><h2>In the mini window</h2><p>Coin Cascade is running in its small window, so this one is paused. Close the mini window, or bring it back here.</p><button id="awayBack" type="button">BRING IT BACK HERE</button></div></div>
+<div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
+<div class="toast box" id="toast" hidden><b id="toastTitle"></b><span id="toastText"></span></div>
+<div class="eventBanner box" id="eventBanner" hidden><b id="evName"></b><span id="evDesc"></span></div>
+<div class="tree" id="tree" hidden>
+  <div class="treeHead box">
+    <div class="tabs" role="tablist"><button class="tab on" id="tabMain" type="button" role="tab">MACHINE</button><button class="tab" id="tabReb" type="button" role="tab" hidden>REBIRTH</button><button class="tab" id="tabAsc" type="button" role="tab" hidden>ASCEND</button><button class="tab" id="tabCh" type="button" role="tab" hidden>CHALLENGES</button><button class="tab" id="tabGoals" type="button" role="tab">GOALS</button><button class="tab" id="tabStats" type="button" role="tab">STATS</button><button class="tab" id="tabStyle" type="button" role="tab">STYLE</button><button class="tab" id="tabSet" type="button" role="tab">SETTINGS</button></div><span class="treeCoins" id="treeCoins"></span>
+    <button class="treeClose" id="treeClose" type="button">CLOSE</button>
+  </div>
+  <div class="rebirthBar box" id="rebirthBar" hidden><p id="rebText"></p><button class="rebBtn" id="rebBtn" type="button">REBIRTH</button></div>
+  <div class="treeScroll" id="treeScroll"><div class="treeArea" id="treeArea"></div></div>
+  <div class="treeInfo box" id="treeInfo"></div>
+</div>
+
+<div class="overlay" id="loading"><div class="card box"><h2 id="loadTitle">Warming up</h2><p id="loadMsg">Loading the 3D engine…</p><div class="bar" id="loadBarWrap"><i id="loadBar"></i></div></div></div>
+
+<script>
+// Shows a readable message on the loading card if anything goes wrong while starting up.
+window.ccFail = function (msg) {
+  var el = document.getElementById("loading");
+  if (!el || el.hidden) return;
+  el.classList.add("failed");
+  document.getElementById("loadTitle").textContent = "Couldn't start";
+  document.getElementById("loadMsg").textContent = msg;
+};
+window.addEventListener("error", function (e) { ccFail(friendly(e.message || String(e.error || "Unknown error"))); });
+window.addEventListener("unhandledrejection", function (e) { ccFail(friendly(String((e.reason && e.reason.message) || e.reason))); });
+function friendly(m) {
+  if (/WebGL/i.test(m)) return "Your browser couldn't start 3D graphics (WebGL). Try turning on hardware acceleration in your browser settings, updating your graphics driver, or using Chrome or Edge. (" + m + ")";
+  if (/import|fetch|module|load/i.test(m)) return "The game engine couldn't be downloaded. An ad blocker or network filter may be blocking cdn.jsdelivr.net and unpkg.com. Try allowing them, or a different network. (" + m + ")";
+  return "Something went wrong: " + m;
+}
+</script>
+<script type="module">
+// Load each library from jsDelivr, falling back to unpkg if that's blocked.
+async function loadFrom(urls) {
+  let err;
+  for (const u of urls) { try { return await import(u); } catch (e) { err = e; } }
+  throw new Error("Couldn't load module: " + (err && err.message));
+}
+const setLoad = (msg, frac) => {
+  document.getElementById("loadMsg").textContent = msg;
+  if (frac != null) document.getElementById("loadBar").style.width = Math.round(5 + frac * 95) + "%";
+};
+const nextFrame = () => new Promise(r => setTimeout(r, 0));
+
+// The GitHub Pages copy ships its own copies of the libraries (and works offline); the artifact uses the CDNs.
+const HOSTED = !!document.querySelector('link[rel="manifest"]');
+const local = f => HOSTED ? [new URL("lib/" + f, location.href).href] : [];
+setLoad("Loading the 3D engine…", 0);
+const THREE = await loadFrom([
+  ...local("three.module.js"),
+  "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "https://unpkg.com/three@0.160.0/build/three.module.js",
+]);
+setLoad("Loading the physics engine…", 0.1);
+const RAPIER = (await loadFrom([
+  ...local("rapier.es.js"),
+  "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
+  "https://unpkg.com/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
+])).default;
+await RAPIER.init();
+setLoad("Setting up the machine…", 0.25);
+{
+  const probe = document.createElement("canvas");
+  if (!probe.getContext("webgl2")) throw new Error("WebGL 2 is not available in this browser");
+}
+
+// ---------- Palettes ----------
+const PALETTES = {
+  casino: { name: "Casino Royale", bg: "#0e1a14", panel: "#14261c", panelEdge: "#2c4a36", muted: "#a9c2b0",
+    felt: "#1f6b45", felt2: "#195a3a", metal: "#d9c08a", metalDark: "#7a5c2e", glass: "#cfe8d8", ambient: "#a09070",
+    accentA: "#ff5a4f", accentB: "#ffd36b", trim: "#e8b84a", cabinet: "#5a1a1e", cabinet2: "#3a1014",
+    signBg: "#3a0e12", signStripe: "#4a1418", signShadow: "#2a0800", bulbOn: "#fff2c0", bulbOff: "#6a3a10",
+    gold: "#ffcf4a", text1: "#ffcf4a", text2: "#fff2d8",
+    silver: { base: "#e6e2d6", mid: "#b8b2a2", rim: "#7a7462", hi: "#ffffff", ink: "#9a927e" }, silverSide: "#a8a290" },
+  seaside: { name: "Seaside Pier", bg: "#0f2433", panel: "#163246", panelEdge: "#2f5a74", muted: "#a6c6d6",
+    felt: "#1f8f9a", felt2: "#1a7b85", metal: "#f2ead8", metalDark: "#8a7e68", glass: "#bff0ff", ambient: "#90b0c0",
+    accentA: "#ff7a5c", accentB: "#7fe3ff", trim: "#ffd27a", cabinet: "#e8e0cc", cabinet2: "#b8ac90",
+    signBg: "#123c5a", signStripe: "#184a6c", signShadow: "#06202e", bulbOn: "#fff6d0", bulbOff: "#6a5a30",
+    gold: "#ffd04a", text1: "#ffd04a", text2: "#ff8a6c",
+    silver: { base: "#e4ecf2", mid: "#aebccc", rim: "#6a7c90", hi: "#ffffff", ink: "#8a9cb0" }, silverSide: "#9eb0c2" },
+  candy: { name: "Candy Pop", bg: "#2a1838", panel: "#3a2250", panelEdge: "#6a4a8a", muted: "#e6c8f0",
+    felt: "#ff9ec7", felt2: "#f58ab8", metal: "#bff3e0", metalDark: "#5aa894", glass: "#ffe0f0", ambient: "#c0a0d0",
+    accentA: "#ff5fb0", accentB: "#7ff0d0", trim: "#fff07a", cabinet: "#9a7ae8", cabinet2: "#6a4ac0",
+    signBg: "#5a2a8a", signStripe: "#6a34a0", signShadow: "#2a0a4a", bulbOn: "#ffffff", bulbOff: "#8a5aa0",
+    gold: "#ffd84a", text1: "#fff07a", text2: "#7ff0d0",
+    silver: { base: "#f4eefa", mid: "#c8bce0", rim: "#8a7aaa", hi: "#ffffff", ink: "#a898c8" }, silverSide: "#b4a8d0" },
+  sunset: { name: "Sunset Boardwalk", bg: "#1e1024", panel: "#2c1632", panelEdge: "#5a2c50", muted: "#e0b8c0",
+    felt: "#c4542e", felt2: "#ac4626", metal: "#ffcf8a", metalDark: "#8a4a2a", glass: "#ffc8a0", ambient: "#b07080",
+    accentA: "#ff6a3c", accentB: "#ffb43c", trim: "#ffe07a", cabinet: "#3a1a40", cabinet2: "#28102c",
+    signBg: "#2a0e30", signStripe: "#3a1440", signShadow: "#1a0410", bulbOn: "#fff0b0", bulbOff: "#6a3018",
+    gold: "#ffd24a", text1: "#ffd24a", text2: "#ff8a5c",
+    silver: { base: "#efe4e0", mid: "#c2aeaa", rim: "#806a6a", hi: "#ffffff", ink: "#a08a88" }, silverSide: "#b09a96" },
+};
+Object.assign(PALETTES, {
+  carpet: { name: "Blacklight Carpet", bg: "#07080d", panel: "#10131c", panelEdge: "#2a3550", muted: "#9fb0c8",
+    felt: "#121a24", felt2: "#0d141c", feltSpecks: ["#ff3d8b", "#2fe6ff", "#ffe14a", "#5cff7a"],
+    metal: "#c9d2dc", metalDark: "#4a5566", glass: "#a0e8ff", ambient: "#8090b0",
+    accentA: "#ff3d8b", accentB: "#2fe6ff", trim: "#ffe14a", cabinet: "#15161c", cabinet2: "#0c0d12",
+    signBg: "#090a0f", signStripe: "#1c2433", signShadow: "#07080d", bulbOn: "#ffffff", bulbOff: "#3a4050",
+    gold: "#ffd24a", text1: "#ffe14a", text2: "#2fe6ff", backdrop: "carpet",
+    silver: { base: "#e6ebf2", mid: "#a8b4c4", rim: "#5e6a7c", hi: "#ffffff", ink: "#8090a6" }, silverSide: "#9aa6b8" },
+  y2k: { name: "Y2K Blue", bg: "#08152e", panel: "#0f2348", panelEdge: "#3a6ac0", muted: "#a8c4ec",
+    felt: "#1f56c4", felt2: "#1a4aab", metal: "#e4ecf6", metalDark: "#7d8ea8", glass: "#cfe9ff", ambient: "#90a8d0",
+    accentA: "#ff9a1f", accentB: "#5fd8ff", trim: "#ffffff", cabinet: "#dfe6f0", cabinet2: "#a9b6c8",
+    signBg: "#123aa8", signStripe: "#1b48c0", signShadow: "#061440", bulbOn: "#ffffff", bulbOff: "#506a9a",
+    gold: "#ffd24a", text1: "#ffffff", text2: "#ffd24a", backdrop: "y2k",
+    silver: { base: "#eef3fa", mid: "#b4c2d6", rim: "#68788f", hi: "#ffffff", ink: "#8a9ab2" }, silverSide: "#a4b4c8" },
+  tickets: { name: "Prize Counter", bg: "#120d08", panel: "#2a1a10", panelEdge: "#7a2a24", muted: "#f0c8b0",
+    felt: "#c42a2a", felt2: "#ac2424", metal: "#f2d060", metalDark: "#8a6a20", glass: "#ffe8c0", ambient: "#c09080",
+    accentA: "#ffd030", accentB: "#ffffff", trim: "#ffd030", cabinet: "#f2b81c", cabinet2: "#b8840e",
+    signBg: "#b81f24", signStripe: "#a01a1f", signShadow: "#3a0606", bulbOn: "#fff6c0", bulbOff: "#7a4a10",
+    gold: "#ffd24a", text1: "#ffffff", text2: "#ffd030", backdrop: "tickets",
+    silver: { base: "#f2ede6", mid: "#c4bcb0", rim: "#7c7468", hi: "#ffffff", ink: "#9a9286" }, silverSide: "#b0a89c" },
+  lime: { name: "Lime & Chrome", bg: "#0b0d0b", panel: "#151a15", panelEdge: "#3d5a20", muted: "#b8d0a8",
+    felt: "#2b2f33", felt2: "#24282c", metal: "#d8dde2", metalDark: "#5a6168", glass: "#d0ffb0", ambient: "#909890",
+    accentA: "#8cf000", accentB: "#c8ff60", trim: "#8cf000", cabinet: "#1a1d20", cabinet2: "#101214",
+    signBg: "#131619", signStripe: "#20262a", signShadow: "#0b0d0b", bulbOn: "#e6ffb0", bulbOff: "#2e3a20",
+    gold: "#ffd24a", text1: "#8cf000", text2: "#ffffff", backdrop: "lime",
+    silver: { base: "#eceff2", mid: "#b6bcc2", rim: "#6a7078", hi: "#ffffff", ink: "#8c929a" }, silverSide: "#a8aeb4" },
+});
+Object.assign(PALETTES, {
+  flatmint: { name: "Flat Mint", bg: "#dfe7ea", panel: "#22303a", panelEdge: "#3a5260", muted: "#c6d6dc",
+    felt: "#3ccfa0", felt2: "#36bf93", metal: "#2b3440", metalDark: "#c8d2d8", glass: "#ffffff", ambient: "#c0c8cc",
+    accentA: "#ff6b5b", accentB: "#3ccfa0", trim: "#ff6b5b", cabinet: "#f4f6f7", cabinet2: "#cfd8dc",
+    signBg: "#f7f5f0", signStripe: "#ece8df", signShadow: "#ffffff", bulbOn: "#ff6b5b", bulbOff: "#d8dee2",
+    gold: "#ffc93c", text1: "#ff6b5b", text2: "#ffffff", backdrop: "plain",
+    silver: { base: "#eef2f4", mid: "#b8c4cc", rim: "#6c7a86", hi: "#ffffff", ink: "#8a98a4" }, silverSide: "#a6b2bc" },
+  skygrass: { name: "Sky & Grass", bg: "#bfe6f7", panel: "#1f3b52", panelEdge: "#3d6a8a", muted: "#cfe8f4",
+    felt: "#5cc04a", felt2: "#52b042", metal: "#ffffff", metalDark: "#a86a34", glass: "#ffffff", ambient: "#c8d8e0",
+    accentA: "#ffd23f", accentB: "#ffffff", trim: "#ffd23f", cabinet: "#c98a4b", cabinet2: "#9a6634",
+    signBg: "#6ec6f0", signStripe: "#62b8e4", signShadow: "#3a2410", bulbOn: "#fff6c0", bulbOff: "#9a6634",
+    gold: "#ffc93c", text1: "#ffd23f", text2: "#ffffff", backdrop: "clouds",
+    silver: { base: "#f2f4f6", mid: "#bcc4cc", rim: "#6e7882", hi: "#ffffff", ink: "#8e98a2" }, silverSide: "#aab2ba" },
+  midnight: { name: "Midnight Flat", bg: "#11161f", panel: "#1a2230", panelEdge: "#33415a", muted: "#a9b6c8",
+    felt: "#1f8a8a", felt2: "#1b7a7a", metal: "#f5b83d", metalDark: "#3a4250", glass: "#cfe0ff", ambient: "#8090a8",
+    accentA: "#f5b83d", accentB: "#f5b83d", trim: "#f5b83d", cabinet: "#2a2f38", cabinet2: "#1c2028",
+    signBg: "#1d2b44", signStripe: "#22324e", signShadow: "#11161f", bulbOn: "#ffe2a0", bulbOff: "#3a4250",
+    gold: "#ffc93c", text1: "#f5b83d", text2: "#ffffff", backdrop: "plain",
+    silver: { base: "#eceff3", mid: "#b2bac6", rim: "#667080", hi: "#ffffff", ink: "#8690a0" }, silverSide: "#a4acb8" },
+  coral: { name: "Coral Pop", bg: "#1b2433", panel: "#24304a", panelEdge: "#40557a", muted: "#c4d0e4",
+    felt: "#24365a", felt2: "#203050", metal: "#ffffff", metalDark: "#e2d2b8", glass: "#fff0e0", ambient: "#a8b0c0",
+    accentA: "#2ec4b6", accentB: "#ffffff", trim: "#2ec4b6", cabinet: "#f6e7cf", cabinet2: "#d8c4a4",
+    signBg: "#ff8a65", signStripe: "#f57c58", signShadow: "#10202a", bulbOn: "#ffffff", bulbOff: "#d8c4a4",
+    gold: "#ffc93c", text1: "#ffffff", text2: "#2ec4b6", backdrop: "dots",
+    silver: { base: "#f4f2ee", mid: "#c6c0b6", rim: "#7c766c", hi: "#ffffff", ink: "#9c968c" }, silverSide: "#b4aea4" },
+});
+const chosenTheme = (() => { try { return (JSON.parse(localStorage.getItem("cc_settings")) || {}).theme; } catch { return null; } })();
+const P = PALETTES[(location.hash.match(/p-(\w+)/) || [])[1]] || PALETTES[chosenTheme] || PALETTES.midnight;
+const hex = c => parseInt(c.slice(1), 16);
+{
+  const r = document.documentElement.style;
+  r.setProperty("--bg", P.bg); r.setProperty("--panel", P.panel); r.setProperty("--panel-edge", P.panelEdge);
+  r.setProperty("--muted", P.muted); r.setProperty("--gold", P.text1); r.setProperty("--neon", P.accentA); r.setProperty("--cyan", P.text2);
+}
+
+// ---------- Machine dimensions ----------
+const HALF_W = 3.5;          // half the width of the playfield
+const FLOOR_FRONT = 2.0;     // coins past this edge fall into the prize tray (a short shelf, so the pile tips over sooner)
+const WALL_END = 1.0;        // side walls stop here, so coins near the edge can slip off the sides
+const PUSH_TOP = 0.82;       // height of the pusher shelf
+const PUSH_HALF_D = 3.8;
+const PUSH_BACK = -4.4, PUSH_FWD = -2.5, PUSH_PERIOD = 3.0; // pusher centre travel; period = seconds per stroke before upgrades
+const BACK_WALL_Z = -3.4;  // short upper shelf so dropped coins spill onto the pile quickly
+const COIN_R = 0.3, COIN_H = 0.11;
+const GOLD_R = 0.42, GOLD_H = 0.14;
+const STEP = 1 / 60;         // physics step
+
+// ---------- Save data (per-browser convenience only) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+// Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
+const SAVE_KEY = "cc_save_v4";
+const VERSION = "1.1.0";
+let titleOpen = false, welcomeReady = false; // title screen state (see "Title screen")
+const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
+const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
+const saved = store.get(SAVE_KEY, null);
+let bank = saved ? saved.bank : 0, earned = saved ? saved.earned : 0, dropped = saved ? saved.dropped : 0;
+const ups = (saved && saved.up) || {};
+let autoOn = saved ? saved.autoOn !== false : true;
+// rebirth progress: tokens and the rebirth tree survive a rebirth; runEarned resets
+let welcome = null; // filled in on load when you've been away
+let tokens = (saved && saved.tokens) || 0, rebirths = (saved && saved.rebirths) || 0;
+// ascension: the second reset layer. Gems and the ascension tree are kept forever.
+let gems = (saved && saved.gems) || 0, ascensions = (saved && saved.ascensions) || 0;
+let tokensAsc = (saved && saved.tokensAsc) || 0, gemsTotal = (saved && saved.gemsTotal) || 0;
+const aups = (saved && saved.aup) || {};
+let autoRebOn = saved ? saved.autoRebOn !== false : true, autoRebAt = (saved && saved.autoRebAt) || 5;
+let wheelCharge = (saved && saved.wheelCharge) || 0, reelQueue = 0;
+let runTime = (saved && saved.runTime) || 0, incomeRate = (saved && saved.incomeRate) || 0, rateEarn = 0, rateT = 0;
+const al = id => aups[id] || 0;
+let runEarned = saved ? (saved.runEarned != null ? saved.runEarned : saved.earned) : 0;
+const rups = (saved && saved.rup) || {};
+let inPlay = (saved && saved.inPlay) || 0;
+// milestones + challenges (permanent; survive rebirths)
+const stats = Object.assign({ jackpots: 0, bestStreak: 0, maxBank: 0 }, (saved && saved.stats) || {});
+const msDone = (saved && saved.msDone) || {}, chDone = (saved && saved.chDone) || {};
+let chActive = (saved && saved.chActive) || null;
+const msHas = id => !!msDone[id], chHas = id => !!chDone[id], chOn = id => chActive === id;
+const pegMap = (saved && saved.pegs) || {}; // "row:index" -> "gold" | "split" | "double"
+const $ = id => document.getElementById(id);
+// numbers: 9999, 12.3K, 4.56M, 7.89B, 1.23T, ... then scientific (1.23e48) past decillions
+const SUFFIX = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+const fmt = n => {
+  if (!isFinite(n)) return "∞";
+  if (n < 10000) return String(Math.floor(n));
+  let e = Math.floor(Math.log10(n) / 3), v = n / 10 ** (3 * e);
+  let txt = v < 100 ? v.toFixed(v < 10 ? 2 : 1) : v.toFixed(0);
+  if (+txt >= 100 && txt.includes(".")) txt = (+txt).toFixed(0); // 99,999 shows as 100K
+  if (+txt >= 10 && +txt < 100 && v < 10) txt = (+txt).toFixed(1);   // 9,999.9K shows as 10.0K
+  if (+txt >= 1000) { e++; v = n / 10 ** (3 * e); txt = v.toFixed(2); } // 999,999 shows as 1.00M, not 1000K
+  if (e >= SUFFIX.length) return n.toExponential(2).replace("e+", "e");
+  return txt + SUFFIX[e];
+};
+function refreshHud() {
+  $("bank").textContent = fmt(bank); $("earned").textContent = fmt(earned);
+  $("tokBox").hidden = !(rebirths > 0 || tokens > 0); $("tokens").textContent = fmt(tokens);
+  $("gemBox").hidden = !(ascensions > 0 || gems > 0); $("gems").textContent = fmt(gems);
+  $("flipBtn").hidden = !(ups.flip > 0 || inPlay > 0); if ($("flipBtn").hidden) $("flip").hidden = true;
+  $("wheelBtn").hidden = !(ups.wheel > 0); if ($("wheelBtn").hidden) $("wheel").hidden = true;
+  $("reels").hidden = !(ups.reels > 0);
+  if (typeof refreshShop === "function") refreshShop();
+  if (!$("flip").hidden) renderFlip();
+  if (typeof checkGoals === "function") checkGoals();
+}
+
+// ---------- Pixel renderer ----------
+// The scene renders at a low resolution into a target, then a post pass adds a limited palette,
+// ordered dithering and dark outlines. The canvas is scaled up with hard pixel edges.
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.BasicShadowMap;
+$("game").appendChild(renderer.domElement);
+
+let lowW = 0, lowH = 0, rt = null;
+// Quality: the game draws about 500 pixels tall on every device (a phone and a 1440p monitor
+// do the same work). If frames are still slow, it steps down: shadows off, then chunkier pixels.
+// phones draw at full resolution (a narrow portrait screen at 2x looked too chunky); bigger screens at about 500 game pixels tall
+function pixelSize() { return innerWidth < 700 ? 1 : Math.max(2, Math.round(innerHeight / 500)); } // about 500 game pixels tall on every screen
+function makeTarget() {
+  rt?.dispose();
+  rt = new THREE.WebGLRenderTarget(lowW, lowH, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+}
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(hex(P.bg));
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 60);
+const camBase = new THREE.Vector3(0, 8.6, 15.6);
+const camLook = new THREE.Vector3(0, 3.5, -1.0);
+
+const post = new THREE.ShaderMaterial({
+  uniforms: { tColor: { value: null }, res: { value: new THREE.Vector2() } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tColor; uniform vec2 res;
+    varying vec2 vUv;
+    float bayer(vec2 p){
+      int x = int(mod(p.x, 4.0)); int y = int(mod(p.y, 4.0));
+      float m[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+      return (m[x + y * 4] + 0.5) / 16.0;
+    }
+    void main(){
+      vec2 px = 1.0 / res;
+      vec3 c = texture2D(tColor, vUv).rgb;
+      c = pow(max(c, 0.0), vec3(1.0 / 2.2));
+      // limited palette with ordered dithering
+      float L = 16.0;
+      c = floor(c * L + (bayer(gl_FragCoord.xy) - 0.5) * 0.25 + 0.5) / L;
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
+const postScene = new THREE.Scene();
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
+
+function resize() {
+  const p = pixelSize();
+  lowW = Math.ceil(innerWidth / p); lowH = Math.ceil(innerHeight / p);
+  renderer.setSize(lowW, lowH, false);
+  makeTarget();
+  post.uniforms.res.value.set(lowW, lowH);
+  camera.aspect = innerWidth / innerHeight;
+  // Pull back on narrow screens so the whole playfield stays in view
+  const k = camera.aspect < 1 ? 1 + (1 - camera.aspect) * 0.75 : 1;
+  camera.position.copy(camBase).sub(camLook).multiplyScalar(k).add(camLook);
+  camera.lookAt(camLook);
+  camera.updateProjectionMatrix();
+}
+resize();
+
+// ---------- Pixel textures ----------
+function pixTex(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  draw(g);
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const STAR = ["...#...", "..###..", "#######", ".#####.", "..###..", ".##.##.", ".#...#."];
+const FIVE = ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."];
+function coinFace(cols, glyph) {
+  return pixTex(16, 16, g => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const r = Math.hypot(x - 7.5, y - 7.5);
+      if (r > 8) continue;
+      g.fillStyle = r > 6.7 ? cols.rim : r > 5.7 ? cols.mid : cols.base;
+      if (r <= 5.7 && x + y < 9) g.fillStyle = cols.hi;
+      g.fillRect(x, y, 1, 1);
+    }
+    const ox = 8 - Math.ceil(glyph[0].length / 2), oy = 4;
+    g.fillStyle = cols.ink;
+    glyph.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === "#") g.fillRect(ox + x, oy + y, 1, 1); }));
+  });
+}
+const silverCols = P.silver;
+const goldCols = { base: "#ffd34d", mid: "#ec9f1e", rim: "#9c560e", hi: "#fff2a6", ink: "#a8600a" };
+
+// Three-step cel shading ramp
+const ramp = new THREE.DataTexture(new Uint8Array([70, 70, 70, 255, 160, 160, 160, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);
+ramp.magFilter = ramp.minFilter = THREE.NearestFilter; ramp.needsUpdate = true;
+const toon = opts => new THREE.MeshToonMaterial({ gradientMap: ramp, ...opts });
+
+const feltTex = pixTex(8, 8, g => {
+  g.fillStyle = P.felt; g.fillRect(0, 0, 8, 8);
+  g.fillStyle = P.felt2;
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if ((x + y) % 4 === 0) g.fillRect(x, y, 1, 1);
+  if (P.feltSpecks) P.feltSpecks.forEach((c, i) => { g.fillStyle = c; g.fillRect((i * 5 + 1) % 8, (i * 3 + 2) % 8, 1, 1); });
+});
+feltTex.wrapS = feltTex.wrapT = THREE.RepeatWrapping;
+
+const chrome = toon({ color: hex(P.metal) });
+const chromeDark = toon({ color: hex(P.metalDark) });
+const felt = toon({ map: feltTex });
+const glassMat = new THREE.MeshBasicMaterial({ color: hex(P.glass), transparent: true, opacity: 0.12, depthWrite: false });
+
+// ---------- Lights ----------
+scene.add(new THREE.AmbientLight(hex(P.ambient), 0.9));
+const key = new THREE.DirectionalLight(0xfff0d8, 2.4);
+key.position.set(3, 12, 6); key.castShadow = true;
+key.shadow.mapSize.set(512, 512);
+Object.assign(key.shadow.camera, { left: -6, right: 6, top: 8, bottom: -8, near: 1, far: 30 });
+key.shadow.bias = -0.002;
+scene.add(key);
+const pinkL = new THREE.PointLight(hex(P.accentA), 22, 14); pinkL.position.set(-4, 3, -3); scene.add(pinkL);
+const cyanL = new THREE.PointLight(hex(P.accentB), 22, 14); cyanL.position.set(4, 3, -3); scene.add(cyanL);
+
+// ---------- Physics ----------
+const world = new RAPIER.World({ x: 0, y: -22, z: 0 });
+world.timestep = STEP;
+world.numSolverIterations = 6;
+world.numAdditionalFrictionIterations = 2;
+
+function fixedBox(hx, hy, hz, x, y, z, mat, friction = 0.5) {
+  world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z).setFriction(friction));
+  if (mat) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2), mat);
+    m.position.set(x, y, z); m.receiveShadow = true; m.castShadow = mat !== glassMat; scene.add(m);
+    return m;
+  }
+}
+
+// Floor of the lower deck
+const floorLen = FLOOR_FRONT + 8;
+feltTex.repeat.set(HALF_W, floorLen / 2);
+fixedBox(HALF_W, 0.1, floorLen / 2, 0, -0.1, FLOOR_FRONT - floorLen / 2, felt, 0.22);
+const lip = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2, 0.08, 0.1), toon({ color: hex(P.trim) }));
+lip.position.set(0, -0.03, FLOOR_FRONT); scene.add(lip);
+// Side walls (glass with posts)
+for (const s of [-1, 1]) {
+  const len = WALL_END + 8;
+  fixedBox(0.1, 1.6, len / 2, s * (HALF_W + 0.1), 1.6, WALL_END - len / 2, glassMat);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.2, 0.24), chrome);
+  post.position.set(s * (HALF_W + 0.1), 1.6, WALL_END); post.castShadow = true; scene.add(post);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, len), chromeDark);
+  rail.position.set(s * (HALF_W + 0.1), 3.2, WALL_END - len / 2); scene.add(rail);
+}
+
+// Back wall above the pusher (keeps shelf coins from sliding off the back)
+fixedBox(HALF_W, 1.3, 0.1, 0, PUSH_TOP + 0.02 + 1.3, BACK_WALL_Z, null);
+
+// ---------- Peg board ----------
+// BOARD-START
+// Triangle peg board. Each coin hops from peg to peg along a real bounce arc, going left or
+// right at every peg. Coins tend to keep heading the way they were going (momentum), and the
+// narrow ×5 slot at the bottom bounces about half its coins into the ×1 slots beside it.
+// Doing it this way means a coin can never jam, and the odds are exact.
+const BOARD = {
+  halfW: 3.5, rows: 8, pegTop: 7.9, rowDy: 0.68, spacing: 0.8, pegR: 0.06, coinR: 0.3,
+  dropY: 8.55, slotTop: 2.6, exitY: 1.95, aimMax: 0.3, g: 16,
+  keepGoing: 0.65,     // chance a coin keeps going the same way at the next peg
+  jackpotKeep: 0.45,   // chance a coin that reaches the ×5 slot actually stays in it
+  jackpotHalf: 0.33,   // half-width of the narrow ×5 slot
+  slots: [3, 1, 0, 1, 5, 1, 0, 1, 3],
+};
+function makeBoard(B, rand) {
+  const pegs = [];
+  for (let k = 0; k < B.rows; k++) {
+    const y = B.pegTop - k * B.rowDy;
+    for (let j = 0; j <= k; j++) pegs.push({ x: (j - k / 2) * B.spacing, y });
+  }
+  const mid = (B.slots.length - 1) / 2;
+  const centers = B.slots.map((_, j) => (j - mid) * B.spacing);
+  const edges = [-B.halfW];
+  for (let j = 1; j < B.slots.length; j++) {
+    let e = (centers[j - 1] + centers[j]) / 2;
+    if (j === mid) e = -B.jackpotHalf; else if (j === mid + 1) e = B.jackpotHalf;
+    edges.push(e);
+  }
+  edges.push(B.halfW);
+  return { B, pegs, centers, edges, dividers: edges.slice(1, -1), coins: [], rand };
+}
+// A leg is one arc: from (x0,y0) to (x1,y1) over T seconds under gravity
+function leg(B, x0, y0, x1, y1, T, peg) {
+  return { x0, y0, x1, y1, T, vy0: (y1 - y0 + (B.g * T * T) / 2) / T, peg };
+}
+function fallTime(B, y0, y1, vUp) { return (vUp + Math.sqrt(vUp * vUp + 2 * B.g * (y0 - y1))) / B.g; }
+// pegs are named "row:index"; row k has k + 1 pegs
+const pegX = (B, k, j) => (j - k / 2) * B.spacing;
+function boardDrop(bd, x, from) {
+  const B = bd.B, rand = bd.rand, top = B.coinR + B.pegR, legs = [];
+  const mid = (B.slots.length - 1) / 2;
+  let px, cy, cx, rights, dir, k0;
+  if (from) {
+    // a split coin carries on from the peg it split on
+    k0 = from.k; rights = from.j; px = pegX(B, from.k, from.j); cx = px; cy = B.pegTop - from.k * B.rowDy + top; dir = rand() < 0.5 ? 1 : -1;
+  } else {
+    // fall onto the top peg (landing a touch off-centre, toward where you aimed)
+    px = 0; cy = B.pegTop + top; cx = x * 0.25; rights = 0; dir = 0; k0 = 0;
+    legs.push(Object.assign(leg(B, x, B.dropY, cx, cy, fallTime(B, B.dropY, cy, 0), true), { pegId: "0:0" }));
+  }
+  for (let k = k0; k < B.rows; k++) {
+    const pRight = k === 0 && !from ? 0.5 + 0.35 * (x / B.aimMax) : from && k === k0 ? 0.5 : dir > 0 ? B.keepGoing : 1 - B.keepGoing;
+    dir = rand() < pRight ? 1 : -1;
+    if (B.luck && rand() < B.luck) {
+      // a lucky bounce steers toward the nearest bonus slot (the middle or an edge)
+      const proj = rights + (B.rows - k) / 2, goal = [0, mid, B.slots.length - 1].reduce((a, g) => Math.abs(g - proj) < Math.abs(a - proj) ? g : a);
+      if (goal !== proj) dir = goal > proj ? 1 : -1;
+    }
+    if (dir > 0) rights++;
+    if (k < B.rows - 1) {
+      px += (dir * B.spacing) / 2;
+      const ny = B.pegTop - (k + 1) * B.rowDy + top;
+      legs.push(Object.assign(leg(B, cx, cy, px, ny, 0.3 + rand() * 0.06, true), { pegId: `${k + 1}:${rights}` }));
+      cx = px; cy = ny;
+    }
+  }
+  let slot = rights;
+  const tx = bd.centers[slot], sy = B.slotTop + B.coinR;
+  if (slot === mid && rand() > B.jackpotKeep) {
+    // clips the edge of the narrow ×5 slot and bounces into the ×1 beside it
+    const side = rand() < 0.5 ? -1 : 1;
+    legs.push(leg(B, cx, cy, side * B.jackpotHalf, sy, 0.3, true));
+    slot = mid + side;
+    legs.push(leg(B, side * B.jackpotHalf, sy, bd.centers[slot], B.exitY, 0.32, false));
+  } else {
+    legs.push(leg(B, cx, cy, tx, B.exitY, fallTime(B, cy, B.exitY, 1.2), false));
+  }
+  const c = { x: from ? cx : x, y: from ? cy : B.dropY, a: 0, vx: 0, vy: 0, legs, i: 0, t: 0, slot };
+  bd.coins.push(c);
+  return c;
+}
+function boardStep(bd, dt, onExit, onPeg) {
+  const B = bd.B, cs = bd.coins;
+  for (let n = cs.length - 1; n >= 0; n--) {
+    const c = cs[n];
+    c.t += dt;
+    let L = c.legs[c.i];
+    while (c.t >= L.T) {
+      c.t -= L.T; c.i++;
+      if (L.peg && onPeg) onPeg(c, L);
+      if (c.i >= c.legs.length) break;
+      L = c.legs[c.i];
+    }
+    if (c.i >= c.legs.length) {
+      c.x = L.x1; c.y = L.y1; c.vx = (L.x1 - L.x0) / L.T; c.vy = L.vy0 - B.g * L.T;
+      cs.splice(n, 1);
+      onExit(c, B.slots[c.slot], c.slot);
+      continue;
+    }
+    const u = c.t / L.T, nx = L.x0 + (L.x1 - L.x0) * u;
+    c.a -= (nx - c.x) / B.coinR;
+    c.x = nx; c.y = L.y0 + L.vy0 * c.t - (B.g * c.t * c.t) / 2;
+  }
+}
+// BOARD-END
+
+const board = makeBoard(BOARD, Math.random);
+board.rand = Math.random;
+const BOARD_Z = BACK_WALL_Z + 0.2;              // the plane the board coins fall in
+const PLATE_BOTTOM = 0.85, PLATE_TOP = 9.3, PLATE_HALF = 3.6;
+const PX = 40;                                   // board texture pixels per unit
+// slot colours go by the slot's position (edge / one / zero / jackpot), not its current multiplier,
+// so upgraded slots (x4, x6, ...) keep their colour
+const SLOT_KIND = [3, 1, 0, 1, 5, 1, 0, 1, 3];
+const SLOT_COLORS = { 0: "#0c0c0e", 1: "#00000066", 3: "#1f6a66", 5: "#a8600a" };
+const boardCanvas = document.createElement("canvas");
+boardCanvas.width = PLATE_HALF * 2 * PX; boardCanvas.height = Math.round((PLATE_TOP - PLATE_BOTTOM) * PX);
+const bx = x => (x + PLATE_HALF) * PX, by = y => (PLATE_TOP - y) * PX;
+// Backboard art, one simple design per colour theme.
+const BACKDROP = (location.hash.match(/b-(\w+)/) || [])[1] || P.backdrop || "plain";
+function drawBackdrop(g) {
+  const W = boardCanvas.width, H = boardCanvas.height, cx = bx(0);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const px = (x, y, w = 1, h = 1) => g.fillRect(Math.round(x), Math.round(y), w, h);
+  if (BACKDROP === "clouds") {
+    // a few chunky pixel clouds in a flat sky
+    g.fillStyle = "#ffffff";
+    for (const [x0, y0, sc] of [[30, 70, 1], [190, 40, 0.8], [210, 170, 1.1], [20, 230, 0.7]]) {
+      const u = 6 * sc;
+      px(x0, y0 + u, u * 7, u * 2); px(x0 + u, y0, u * 3, u); px(x0 + u * 4, y0 + u * 0.5, u * 2, u);
+    }
+  } else if (BACKDROP === "dots") {
+    // sparse white polka dots on a flat colour
+    g.fillStyle = "#ffffff33";
+    for (let y = 10; y < H; y += 24) for (let x = (y / 24) % 2 ? 22 : 10; x < W; x += 24) px(x, y, 3, 3);
+  } else if (BACKDROP === "carpet") {
+    // blacklight arcade carpet: scattered neon squiggles, rings, triangles and dots
+    const cols = ["#ff3d8b", "#2fe6ff", "#ffe14a", "#5cff7a"];
+    for (let i = 0; i < 70; i++) {
+      const x = rnd() * W, y = rnd() * H, c = cols[i % 4], kind = i % 5;
+      g.fillStyle = c; g.strokeStyle = c; g.lineWidth = 2;
+      if (kind === 0) { for (let t = 0; t < 14; t++) px(x + t, y + ((t >> 1) % 2 ? 3 : 0), 2, 2); }          // zigzag
+      else if (kind === 1) { g.beginPath(); g.arc(Math.round(x), Math.round(y), 4, 0, 7); g.stroke(); }       // ring
+      else if (kind === 2) { for (let t = 0; t < 7; t++) px(x - t, y + t, t * 2 + 1, 1); }                     // triangle
+      else if (kind === 3) { px(x, y, 3, 3); }                                                                // dot
+      else { for (let t = 0; t < 12; t++) px(x + t, y + Math.round(Math.sin(t / 2) * 3), 2, 2); }             // squiggle
+    }
+  } else if (BACKDROP === "y2k") {
+    // glossy Y2K blue: dithered top-to-bottom fade, a shiny diagonal sheen and a few sparkles
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const t = y / H, d = ((x * 7 + y * 13) % 16) / 16;
+      if (t > 0.35 && d < (t - 0.35) * 0.9) { g.fillStyle = "#0e2c88"; px(x, y); }
+    }
+    g.fillStyle = "#3a72e0";
+    for (let y = 0; y < H; y++) { const x0 = W * 0.08 + y * 0.55, w = 26 - y * 0.05; if (w > 4) px(x0, y, w, 1); }
+    g.fillStyle = "#5a92f0";
+    for (let y = 0; y < H; y++) { const x0 = W * 0.08 + y * 0.55 + 30, w = 8 - y * 0.02; if (w > 2) px(x0, y, w, 1); }
+    g.fillStyle = "#ffffff";
+    for (let i = 0; i < 9; i++) {
+      const x = rnd() * W, y = by(8.8) + rnd() * (by(BOARD.slotTop) - by(8.8)), r = i % 3 === 0 ? 3 : 2;
+      px(x - r, y, r * 2 + 1, 1); px(x, y - r, 1, r * 2 + 1);
+    }
+  } else if (BACKDROP === "tickets") {
+    // prize counter: tone-on-tone diagonal stripes with a few gold stars
+    g.fillStyle = P.signStripe;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (((x + y) >> 3) % 2 === 0) px(x, y);
+    g.fillStyle = "#ffd030";
+    for (let i = 0; i < 10; i++) {
+      const x = rnd() * W, y = by(8.8) + rnd() * (by(BOARD.slotTop) - by(8.8));
+      px(x - 1, y - 3, 3, 7); px(x - 3, y - 1, 7, 3);
+    }
+  } else if (BACKDROP === "lime") {
+    // lime & chrome: dark gunmetal with a soft lime glow behind the pegs and a faint dot grid
+    const gy = by(5.2);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const d = Math.hypot(x - cx, (y - gy) * 0.8);
+      const on = d < 60 ? (x + y) % 2 === 0 : d < 110 ? x % 2 === 0 && y % 2 === 0 : false;
+      if (on) { g.fillStyle = "#1f3410"; px(x, y); }
+    }
+    g.fillStyle = "#2a3a2a";
+    for (let y = 6; y < H; y += 12) for (let x = 6; x < W; x += 12) px(x, y);
+  }
+}
+function drawBoard() {
+  const g = boardCanvas.getContext("2d"); g.imageSmoothingEnabled = false;
+  g.fillStyle = P.signBg; g.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+  drawBackdrop(g);
+  // header
+  g.fillStyle = P.accentA; g.fillRect(0, by(PLATE_TOP), boardCanvas.width, (PLATE_TOP - 8.95) * PX);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.font = '12px "Press Start 2P", monospace';
+  g.fillStyle = P.signShadow; g.fillText(`★ ×${BOARD.slots[(BOARD.slots.length - 1) / 2]} JACKPOT ★`, bx(0), by(9.12));
+  // slots with their multipliers
+  BOARD.slots.forEach((m, k) => {
+    const x0 = board.edges[k], w = board.edges[k + 1] - x0;
+    g.fillStyle = SLOT_COLORS[SLOT_KIND[k]];
+    g.fillRect(bx(x0), by(BOARD.slotTop), w * PX, (BOARD.slotTop - BOARD.exitY) * PX);
+    g.font = (w < 0.7 ? 10 : 12) + 'px "Press Start 2P", monospace';
+    g.fillStyle = m === 0 ? "#d0708a" : m === 5 ? "#fff2a6" : "#ffffff";
+    g.fillText("×" + m, bx(x0 + w / 2), by((BOARD.slotTop + BOARD.exitY) / 2));
+  });
+  boardTex.needsUpdate = true;
+}
+const boardTex = new THREE.CanvasTexture(boardCanvas);
+boardTex.magFilter = boardTex.minFilter = THREE.NearestFilter; boardTex.generateMipmaps = false; boardTex.colorSpace = THREE.SRGBColorSpace;
+drawBoard();
+document.fonts?.load('12px "Press Start 2P"').then(drawBoard).catch(() => {});
+const plate = new THREE.Mesh(new THREE.BoxGeometry(PLATE_HALF * 2, PLATE_TOP - PLATE_BOTTOM, 0.2),
+  [chromeDark, chromeDark, chromeDark, chromeDark, new THREE.MeshBasicMaterial({ map: boardTex }), chromeDark]);
+plate.position.set(0, (PLATE_TOP + PLATE_BOTTOM) / 2, BACK_WALL_Z); scene.add(plate);
+// Frame rails at the board's sides
+for (const sx of [-1, 1]) {
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, PLATE_TOP - PLATE_BOTTOM, 0.5), chrome);
+  rail.position.set(sx * (BOARD.halfW + 0.1), (PLATE_TOP + PLATE_BOTTOM) / 2, BACK_WALL_Z + 0.2);
+  rail.castShadow = true; scene.add(rail);
+}
+// Pegs (one instanced mesh), wall bumpers and slot dividers
+{
+  const pegGeo = new THREE.CylinderGeometry(BOARD.pegR, BOARD.pegR, 0.3, 6);
+  pegGeo.rotateX(Math.PI / 2);
+  const pegs = new THREE.InstancedMesh(pegGeo, toon({ color: hex(P.metal) }), board.pegs.length);
+  const m4 = new THREE.Matrix4();
+  board.pegs.forEach((p, i) => pegs.setMatrixAt(i, m4.makeTranslation(p.x, p.y, BACK_WALL_Z + 0.25)));
+  scene.add(pegs);
+}
+// ---------- Special pegs (placed by the player) ----------
+const PEG_TYPES = {
+  gold: { name: "Golden Peg", up: "goldpeg", color: 0xffd24a },
+  split: { name: "Splitter Peg", up: "splitpeg", color: 0x46e0ff },
+  double: { name: "Doubler Peg", up: "doublepeg", color: 0xff5a5a },
+};
+const specialGroup = new THREE.Group(); scene.add(specialGroup);
+const specialGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.34, 10); specialGeo.rotateX(Math.PI / 2);
+const haloGeo = new THREE.RingGeometry(0.17, 0.22, 16);
+function drawSpecialPegs() {
+  specialGroup.clear();
+  for (const [id, type] of Object.entries(pegMap)) {
+    const [k, j] = id.split(":").map(Number), T = PEG_TYPES[type];
+    const m = new THREE.Mesh(specialGeo, new THREE.MeshBasicMaterial({ color: T.color }));
+    m.position.set(pegX(BOARD, k, j), BOARD.pegTop - k * BOARD.rowDy, BACK_WALL_Z + 0.27);
+    const h = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({ color: T.color, transparent: true, opacity: 0.5 }));
+    h.position.copy(m.position); h.position.z += 0.18;
+    specialGroup.add(m, h);
+  }
+}
+{
+  // V-shaped guides over the top peg
+  const guideMat = toon({ color: hex(P.accentB) });
+  for (const sx of [-1, 1]) {
+    const gd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.3), guideMat);
+    gd.position.set(sx * 0.62, BOARD.dropY + 0.1, BACK_WALL_Z + 0.25); gd.rotation.z = sx * 0.5; scene.add(gd);
+  }
+  const divMat = toon({ color: hex(P.metal) });
+  for (const dx of board.dividers) {
+    const h = BOARD.slotTop - BOARD.exitY;
+    const d = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.3), divMat);
+    d.position.set(dx, BOARD.exitY + h / 2, BACK_WALL_Z + 0.25); scene.add(d);
+  }
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(BOARD.halfW * 2, PLATE_TOP - PLATE_BOTTOM),
+    new THREE.MeshBasicMaterial({ color: hex(P.glass), transparent: true, opacity: 0.025, depthWrite: false }));
+  glass.position.set(0, (PLATE_TOP + PLATE_BOTTOM) / 2, BACK_WALL_Z + 0.4); scene.add(glass);
+}
+
+// Chase lights along the top of the board
+const bulbs = [];
+const bulbGeo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+for (let i = 0; i < 16; i++) {
+  const mat = new THREE.MeshBasicMaterial({ color: hex(P.bulbOff) });
+  const b = new THREE.Mesh(bulbGeo, mat);
+  b.position.set(-PLATE_HALF + 0.25 + i * ((PLATE_HALF * 2 - 0.5) / 15), PLATE_TOP + 0.1, BACK_WALL_Z + 0.14);
+  scene.add(b); bulbs.push(mat);
+}
+
+// Prize tray below the front edge
+const tray = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2 + 0.4, 0.3, 1.6), toon({ color: hex(P.cabinet2) }));
+tray.position.set(0, -2.1, FLOOR_FRONT + 0.7); scene.add(tray);
+const trayGlow = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2 + 0.4, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: hex(P.accentB) }));
+trayGlow.position.set(0, -1.94, FLOOR_FRONT + 1.5); scene.add(trayGlow);
+// Cabinet body
+const cab = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2 + 1.2, 3, 14), toon({ color: hex(P.cabinet) }));
+cab.position.set(0, -1.72, -2.6); cab.receiveShadow = true; scene.add(cab);
+for (const s of [-1, 1]) {
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 12), new THREE.MeshBasicMaterial({ color: s < 0 ? hex(P.accentA) : hex(P.accentB) }));
+  strip.position.set(s * (HALF_W + 0.6), -0.2, -3); scene.add(strip);
+}
+
+// Pusher (kinematic)
+const pusherBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, PUSH_TOP / 2 + 0.01, PUSH_BACK));
+world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_W - 0.02, PUSH_TOP / 2, PUSH_HALF_D).setFriction(0.35), pusherBody);
+const pusherMesh = new THREE.Mesh(new THREE.BoxGeometry((HALF_W - 0.02) * 2, PUSH_TOP, PUSH_HALF_D * 2),
+  [chrome, chrome, felt, chrome, chrome, chrome]);
+pusherMesh.castShadow = pusherMesh.receiveShadow = true; scene.add(pusherMesh);
+
+// ---------- Coins ----------
+const coinGeo = new THREE.CylinderGeometry(COIN_R, COIN_R, COIN_H, 16);
+const goldGeo = new THREE.CylinderGeometry(GOLD_R, GOLD_R, GOLD_H, 18);
+// Every coin value gets its own coin: its number on the face, and a colour band by size.
+const DIGITS = { 0: ["###", "#.#", "#.#", "#.#", "###"], 1: [".#.", "##.", ".#.", ".#.", "###"], 2: ["###", "..#", "###", "#..", "###"],
+  3: ["###", "..#", "###", "..#", "###"], 4: ["#.#", "#.#", "###", "..#", "..#"], 5: ["###", "#..", "###", "..#", "###"],
+  6: ["###", "#..", "###", "#.#", "###"], 7: ["###", "..#", "..#", ".#.", ".#."], 8: ["###", "#.#", "###", "#.#", "###"],
+  9: ["###", "#.#", "###", "..#", "###"], "?": ["###", "..#", ".##", "...", ".#."], K: ["#.#", "##.", "#..", "##.", "#.#"], M: ["#.#", "###", "###", "#.#", "#.#"] };
+function tierCols(v) {
+  if (v === "?") return { base: "#3a4250", mid: "#2a303c", rim: "#11161f", hi: "#5a6478", ink: "#f5b83d", side: "#2a303c" };
+  if (v <= 1) return { ...P.silver, side: P.silverSide };
+  if (v === 2) return { base: "#f0b080", mid: "#c87848", rim: "#7a3a18", hi: "#ffe0c8", ink: "#6a2c10", side: "#b86a3a" };
+  if (v === 3) return { base: "#8ff0e0", mid: "#3fc0b0", rim: "#1a6a66", hi: "#e6fffa", ink: "#14524e", side: "#3fb0a2" };
+  if (v === 4) return { base: "#b4f08a", mid: "#6cc04a", rim: "#2a6a20", hi: "#eaffd8", ink: "#1e4e16", side: "#5aa83c" };
+  if (v < 10) return { base: "#ffd34d", mid: "#ec9f1e", rim: "#9c560e", hi: "#fff2a6", ink: "#7a4006", side: "#e0961c" };
+  if (v < 25) return { base: "#ff9a9a", mid: "#e04a4a", rim: "#8a1a1a", hi: "#ffe0e0", ink: "#5a0c0c", side: "#c83a3a" };
+  if (v < 100) return { base: "#9ad0ff", mid: "#4a8ae0", rim: "#1a3a8a", hi: "#e0f0ff", ink: "#0e2460", side: "#3a78d0" };
+  if (v < 1000) return { base: "#f4f8ff", mid: "#c8d4e8", rim: "#6a7a9a", hi: "#ffffff", ink: "#a06a10", side: "#b8c4d8" };
+  return { base: "#ffb8e4", mid: "#e060b0", rim: "#7a1a5a", hi: "#ffe8f6", ink: "#5a0c40", side: "#d050a0" };
+}
+const coinLabel = v => typeof v === "string" ? v : v < 1000 ? String(v) : v < 1e6 ? Math.floor(v / 1000) + "K" : Math.floor(v / 1e6) + "M";
+const GILD = { base: "#ffd34d", mid: "#ec9f1e", hi: "#fff2a6" };
+function valueFace(v, style = settings.coinStyle) {
+  let cols = tierCols(v);
+  const label = coinLabel(v);
+  if (style === "gilded" && v !== "?") cols = { ...cols, ...GILD, ink: cols.rim === GILD.rim ? "#7a4006" : cols.rim };
+  return pixTex(16, 16, g => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const dx = Math.abs(x - 7.5), dy = Math.abs(y - 7.5), r = Math.hypot(dx, dy);
+      if (style === "token") {
+        // octagonal arcade token with a groove ring
+        const o = Math.max(dx, dy, (dx + dy) * 0.8);
+        if (o > 7.6) continue;
+        g.fillStyle = o > 6.6 ? cols.rim : o > 5.4 && o <= 6.6 && (y < 5 || y > 11) ? cols.ink : cols.base; // flat-sided token, dark groove inside the rim (kept clear of the number)
+        if (o <= 5.6 && x + y < 8) g.fillStyle = cols.hi;
+      } else {
+        if (r > 8) continue;
+        g.fillStyle = r > 6.7 ? cols.rim : r > 5.7 ? cols.mid : cols.base;
+        if (style === "minted" && r > 6.7 && (x + y) % 2) g.fillStyle = cols.hi;  // reeded edge
+        if (style === "minted" && r > 4.6 && r <= 5.3) g.fillStyle = cols.rim;   // inner ring
+        if (r <= 5.7 && x + y < (style === "minted" ? 11 : 8)) g.fillStyle = cols.hi;
+        if (style === "minted" && r <= 5.7 && x + y === 11) g.fillStyle = cols.base;
+      }
+      g.fillRect(x, y, 1, 1);
+    }
+    const w = label.length * 4 - 1, ox = Math.floor(8 - w / 2), oy = 6;
+    g.fillStyle = cols.ink;
+    [...label].forEach((ch, i) => (DIGITS[ch] || DIGITS[0]).forEach((row, y) => [...row].forEach((c, x) => { if (c === "#") g.fillRect(ox + i * 4 + x, oy + y, 1, 1); })));
+  });
+}
+const MAX_PER_LOOK = 300;
+const looks = new Map(); // value -> { geo, mats, inst, n }
+function lookFor(v) {
+  let L = looks.get(v);
+  if (!L) {
+    const cols = tierCols(v), face = toon({ map: valueFace(v) }), side = toon({ color: hex(cols.side) });
+    const geo = v >= 5 ? goldGeo : coinGeo, mats = [side, face, face];
+    const inst = new THREE.InstancedMesh(geo, mats, MAX_PER_LOOK);
+    inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage); inst.count = 0;
+    inst.castShadow = false; inst.receiveShadow = true; inst.frustumCulled = false; scene.add(inst);
+    L = { geo, mats, inst, n: 0 }; looks.set(v, L);
+  }
+  return L;
+}
+const BORDER = 0.03;  // rounded coin edges stack far more steadily than sharp cylinders
+const coins = [];     // { body, mesh, value, calm }
+function spawnCoin(x, y, z, value = 1, tilt = 0.15, quat = null) {
+  const gold = value >= 5;
+  const r = gold ? GOLD_R : COIN_R, h = gold ? GOLD_H : COIN_H;
+  const q = quat || new THREE.Quaternion().setFromEuler(new THREE.Euler((Math.random() - 0.5) * tilt, Math.random() * 6.28, (Math.random() - 0.5) * tilt));
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z).setRotation(q)
+    .setLinearDamping(0.15).setAngularDamping(1.2));
+  world.createCollider(RAPIER.ColliderDesc.roundCylinder(h / 2 - BORDER, r - BORDER, BORDER)
+    .setFriction(0.3).setRestitution(0.02).setDensity(gold ? 3 : 2), body);
+  const coin = { body, value, calm: 0 };
+  coins.push(coin);
+  return coin;
+}
+function removeCoin(i) {
+  const c = coins[i];
+  world.removeRigidBody(c.body);
+  coins.splice(i, 1);
+}
+
+// Put coins to rest once they've stopped moving, so resting piles don't buzz.
+// Coins near the pusher are left alone; anything that hits a resting coin wakes it again.
+function settleCoins() {
+  const pusherFront = pusherBody.translation().z + PUSH_HALF_D;
+  for (const c of coins) {
+    if (c.body.isSleeping()) { c.calm = 0; continue; }
+    const t = c.body.translation();
+    if (t.z < pusherFront + 0.9 || t.y > PUSH_TOP + 0.3) { c.calm = 0; continue; }
+    const v = c.body.linvel(), w = c.body.angvel();
+    if (v.x * v.x + v.y * v.y + v.z * v.z < 0.012 && w.x * w.x + w.y * w.y + w.z * w.z < 0.06) {
+      if (++c.calm > 12) { c.body.sleep(); c.calm = 0; }
+    } else c.calm = 0;
+  }
+}
+
+// ---------- Dropping onto the peg board ----------
+let aimX = 0;
+const ghost = new THREE.Group();
+{
+  const m = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.gold), transparent: true, opacity: 0.55 }));
+  m.rotation.x = Math.PI / 2; ghost.add(m);
+}
+ghost.position.set(0, BOARD.dropY, BOARD_Z); scene.add(ghost);
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const aimPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -BOARD_Z);
+const hitV = new THREE.Vector3();
+function aimFromPointer(e) {
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  if (ray.ray.intersectPlane(aimPlane, hitV)) aimX = THREE.MathUtils.clamp(hitV.x, -BOARD.aimMax, BOARD.aimMax);
+}
+
+// ---------- Placing special pegs ----------
+let placing = null;
+const pegsPlaced = type => Object.values(pegMap).filter(t => t === type).length;
+function trimPegs() {
+  // never more placed than owned (e.g. after a rebirth)
+  for (const type in PEG_TYPES) {
+    let extra = pegsPlaced(type) - lvl(PEG_TYPES[type].up);
+    for (const id of Object.keys(pegMap)) if (extra > 0 && pegMap[id] === type) { delete pegMap[id]; extra--; }
+  }
+}
+function startPlacing(type) {
+  placing = type; $("tree").hidden = true; holding = false;
+  const T = PEG_TYPES[type], left = lvl(T.up) - pegsPlaced(type);
+  $("placeText").textContent = left > 0 ? `Click a peg to place your ${T.name} (${left} to place).` : `Click one of your ${T.name}s to pick it up, then click where it should go.`;
+  $("placeBanner").hidden = false;
+}
+function stopPlacing() { placing = null; $("placeBanner").hidden = true; }
+function nearestPeg(e) {
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  if (!ray.ray.intersectPlane(aimPlane, hitV)) return null;
+  let best = null, bd = 0.45;
+  for (let k = 0; k < BOARD.rows; k++) for (let j = 0; j <= k; j++) {
+    const d = Math.hypot(hitV.x - pegX(BOARD, k, j), hitV.y - (BOARD.pegTop - k * BOARD.rowDy));
+    if (d < bd) { bd = d; best = `${k}:${j}`; }
+  }
+  return best;
+}
+// golden pegs aren't placed by hand: each one lands on a random free peg and stays there until the next rebirth
+function fillGold() {
+  let added = false;
+  while (pegsPlaced("gold") < lvl("goldpeg")) {
+    const free = [];
+    for (let k = 0; k < BOARD.rows; k++) for (let j = 0; j <= k; j++) if (!pegMap[`${k}:${j}`]) free.push(`${k}:${j}`);
+    if (!free.length) break;
+    pegMap[free[Math.floor(Math.random() * free.length)]] = "gold"; added = true;
+  }
+  return added;
+}
+function placeAt(e) {
+  const id = nearestPeg(e);
+  if (!id) return;
+  const T = PEG_TYPES[placing];
+  if (pegMap[id] === placing) { delete pegMap[id]; }                       // pick it back up
+  else if (pegsPlaced(placing) < lvl(T.up)) { pegMap[id] = placing; sfx.bonus(); } // place (replaces another type)
+  else return;
+  fillGold(); // a golden peg that got covered jumps to a new random spot
+  drawSpecialPegs(); save();
+  if (pegsPlaced(placing) >= lvl(T.up)) stopPlacing(); else startPlacing(placing);
+}
+// what special pegs do when a coin lands on them
+function onSpecialPeg(c, L) {
+  const type = !chOn("nopegs") && L.pegId && pegMap[L.pegId];
+  if (!type) return;
+  const at = new THREE.Vector3(L.x1, L.y1 + 0.35, BOARD_Z);
+  if (type === "gold") { c.v = (c.v || 1) + goldAmt(); popAt(at, "+" + goldAmt(), ""); retint(c); sfx.golden(); }
+  else if (type === "double") { c.v = (c.v || 1) * 2; popAt(at, "×2", "big"); retint(c); sfx.doubler(); }
+  else if (type === "split" && Math.random() < splitChance()) {
+    const [k, j] = L.pegId.split(":").map(Number);
+    if (k < BOARD.rows - 1) { boardDrop(board, 0, { k, j }).v = c.v || 1; popAt(at, "SPLIT", ""); sfx.split(); }
+  }
+}
+// a board coin changes its face when its value changes
+function retint(c) { const g = boardMeshes.get(c); if (g) g.children[0].material = lookFor(c.v).mats; }
+
+// Each board coin is drawn as a coin standing on its edge, spinning as it rolls off pegs
+const boardMeshes = new Map();
+function boardMesh(c) {
+  let g = boardMeshes.get(c);
+  if (!g) {
+    g = new THREE.Group();
+    const m = new THREE.Mesh(coinGeo, lookFor(c.v || 1).mats); m.rotation.x = Math.PI / 2; m.castShadow = true;
+    g.add(m); scene.add(g); boardMeshes.set(c, g);
+  }
+  return g;
+}
+function updateBoardCoins() {
+  for (const c of board.coins) { const g = boardMesh(c); g.position.set(c.x, c.y, BOARD_Z); g.rotation.z = c.a; }
+}
+const _eq = new THREE.Quaternion(), _qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+let lastTick = 0;
+function stepBoard(dt) {
+  const n = 4, h = dt / n;
+  for (let i = 0; i < n; i++) boardStep(board, h * coinSpeed(), onSlot, (c, L) => {
+    const now = performance.now(); if (now - lastTick > 45) { lastTick = now; sfx.peg(); }
+    onSpecialPeg(c, L);
+  });
+}
+function onSlot(c, mult, slot) {
+  const g = boardMeshes.get(c); if (g) { scene.remove(g); boardMeshes.delete(c); }
+  const at = new THREE.Vector3(c.x, BOARD.exitY + 0.3, BOARD_Z);
+  let base = BASE_SLOTS[slot];
+  if (mult === 0) {
+    if (Math.random() < luckyZero()) { mult = 1; base = 1; popAt(at, "SAVED", ""); sfx.lucky(); }
+    else { popAt(at, "×0", "lost"); sfx.lost(); return; }
+  }
+  // Hand the coin to the pusher, standing on edge, now worth its multiplier
+  _eq.setFromAxisAngle(new THREE.Vector3(0, 0, 1), c.a).multiply(_qx);
+  const value = mult * (c.v || 1) * (eventOn("gold") ? 2 : 1);
+  const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, value, 0, _eq.clone());
+  if (Math.random() < mysteryChance()) coin.mystery = true; // its value stays hidden until it pays out
+  coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
+  popAt(at, coin.value !== mult ? `×${mult} = ${fmtV(coin.value * payoutMult())}` : "×" + mult, base === 5 ? "big" : "");
+  if (base === 5) { stats.jackpots++; if (lvl("reels")) reelQueue = Math.min(reelQueue + 1, 5); }
+  if (base === 5) sfx.bonus(); else if (base === 3) sfx.win(1); else sfx.click();
+}
+
+let warm = false, lastDrop = 0, holding = false;
+function dropCoin() {
+  if (!warm || bank < 1 || placing || titleOpen) return; // payouts can be fractional, so a drop needs at least a whole coin
+  const now = performance.now();
+  if (now - lastDrop < dropCooldown() * (eventOn("frenzy") ? 0.35 : 1) * 1000) return;
+  lastDrop = now;
+  dropped++;
+  // a coin costs what it's worth; if you can't afford a full one, you drop the biggest coin you can afford
+  let value = coinValue();
+  if (eventOn("frenzy") || Math.random() < freeDrop()) { popAt(new THREE.Vector3(aimX, BOARD.dropY + 0.5, BOARD_Z), "FREE", ""); if (!eventOn("frenzy")) sfx.free(); }
+  else { value = Math.min(value, Math.floor(bank)); bank -= value; }
+  boardDrop(board, aimX + (Math.random() - 0.5) * 0.04).v = value;
+  if (Math.random() < doubleDrop()) setTimeout(() => { boardDrop(board, (Math.random() - 0.5) * BOARD.aimMax * 2).v = coinValue(); popAt(new THREE.Vector3(0, BOARD.dropY + 0.4, BOARD_Z), "FREE COIN", ""); sfx.extra(); }, 180);
+  sfx.drop();
+  refreshHud();
+}
+
+const gameEl = $("game");
+gameEl.addEventListener("pointermove", aimFromPointer);
+gameEl.addEventListener("pointerdown", e => { sfx.unlock(); if (placing) { placeAt(e); return; } aimFromPointer(e); holding = true; dropCoin(); });
+addEventListener("pointerup", () => { holding = false; });
+addEventListener("pointercancel", () => { holding = false; });
+const keys = {};
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code === "Space") { e.preventDefault(); sfx.unlock(); dropCoin(); }
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+
+// ---------- Sound (chiptune blips, starts after first interaction) ----------
+const sfx = (() => {
+  let ac = null;
+  const tone = (freq, dur, type = "square", vol = 0.05, when = 0) => {
+    if (!ac) return;
+    const t = ac.currentTime + when;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    if (!settings.sound || settings.volume <= 0) return;
+    g.gain.setValueAtTime(vol * settings.volume * 1.4, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur);
+  };
+  // a pitch slide from f1 to f2 (boings, whooshes, sad trombones)
+  const slide = (f1, f2, dur, type = "square", vol = 0.05, when = 0) => {
+    if (!ac || !settings.sound || settings.volume <= 0) return;
+    const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol * settings.volume * 1.4, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+  };
+  const seq = (notes, gap, dur, type, vol) => notes.forEach((f, i) => tone(f, dur, type, vol, i * gap));
+  // frequent bonus sounds play at most a few times a second, so busy boards don't machine-gun them
+  const last = {}, ok = (k, ms) => { const n = performance.now(); if (n - (last[k] || 0) < ms) return false; last[k] = n; return true; };
+  return {
+    unlock() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } else if (ac.state === "suspended") ac.resume(); if (ac && settings.music) music.start(ac); },
+    get ctx() { return ac; },
+    drop() { tone(1800 + Math.random() * 300, 0.05, "square", 0.025); },
+    click() { tone(420, 0.04, "square", 0.03); tone(640, 0.05, "square", 0.025, 0.03); },
+    peg() { tone(2200 + Math.random() * 800, 0.025, "square", 0.012); },
+    win(v) { tone(988, 0.08, "square", 0.04); tone(1319, 0.14, "square", 0.04, 0.07); if (v > 1) { tone(1568, 0.12, "square", 0.05, 0.14); tone(2093, 0.3, "square", 0.05, 0.22); } },
+    lost() { tone(196, 0.12, "square", 0.03); },
+    bonus() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.1, "square", 0.05, i * 0.06)); },
+    free() { if (!ok("free", 150)) return; seq([1568, 2093, 2637], 0.045, 0.08, "triangle", 0.06); },                       // rising sparkle
+    extra() { if (!ok("extra", 150)) return; tone(1319, 0.06, "square", 0.04); tone(1976, 0.25, "square", 0.04, 0.06); },   // ka-ching
+    golden() { if (!ok("golden", 250)) return; tone(2637, 0.4, "sine", 0.06); tone(3951, 0.25, "sine", 0.025); },            // bell
+    doubler() { if (!ok("doubler", 200)) return; tone(880, 0.06, "square", 0.04); tone(1760, 0.1, "square", 0.04, 0.07); },   // blip, octave up
+    split() { if (!ok("split", 200)) return; slide(300, 900, 0.18, "triangle", 0.09); },                                    // boing
+    lucky() { if (!ok("lucky", 200)) return; seq([523, 659, 784], 0.06, 0.1, "triangle", 0.07); },                          // rescue arpeggio
+    sad() { slide(392, 196, 0.35, "square", 0.035); },                                       // ×0 reveal
+    fanfare() { seq([523, 659, 784, 1047, 784, 1047], 0.08, 0.14, "square", 0.05); },
+    achieve() { seq([784, 988, 1175, 1568], 0.07, 0.12, "square", 0.05); tone(2093, 0.5, "triangle", 0.05, 0.3); },
+    event(id) {
+      if (id === "gold") seq([523, 659, 784, 1047, 1319], 0.07, 0.16, "square", 0.05);
+      else if (id === "frenzy") seq([523, 587, 659, 698, 784, 880, 988, 1047], 0.035, 0.07, "square", 0.045);
+      else if (id === "shower") seq([2637, 2349, 2093, 1760, 2093, 2637], 0.06, 0.12, "triangle", 0.06);
+      else slide(150, 1200, 0.45, "sawtooth", 0.03);                                           // magnet whoosh
+    },
+  };
+})();
+
+// ---------- Music: five original chiptune tracks, generated live, that shuffle ----------
+// Each track is 8 bars; it loops for about a minute and a half, then a different track takes over.
+// Patterns are 16 steps per bar: bass = semitones above the chord root (null = rest), "x" = hit,
+// digits = hat loudness, lead/arp = which note of the chord.
+const TRACKS = [
+  { name: "Arcade Chill", bpm: 112, chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]],
+    bass: [0, null, null, null, 0, null, null, null, 0, null, null, null, 0, null, null, null], bassOct: -12, bassType: "triangle", bassVol: 0.16, bassDur: 3.5,
+    arpRate: 1, arpPat: [0, 1, 2], arpOct: 0, arpLift: true, arpType: "square", arpVol: 0.022,
+    lead: [0, null, 1, null, 2, null, 1, null, 0, null, null, null, 2, null, 1, null], leadOct: 12, leadType: "square", leadVol: 0.035,
+    kick: "x.......x.......", snare: "................", hat: "1020102010201020" },
+  { name: "Neon Drive", bpm: 128, chords: [[50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55]],
+    bass: [0, null, 12, null, 0, null, 12, null, 0, null, 12, null, 0, null, 12, null], bassOct: -12, bassType: "square", bassVol: 0.045, bassDur: 1.4,
+    arpRate: 1, arpPat: [0, 1, 2, 1], arpOct: 12, arpLift: false, arpType: "square", arpVol: 0.02,
+    lead: [2, null, null, 1, null, null, 0, null, 1, null, 2, null, null, null, null, null], leadOct: 12, leadType: "square", leadVol: 0.032,
+    kick: "x...x...x...x...", snare: "....x.......x...", hat: "0030003000300030" },
+  { name: "Coin Hop", bpm: 140, chords: [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]],
+    bass: [0, null, null, null, 7, null, 0, null, 0, null, null, null, 7, null, 12, null], bassOct: -12, bassType: "triangle", bassVol: 0.16, bassDur: 1.6,
+    arpRate: 2, arpPat: [0, 1, 2, 1], arpOct: 12, arpLift: false, arpType: "square", arpVol: 0.025,
+    lead: [0, null, 1, null, 2, null, null, null, 1, null, 0, null, null, null, null, null], leadOct: 12, leadType: "triangle", leadVol: 0.07, leadAll: true,
+    kick: "x.......x.......", snare: "....x.......x...", hat: "0020002000200020" },
+  { name: "Night Shift", bpm: 92, chords: [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]],
+    bass: [0, null, null, null, null, null, null, null, 0, null, null, null, null, null, null, null], bassOct: -12, bassType: "triangle", bassVol: 0.15, bassDur: 7,
+    arpRate: 2, arpPat: [0, 1, 2, 1], arpOct: 12, arpLift: false, arpType: "triangle", arpVol: 0.06,
+    lead: [2, null, null, null, null, null, 1, null, null, null, null, null, 0, null, null, null], leadOct: 12, leadType: "sine", leadVol: 0.06,
+    kick: "x...............", snare: "................", hat: "1000100010001000" },
+  { name: "Jackpot Funk", bpm: 104, chords: [[57, 61, 64, 67], [50, 54, 57, 60], [57, 61, 64, 67], [52, 56, 59, 62]],
+    bass: [0, null, null, 0, null, null, 7, null, 10, null, 0, null, null, 7, null, null], bassOct: -12, bassType: "square", bassVol: 0.045, bassDur: 1.2,
+    arpRate: 1, arpPat: [0, 2, 1, 3], arpOct: 12, arpLift: false, arpType: "square", arpVol: 0.014,
+    lead: [3, null, null, 2, null, null, 1, null, null, null, 0, null, null, null, null, null], leadOct: 12, leadType: "square", leadVol: 0.03,
+    kick: "x......x..x.....", snare: "....x.......x...", hat: "1211121112111211" },
+];
+// played while a random event is running
+const BONUS_TRACK = { name: "Bonus Time!", bpm: 150, chords: [[60, 64, 67], [65, 69, 72], [67, 71, 74], [60, 64, 67]],
+  bass: [0, null, 12, null, 0, null, 12, null, 0, null, 12, null, 0, null, 12, null], bassOct: -24, bassType: "square", bassVol: 0.05, bassDur: 1.3,
+  arpRate: 1, arpPat: [0, 1, 2, 1], arpOct: 0, arpLift: true, arpType: "square", arpVol: 0.022,
+  lead: [2, null, 2, null, 1, null, 2, null, 0, null, 1, null, 2, null, null, null], leadOct: 12, leadType: "square", leadVol: 0.035, leadAll: true,
+  kick: "x...x...x...x...", snare: "....x.......x...", hat: "2121212121212121" };
+const music = (() => {
+  let ac = null, out = null, timer = null, step = 0, nextT = 0, noise = null, cur = 0, stepsLeft = 0, bonus = false;
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+  function tone(f, t, dur, type, vol) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(out); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function kick(t) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+    g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    o.connect(g).connect(out); o.start(t); o.stop(t + 0.16);
+  }
+  function burst(t, vol, freq, len) {
+    if (!noise) { noise = ac.createBuffer(1, ac.sampleRate * 0.2, ac.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = noise; f.type = "highpass"; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src.connect(f).connect(g).connect(out); src.start(t); src.stop(t + len + 0.01);
+  }
+  // a track loops for about 90 seconds (at least twice), then a different one takes over
+  function pick(different) {
+    let n = cur;
+    if (different) while (TRACKS.length > 1 && n === cur) n = Math.floor(Math.random() * TRACKS.length); else n = Math.floor(Math.random() * TRACKS.length);
+    cur = n; step = 0;
+    const T = TRACKS[cur], loopSec = 128 * 60 / T.bpm / 4;
+    stepsLeft = Math.max(2, Math.round(90 / loopSec)) * 128;
+    const np = document.getElementById("nowPlaying"); if (np) np.textContent = `Now playing: ${T.name}`;
+  }
+  function play(i, t) {
+    const T = bonus ? BONUS_TRACK : TRACKS[cur], S = 60 / T.bpm / 4, bar = Math.floor(i / 16) % 8, s = i % 16, ch = T.chords[bar % T.chords.length];
+    if (T.bass[s] !== null) tone(hz(ch[0] + T.bass[s] + T.bassOct), t, S * T.bassDur, T.bassType, T.bassVol);
+    if (s % T.arpRate === 0) {
+      const k = T.arpPat[(s / T.arpRate) % T.arpPat.length] % ch.length;
+      tone(hz(ch[k] + T.arpOct + (T.arpLift && s % 8 >= 4 ? 12 : 0)), t, S * T.arpRate * 0.9, T.arpType, T.arpVol);
+    }
+    if ((T.leadAll || bar >= 4) && T.lead[s] !== null) tone(hz(ch[T.lead[s] % ch.length] + T.leadOct), t, S * 1.8, T.leadType, T.leadVol);
+    if (T.kick[s] === "x") kick(t);
+    if (T.snare[s] === "x") burst(t, 0.08, 1800, 0.12);
+    if (T.hat[s] !== "0") burst(t, 0.012 * +T.hat[s], 7000, 0.04);
+  }
+  function schedule() {
+    if (!ac) return;
+    if (nextT < ac.currentTime) nextT = ac.currentTime + 0.05; // after a background pause, pick up cleanly
+    while (nextT < ac.currentTime + 0.15) {
+      play(step, nextT);
+      nextT += 60 / (bonus ? BONUS_TRACK : TRACKS[cur]).bpm / 4; step = (step + 1) % 128;
+      if (!bonus && --stepsLeft <= 0) { nextT += 0.4; pick(true); } // a short breath between tracks
+    }
+  }
+  return {
+    get name() { return bonus ? BONUS_TRACK.name : TRACKS[cur].name; },
+    // cut to the bonus track for an event, then back to the shuffle
+    bonusTime(on) {
+      if (on === bonus) return;
+      bonus = on; step = 0;
+      if (!on) pick(true);
+      else { const np = document.getElementById("nowPlaying"); if (np) np.textContent = `Now playing: ${BONUS_TRACK.name}`; }
+      if (ac) nextT = ac.currentTime + 0.05;
+    },
+    start(ctx) {
+      if (timer || !ctx) return;
+      ac = ctx; out = ac.createGain(); out.connect(ac.destination); this.volume();
+      pick(false); nextT = ac.currentTime + 0.1; timer = setInterval(schedule, 25);
+    },
+    stop() { if (!timer) return; clearInterval(timer); timer = null; out.disconnect(); out = null; },
+    volume() { if (out) out.gain.value = settings.music ? settings.musicVol * 0.9 : 0; },
+    toggle(on) { settings.music = on; saveSettings(); if (on) { sfx.unlock(); this.start(sfx.ctx); } this.volume(); },
+    skip() { if (!ac) return; pick(true); nextT = ac.currentTime + 0.1; },
+  };
+})();
+
+// ---------- Popups ----------
+const tmpV = new THREE.Vector3();
+function popAt(pos, text, cls = "") {
+  tmpV.copy(pos).project(camera);
+  const el = document.createElement("div");
+  el.className = "pop " + cls + (settings.calm ? " calm" : ""); el.textContent = text;
+  el.style.left = ((tmpV.x + 1) / 2 * innerWidth) + "px";
+  el.style.top = Math.min(innerHeight - 60, (1 - tmpV.y) / 2 * innerHeight) + "px";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+
+// ---------- Machine helpers ----------
+let pusherT = 0; // pusher phase, in strokes
+function pusherZ(ph) { return PUSH_BACK + (PUSH_FWD - PUSH_BACK) * (0.5 - 0.5 * Math.cos(ph * Math.PI * 2)); }
+
+function stepPhysics(counting) {
+  pusherT += STEP / pushPeriod();
+  pusherBody.setNextKinematicTranslation({ x: 0, y: PUSH_TOP / 2 + 0.01, z: pusherZ(pusherT) });
+  world.step();
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const t = coins[i].body.translation();
+    if (t.y > -1.0) continue;
+    const c = coins[i];
+    if (counting) {
+      if (t.z > FLOOR_FRONT - 0.3 && Math.abs(t.x) < HALF_W) {
+        const mult = c.mystery ? rollMystery() : 1;
+        const v = c.value * mult * payoutMult();
+        if (c.mystery) { popAt(new THREE.Vector3(t.x, 0.6, FLOOR_FRONT + 0.4), `? = ×${mult}`, mult >= 5 ? "big" : mult === 0 ? "lost" : ""); if (mult === 0) sfx.sad(); else if (mult >= 5) sfx.fanfare(); }
+        wheelCharge += v;
+        bank += v; earned += v; runEarned += v; rateEarn += v;
+        popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), "+" + fmtV(v), v > 1 ? "big" : "");
+        sfx.win(v);
+      } else {
+        popAt(new THREE.Vector3(t.x, 0, t.z), "LOST", "lost");
+        sfx.lost();
+      }
+      refreshHud();
+    }
+    removeCoin(i);
+  }
+}
+
+
+// ---------- Upgrades (bought on the trees) ----------
+const BASE_SLOTS = BOARD.slots.slice();
+const lvl = id => ups[id] || 0;
+const rl = id => rups[id] || 0;
+const fmtV = v => v < 10 && v % 1 ? v.toFixed(1) : fmt(v);
+const coinValue = (l = lvl("value")) => 1 + l;
+const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (msHas("drop5k") ? 0.9 : 1) * (chHas("slow") ? 0.85 : 1)) * (chOn("slow") ? 3 : 1);
+const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (msHas("drop500") ? 0.9 : 1) * (chHas("dry") ? 0.75 : 1);
+const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + (chHas("pocketless") ? 10 : 0);
+const freeDrop = (l = lvl("free")) => 0.04 * l;
+const luckyZero = (l = lvl("lucky")) => 0.1 * l;
+const doubleDrop = (l = lvl("double")) => 0.05 * l;
+const pushPeriod = (l = lvl("pusher")) => PUSH_PERIOD * Math.pow(0.88, l) * (chHas("heavy") ? 0.85 : 1) * (chOn("heavy") ? 1.6 : 1);
+const coinSpeed = (l = lvl("coinspeed")) => (1 + 0.15 * l) * (chOn("heavy") ? 0.5 : 1);
+const eventsLvl = () => Math.max(lvl("events"), rl("eventstart"));
+const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1));
+const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
+const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
+// rebirth tree effects
+const payoutMult = (l = rl("golden")) => (1 + 0.25 * l) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.25 : 1) * (1 + msPayout()) * (chHas("leaky") ? 1.15 : 1) * (chOn("leaky") ? 0.5 : 1);
+const HEADSTART = [0, 10, 30, 100, 300, 1000];
+const startCoins = (l = rl("headstart")) => HEADSTART[l];
+const tokenMult = (l = rl("tokens")) => (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
+// rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
+const REBIRTH_AT = 1000;
+const tokenGain = () => runEarned < REBIRTH_AT ? 0 : Math.floor(2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult());
+const flipOdds = (l = rl("weighted")) => 0.5 + 0.02 * l + (msHas("streak5") ? 0.02 : 0);
+const cheaper = (l = rl("cheaper")) => Math.pow(0.9, l);
+const pct = v => Math.round(v * 100) + "%";
+const mysteryChance = (l = lvl("mystery")) => 0.05 * l;
+const goldAmt = () => 1 + lvl("pegpower") + (chHas("nopegs") ? 1 : 0);
+const splitChance = () => 0.25 + 0.05 * lvl("pegpower");
+// x, y = position on the tree (up is negative y); parent = the node that reveals it
+const UPGRADES = [
+  { id: "regen", name: "Faster Regen", x: 0, y: 0, parent: null, max: 10, base: 2, grow: 1.5, text: l => `Every ${regenInterval(l).toFixed(1)}s, +1 coin` },
+  { id: "cooldown", name: "Quick Drop", x: -1, y: 0, parent: "regen", max: 12, base: 10, grow: 1.6, text: l => `Drop every ${dropCooldown(l).toFixed(2)}s` },
+  { id: "free", name: "Free Drops", x: -2, y: 0, parent: "cooldown", max: 10, base: 12, grow: 1.6, text: l => `${pct(freeDrop(l))} of drops cost nothing` },
+  { id: "double", name: "Double Drop", x: -3, y: 0, parent: "free", max: 10, base: 60, grow: 1.7, text: l => `${pct(doubleDrop(l))} chance of a free extra coin` },
+  { id: "cap", name: "Bigger Refill", x: -1, y: 1, parent: "regen", max: 10, base: 8, grow: 1.55, text: l => `Regen refills up to ${regenCap(l)}` },
+  { id: "auto", name: "Auto Dropper", x: -2, y: 1, parent: "cap", max: 1, base: 400, grow: 1, text: l => l ? "Drops coins for you" : "You drop every coin by hand" },
+  { id: "coinspeed", name: "Coin Speed", x: 1, y: 0, parent: "regen", max: 8, base: 4, grow: 1.6, text: l => `Coins fall ${pct(coinSpeed(l))} speed` },
+  { id: "pusher", name: "Pusher Speed", x: 2, y: 0, parent: "coinspeed", max: 8, base: 10, grow: 1.65, text: l => `One push every ${pushPeriod(l).toFixed(2)}s` },
+  { id: "rails", name: "Side Rails", x: 3, y: 0, parent: "pusher", max: 1, base: 150, grow: 1, text: l => l ? "No coins lost off the sides" : "Coins can fall off the sides" },
+  { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 2.0, text: l => l ? `An event about every ${Math.round(eventGap(Math.max(l, rl("eventstart"))))}s` : "No random events" },
+  { id: "wheel", name: "Prize Wheel", x: 3, y: 1, parent: "eventlen", max: 1, base: 200, grow: 1, text: l => l ? "Earning charges the prize wheel" : "Unlocks the prize wheel" },
+  { id: "wheelfast", name: "Fast Charge", x: 3, y: 2, parent: "wheel", max: 5, base: 150, grow: 2, text: l => `The wheel charges ${pct(1 + 0.2 * l)} as fast` },
+  { id: "eventlen", name: "Longer Events", x: 2, y: 1, parent: "events", max: 5, base: 80, grow: 1.9, text: l => `Events last ${pct(eventLen(l))} as long` },
+  { id: "edge", name: "Edge Payout", x: 0, y: -1, parent: "regen", max: 7, base: 25, grow: 1.7, text: l => `Edge slots pay ×${3 + l}` },
+  { id: "jackpot", name: "Jackpot Value", x: 0, y: -3, parent: "value", max: 10, base: 40, grow: 1.75, text: l => `Middle slot pays ×${5 + l}` },
+  { id: "wide", name: "Wide Jackpot", x: 1, y: -3, parent: "jackpot", max: 5, base: 30, grow: 1.9, text: l => `${pct(0.45 + 0.08 * l)} of coins stay in the middle` },
+  { id: "reels", name: "Slot Reels", x: 0, y: -4, parent: "jackpot", max: 1, base: 120, grow: 1, text: l => l ? "Every ×5 hit spins the reels" : "Unlocks the slot reels" },
+  { id: "reelluck", name: "Hot Reels", x: 1, y: -4, parent: "reels", max: 5, base: 150, grow: 2, text: l => `7s and 10s come up ${pct(1 + 0.25 * l)} as often` },
+  { id: "mystery", name: "Mystery Coins", x: -2, y: -1, parent: "luck", max: 6, base: 80, grow: 1.9, text: l => `${pct(mysteryChance(l))} of coins become ? coins` },
+  { id: "lucky", name: "Lucky Zero", x: -1, y: -3, parent: "jackpot", max: 5, base: 50, grow: 1.8, text: l => `${pct(luckyZero(l))} of ×0 coins saved as ×1` },
+  { id: "luck", name: "Lucky Bounce", x: -1, y: -1, parent: "edge", max: 10, base: 35, grow: 1.8, text: l => `${pct(0.04 * l)} of bounces steer toward a bonus slot` },
+  { id: "flip", name: "Double or Nothing", x: 1, y: -1, parent: "edge", max: 1, base: 50, grow: 1, text: l => l ? "Coin flip side game unlocked" : "Unlocks the coin flip side game" },
+  { id: "goldpeg", name: "Golden Peg", x: 0, y: 1, parent: "regen", max: 6, base: 40, grow: 2.2, peg: "gold", text: l => `${l} golden peg${l === 1 ? "" : "s"} on random pegs: +${goldAmt()} value per touch` },
+  { id: "pegpower", name: "Peg Power", x: 0, y: 2, parent: "goldpeg", max: 5, base: 150, grow: 2.2, text: l => `Golden pegs +${1 + l} · splitters ${pct(0.25 + 0.05 * l)}` },
+  { id: "splitpeg", name: "Splitter Peg", x: -1, y: 2, parent: "goldpeg", max: 4, base: 120, grow: 2.5, peg: "split", text: l => `${l} splitter peg${l === 1 ? "" : "s"}: ${pct(splitChance())} chance to split` },
+  { id: "doublepeg", name: "Doubler Peg", x: 1, y: 2, parent: "goldpeg", max: 2, base: 500, grow: 4, peg: "double", text: l => `${l} doubler peg${l === 1 ? "" : "s"}: ×2 value per touch` },
+  { id: "value", name: "Coin Value", x: 0, y: -2, parent: "edge", max: 10, base: 30, grow: 2.5, text: l => `Each coin you drop is worth ${coinValue(l)} (and costs ${coinValue(l)})` },
+];
+const RUPGRADES = [
+  { id: "golden", name: "Golden Touch", x: 0, y: 0, parent: null, max: 20, base: 1, grow: 1.5, text: l => `Every payout ×${payoutMult(l).toFixed(2)}` },
+  { id: "headstart", name: "Head Start", x: -1, y: 0, parent: "golden", max: 5, base: 2, grow: 2.2, text: l => `Start each run with ${startCoins(Math.min(l, 5))} coins` },
+  { id: "regenkeep", name: "Deep Pockets", x: -2, y: 0, parent: "headstart", max: 5, base: 3, grow: 1.8, text: l => `Regen cap +${5 * l}, forever` },
+  { id: "autostart", name: "Auto From Start", x: -1, y: 1, parent: "headstart", max: 1, base: 5, grow: 1, text: l => l ? "Auto Dropper owned every run" : "Buy Auto Dropper each run" },
+  { id: "tokens", name: "Token Boost", x: 1, y: 0, parent: "golden", max: 10, base: 2, grow: 1.8, text: l => `${pct(tokenMult(l))} tokens per rebirth` },
+  { id: "cheaper", name: "Bulk Discount", x: 2, y: 0, parent: "tokens", max: 5, base: 4, grow: 2, text: l => `Machine upgrades cost ${pct(cheaper(l))}` },
+  { id: "eventstart", name: "Event Pass", x: 1, y: 1, parent: "tokens", max: 1, base: 6, grow: 1, text: l => l ? "Random events from the start" : "Unlock events each run" },
+  { id: "weighted", name: "Weighted Coin", x: 0, y: -1, parent: "golden", max: 5, base: 3, grow: 2, text: l => `Win ${pct(flipOdds(l))} of coin flips` },
+];
+const ASC_AT = 25; // tokens earned since the last ascension
+const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(2 * Math.sqrt(tokensAsc / ASC_AT));
+const AUPGRADES = [
+  { id: "shine", name: "Gem Shine", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.8, text: l => `All payouts +${50 * l}%` },
+  { id: "fountain", name: "Token Fountain", x: 1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% tokens per rebirth` },
+  { id: "keeppegs", name: "Peg Keeper", x: 2, y: 0, parent: "fountain", max: 1, base: 4, grow: 1, text: l => l ? "Special pegs survive rebirths" : "Special pegs reset on rebirth" },
+  { id: "autoreb", name: "Auto Rebirth", x: 1, y: 1, parent: "fountain", max: 1, base: 3, grow: 1, text: l => l ? `Rebirths for you at ${autoRebAt} tokens` : "You rebirth by hand" },
+  { id: "startups", name: "Running Start", x: -1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => l ? `Runs start with Regen, Quick Drop and Coin Speed at level ${2 * l}` : "Runs start from scratch" },
+  { id: "fever", name: "Jackpot Fever", x: 0, y: -1, parent: "shine", max: 5, base: 3, grow: 2.2, text: l => `Middle slot +${2 * l}` },
+  { id: "gemluck", name: "Gem Luck", x: -1, y: -1, parent: "fever", max: 5, base: 2, grow: 2, text: l => `+${5 * l}% Lucky Bounce` },
+];
+const TREES = {
+  main: { list: UPGRADES, lv: lvl, set: (id, v) => { ups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, lvl(u.id)) * cheaper()), has: () => bank, pay: c => { bank -= c; }, unit: "coins" },
+  asc: { list: AUPGRADES, lv: al, set: (id, v) => { aups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, al(u.id))), has: () => gems, pay: c => { gems -= c; }, unit: "gems" },
+  reb: { list: RUPGRADES, lv: rl, set: (id, v) => { rups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, rl(u.id))), has: () => tokens, pay: c => { tokens -= c; }, unit: "tokens" },
+};
+let treeId = "main";
+const selectedIn = { main: "regen", reb: "golden", asc: "shine" };
+const byId = (T, id) => T.list.find(u => u.id === id);
+// open = can be bought; locked = shown as "?" next to something open; hidden = not shown yet
+const nodeState = (T, u) => !u.parent || T.lv(u.parent) > 0 ? "open" : nodeState(T, byId(T, u.parent)) === "open" ? "locked" : "hidden";
+let railsBuilt = false;
+function applyUpgrades() {
+  BOARD.slots = BASE_SLOTS.map(m => {
+    if (m === 5) return chOn("nojack") ? 0 : 5 + lvl("jackpot") + (chHas("nojack") ? 1 : 0) + 2 * al("fever") + (chHas("jackonly") ? 2 : 0);
+    if (chOn("jackonly")) return 0;
+    if (m === 3) return 3 + lvl("edge") + (chHas("allnothing") ? 1 : 0);
+    if (m === 1 && chOn("allnothing")) return 0;
+    return m;
+  });
+  BOARD.jackpotKeep = eventOn("magnet") ? 1 : Math.min(1, 0.45 + 0.08 * lvl("wide") + (msHas("jack100") ? 0.05 : 0));
+  BOARD.luck = 0.04 * lvl("luck") + (msHas("jack10") ? 0.04 : 0) + 0.05 * al("gemluck");
+  drawBoard();
+  $("bonusbar").textContent = `×${BOARD.slots[4]} in the middle · ×${BOARD.slots[0]} on the edges`;
+  if (lvl("rails") && !railsBuilt) {
+    railsBuilt = true;
+    for (const sx of [-1, 1]) {
+      const len = FLOOR_FRONT - WALL_END;
+      fixedBox(0.1, 1.6, len / 2, sx * (HALF_W + 0.1), 1.6, WALL_END + len / 2, glassMat);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.2, 0.24), chrome);
+      post.position.set(sx * (HALF_W + 0.1), 1.6, FLOOR_FRONT); scene.add(post);
+    }
+  }
+}
+function buy(T, u) {
+  const c = T.cost(u);
+  if (nodeState(T, u) !== "open" || T.lv(u.id) >= u.max || T.has() < c) return;
+  T.pay(c); T.set(u.id, T.lv(u.id) + 1);
+  applyUpgrades(); sfx.bonus(); save(); refreshHud(); renderTree();
+  if (u.peg === "gold") { if (fillGold()) { drawSpecialPegs(); save(); popAt(new THREE.Vector3(0, BOARD.pegTop + 0.6, BOARD_Z), "GOLDEN PEG!", "big"); sfx.golden(); } }
+  else if (u.peg) startPlacing(u.peg);
+}
+
+// ---------- The tree view (machine tree + rebirth tree) ----------
+const CELL_W = 136, CELL_H = 112, NODE_W = 104, NODE_H = 76;
+function extents(T) {
+  const xs = T.list.map(u => u.x), ys = T.list.map(u => u.y);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+const nodeCenter = (T, u) => { const e = extents(T); return [24 + (u.x - e.minX) * CELL_W + CELL_W / 2, 24 + (u.y - e.minY) * CELL_H + CELL_H / 2]; };
+function renderTree() {
+  if ($("tree").hidden) return;
+  $("tabMain").classList.toggle("on", treeId === "main"); $("tabReb").classList.toggle("on", treeId === "reb");
+  $("tabCh").classList.toggle("on", treeId === "ch"); $("tabAsc").classList.toggle("on", treeId === "asc");
+  $("tabAsc").hidden = !(rebirths >= 3 || ascensions > 0); $("tabGoals").classList.toggle("on", treeId === "goals");
+  $("tabReb").hidden = !(rebirths > 0 || runEarned >= 250);
+  $("tabCh").hidden = !(rebirths > 0);
+  const listTab = ["ch", "goals", "stats", "set", "style"].includes(treeId);
+  $("tabStyle").classList.toggle("on", treeId === "style");
+  $("tabStats").classList.toggle("on", treeId === "stats"); $("tabSet").classList.toggle("on", treeId === "set");
+  $("treeInfo").hidden = listTab;
+  if (listTab) { $("rebirthBar").hidden = true; $("treeCoins").textContent = `${fmt(bank)} coins`; return treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : renderSettings(); }
+  const T = TREES[treeId], e = extents(T), area = $("treeArea");
+  $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`;
+  renderRebirthBar();
+  const W = 48 + (e.maxX - e.minX + 1) * CELL_W, H = 48 + (e.maxY - e.minY + 1) * CELL_H;
+  area.style.width = W + "px"; area.style.height = H + "px";
+  area.textContent = "";
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  for (const u of T.list) {
+    if (!u.parent || nodeState(T, u) === "hidden") continue;
+    const [x1, y1] = nodeCenter(T, byId(T, u.parent)), [x2, y2] = nodeCenter(T, u);
+    const ln = document.createElementNS(ns, "line");
+    ln.setAttribute("x1", x1); ln.setAttribute("y1", y1); ln.setAttribute("x2", x2); ln.setAttribute("y2", y2);
+    ln.setAttribute("stroke", T.lv(u.id) > 0 ? (treeId === "reb" ? P.accentB : P.gold) : "#ffffff30"); ln.setAttribute("stroke-width", "4");
+    if (nodeState(T, u) === "locked") ln.setAttribute("stroke-dasharray", "6 6");
+    svg.appendChild(ln);
+  }
+  area.appendChild(svg);
+  for (const u of T.list) {
+    const st = nodeState(T, u);
+    if (st === "hidden") continue;
+    const [cx, cy] = nodeCenter(T, u), l = T.lv(u.id), maxed = l >= u.max;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "node" + (st === "locked" ? " locked" : maxed ? " maxed" : T.has() >= T.cost(u) ? " afford" : "") + (selectedIn[treeId] === u.id ? " sel" : "");
+    b.style.left = cx - NODE_W / 2 + "px"; b.style.top = cy - NODE_H / 2 + "px";
+    b.innerHTML = '<span class="nm"></span><span class="lv"></span>';
+    if (st === "locked") { b.querySelector(".nm").textContent = "?"; b.disabled = true; b.setAttribute("aria-label", "Locked upgrade"); }
+    else {
+      b.querySelector(".nm").textContent = u.name;
+      b.querySelector(".lv").textContent = maxed ? "MAX" : `${l}/${u.max}`;
+      b.addEventListener("click", () => { selectedIn[treeId] = u.id; renderTree(); });
+    }
+    area.appendChild(b);
+  }
+  renderInfo();
+}
+function renderInfo() {
+  const T = TREES[treeId], u = byId(T, selectedIn[treeId]), l = T.lv(u.id), maxed = l >= u.max, info = $("treeInfo");
+  info.innerHTML = '<h3></h3><p class="d"></p><p class="c"></p><button class="buy" type="button"></button>';
+  info.querySelector("h3").textContent = `${u.name}  ·  Lv ${l}/${u.max}`;
+  info.querySelector(".d").textContent = maxed ? u.text(l) : `${u.text(l)}  →  ${u.text(l + 1)}`;
+  info.querySelector(".c").textContent = maxed ? "Fully upgraded" : `Costs ${fmt(T.cost(u))} ${T.unit} · you have ${fmt(T.has())}`;
+  const buyBtn = info.querySelector(".buy");
+  buyBtn.textContent = maxed ? "MAX" : "BUY"; buyBtn.disabled = maxed || T.has() < T.cost(u);
+  buyBtn.addEventListener("click", () => buy(T, u));
+  if (u.peg === "gold" && l > 0) {
+    const p = document.createElement("p"); p.className = "c"; p.textContent = "Golden pegs land on random pegs and stay put until your next rebirth."; info.appendChild(p);
+  } else if (u.peg && l > 0) {
+    const placed = pegsPlaced(u.peg), t = document.createElement("button"); t.type = "button"; t.className = "tog";
+    t.textContent = placed < l ? `Place on the board (${placed}/${l} placed)` : `Move a peg (${placed}/${l} placed)`;
+    t.addEventListener("click", () => startPlacing(u.peg));
+    info.appendChild(t);
+  }
+  if (u.id === "autoreb" && l > 0) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog";
+    t.textContent = autoRebOn ? "Auto Rebirth is ON (click to switch off)" : "Auto Rebirth is OFF (click to switch on)";
+    t.addEventListener("click", () => { autoRebOn = !autoRebOn; save(); renderInfo(); });
+    const chips = document.createElement("div"); chips.className = "chips";
+    for (const n of [2, 5, 10, 25]) {
+      const c = document.createElement("button"); c.type = "button"; c.textContent = `at ${n} tokens`; c.className = n === autoRebAt ? "on" : "";
+      c.addEventListener("click", () => { autoRebAt = n; save(); renderInfo(); });
+      chips.appendChild(c);
+    }
+    info.append(t, chips);
+  }
+  if ((u.id === "auto" || u.id === "autostart") && autoOwned()) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog";
+    t.textContent = autoOn ? "Auto Dropper is ON (click to switch off)" : "Auto Dropper is OFF (click to switch on)";
+    t.addEventListener("click", () => { autoOn = !autoOn; save(); renderInfo(); });
+    info.appendChild(t);
+  }
+}
+let rebArmed = 0;
+function renderRebirthBar() {
+  const bar = $("rebirthBar"); bar.hidden = treeId !== "reb" && treeId !== "asc";
+  if (bar.hidden) return;
+  if (treeId === "asc") {
+    const g = gemGain();
+    $("rebText").textContent = g >= 1
+      ? `Ascend: reset your machine, tokens and rebirth tree for ${g} gem${g > 1 ? "s" : ""} (${fmt(tokensAsc)} tokens earned since your last ascension). You keep gems, this tree, milestones and challenge rewards.`
+      : `Earn ${ASC_AT} tokens since your last ascension to ascend for gems. So far: ${fmt(tokensAsc)}.`;
+    const ab = $("rebBtn"); ab.disabled = g < 1;
+    ab.textContent = Date.now() - rebArmed < 3000 ? "CLICK TO CONFIRM" : `ASCEND +${g}`;
+    return;
+  }
+  const n = tokenGain();
+  $("rebText").textContent = n >= 1
+    ? `Rebirth: start a fresh machine and get ${n} token${n > 1 ? "s" : ""} (you earned ${fmt(runEarned)} coins this run). You keep your tokens and this tree.`
+    : `Earn ${fmt(REBIRTH_AT)} coins in a run to rebirth for tokens. This run: ${fmt(runEarned)} coins.`;
+  const b = $("rebBtn");
+  b.disabled = n < 1;
+  b.textContent = Date.now() - rebArmed < 3000 ? "CLICK TO CONFIRM" : `REBIRTH +${n}`;
+}
+$("rebBtn").addEventListener("click", () => {
+  if ((treeId === "asc" ? gemGain() : tokenGain()) < 1) return;
+  if (Date.now() - rebArmed > 3000) { rebArmed = Date.now(); renderRebirthBar(); setTimeout(renderRebirthBar, 3100); return; }
+  if (treeId === "asc") doAscend(); else doRebirth();
+});
+function refreshShop() {
+  const any = UPGRADES.some(u => nodeState(TREES.main, u) === "open" && lvl(u.id) < u.max && bank >= TREES.main.cost(u))
+    || RUPGRADES.some(u => nodeState(TREES.reb, u) === "open" && rl(u.id) < u.max && tokens >= TREES.reb.cost(u))
+    || AUPGRADES.some(u => nodeState(TREES.asc, u) === "open" && al(u.id) < u.max && gems >= TREES.asc.cost(u));
+  $("treeBadge").hidden = !any;
+  if (!$("tree").hidden && !["set", "stats", "style"].includes(treeId)) renderTree();
+}
+function centerTree() {
+  if (!TREES[treeId]) return;
+  const T = TREES[treeId], root = T.list[0], [cx, cy] = nodeCenter(T, root), sc = $("treeScroll");
+  sc.scrollLeft = cx - sc.clientWidth / 2; sc.scrollTop = cy - sc.clientHeight / 2;
+}
+$("treeBtn").addEventListener("click", () => { $("tree").hidden = false; renderTree(); centerTree(); });
+$("tabMain").addEventListener("click", () => { treeId = "main"; renderTree(); centerTree(); });
+$("tabReb").addEventListener("click", () => { treeId = "reb"; renderTree(); centerTree(); });
+$("tabAsc").addEventListener("click", () => { treeId = "asc"; renderTree(); centerTree(); });
+$("tabCh").addEventListener("click", () => { treeId = "ch"; renderTree(); $("treeScroll").scrollTo(0, 0); });
+$("tabGoals").addEventListener("click", () => { treeId = "goals"; renderTree(); $("treeScroll").scrollTo(0, 0); });
+$("tabStats").addEventListener("click", () => { treeId = "stats"; renderTree(); $("treeScroll").scrollTo(0, 0); });
+$("tabStyle").addEventListener("click", () => { treeId = "style"; renderTree(); $("treeScroll").scrollTo(0, 0); });
+$("tabSet").addEventListener("click", () => { treeId = "set"; renderTree(); $("treeScroll").scrollTo(0, 0); });
+$("treeClose").addEventListener("click", () => { $("tree").hidden = true; });
+$("placeDone").addEventListener("click", stopPlacing);
+addEventListener("keydown", e => { if (e.code === "Escape") { $("tree").hidden = true; $("flip").hidden = true; stopPlacing(); } });
+// ---------- Cosmetics: unlocked by playing ----------
+const THEMES = [
+  { id: "midnight", req: () => true, how: "Unlocked from the start" },
+  { id: "flatmint", req: () => earned >= 1000, how: "Earn 1,000 coins" },
+  { id: "skygrass", req: () => rebirths >= 1, how: "Rebirth once" },
+  { id: "coral", req: () => Object.keys(chDone).length >= 1, how: "Beat a challenge" },
+  { id: "seaside", req: () => earned >= 100000, how: "Earn 100,000 coins" },
+  { id: "carpet", req: () => stats.jackpots >= 100, how: "Hit ×5 100 times" },
+  { id: "casino", req: () => stats.bestStreak >= 8, how: "Win 8 coin flips in a row" },
+  { id: "tickets", req: () => (stats.reel777 || 0) >= 1, how: "Hit 7-7-7 on the slot reels" },
+  { id: "lime", req: () => Object.keys(msDone).length >= 10, how: "Complete 10 milestones" },
+  { id: "y2k", req: () => ascensions >= 1, how: "Ascend once" },
+];
+const COIN_STYLES = [
+  { id: "classic", name: "Classic", req: () => true, how: "Unlocked from the start" },
+  { id: "minted", name: "Minted", req: () => earned >= 10000, how: "Earn 10,000 coins" },
+  { id: "token", name: "Arcade Token", req: () => rebirths >= 3, how: "Rebirth 3 times" },
+  { id: "gilded", name: "Gilded", req: () => Object.keys(chDone).length >= 6, how: "Beat 6 challenges" },
+];
+function checkCosmetics() {
+  const quiet = !settings.seenInit; // the first check (an existing save) unlocks things silently
+  for (const c of [...THEMES.map(t => ({ ...t, name: PALETTES[t.id].name, kind: "theme" })), ...COIN_STYLES.map(c => ({ ...c, kind: "coin style" }))]) {
+    if (c.req() && !settings.seenCos.includes(c.id)) {
+      settings.seenCos.push(c.id); saveSettings();
+      if (!quiet && c.id !== "midnight" && c.id !== "classic") showToast("NEW " + c.kind.toUpperCase() + " UNLOCKED", `${c.name} · pick it in the STYLE tab`);
+    }
+  }
+  if (quiet) { settings.seenInit = true; saveSettings(); }
+}
+function applyLook(key, val) { settings[key] = val; saveSettings(); save(); saveBlocked = true; location.reload(); }
+function renderStyle() {
+  const w = cardsWrap("Themes and coin styles are trophies: you unlock them by playing. Picking one reloads the game in the new look (your progress is saved first).");
+  const head = t => { const h = document.createElement("h3"); h.textContent = t; h.style.gridColumn = "1 / -1"; h.className = "listHead"; return h; };
+  w.appendChild(head("Machine themes"));
+  for (const t of THEMES) {
+    const pal = PALETTES[t.id], open = t.req(), using = (settings.theme || "midnight") === t.id;
+    const c = card(open ? "" : "locked", (using ? "✓ " : "") + pal.name, [[open ? "" : "Locked: ", open ? (using ? "In use" : "Unlocked") : t.how]]);
+    const sw = document.createElement("div"); sw.className = "swatches";
+    for (const col of [pal.signBg, pal.felt, pal.metal, pal.accentA, pal.cabinet, pal.bg]) { const i = document.createElement("i"); i.style.background = col; sw.appendChild(i); }
+    c.appendChild(sw);
+    if (open && !using) { const b = document.createElement("button"); b.type = "button"; b.textContent = "USE THEME"; b.addEventListener("click", () => applyLook("theme", t.id)); c.appendChild(b); }
+    w.appendChild(c);
+  }
+  w.appendChild(head("Coin styles"));
+  for (const cs of COIN_STYLES) {
+    const open = cs.req(), using = (settings.coinStyle || "classic") === cs.id;
+    const c = card(open ? "" : "locked", (using ? "✓ " : "") + cs.name, [[open ? "" : "Locked: ", open ? (using ? "In use" : "Unlocked") : cs.how]]);
+    const row = document.createElement("div"); row.className = "coinRow";
+    for (const v of [1, 2, 5, 10, 100]) { const cv = valueFace(v, cs.id).image; cv.setAttribute("aria-hidden", "true"); row.appendChild(cv); }
+    c.appendChild(row);
+    if (open && !using) { const b = document.createElement("button"); b.type = "button"; b.textContent = "USE STYLE"; b.addEventListener("click", () => applyLook("coinStyle", cs.id)); c.appendChild(b); }
+    w.appendChild(c);
+  }
+}
+
+// ---------- Stats ----------
+function renderStats() {
+  const w = cardsWrap("");
+  const groups = [
+    ["Time", [["Played: ", dur(stats.playTime || 0)], ["This run: ", dur(runTime)]]],
+    ["Coins", [["Earned in total: ", fmt(earned)], ["Earned this run: ", fmt(runEarned)], ["In the vault: ", fmt(bank)], ["Biggest vault: ", fmt(stats.maxBank)], ["Income lately: ", `${fmtV(incomeRate * 60)} a minute`]]],
+    ["Machine", [["Coins dropped: ", fmt(dropped)], ["×5 hits: ", fmt(stats.jackpots)], ["Best flip streak: ", String(stats.bestStreak)]]],
+    ["Progress", [["Rebirths: ", fmt(rebirths)], ["Tokens earned: ", fmt(stats.tokensTotal || 0)], ["Ascensions: ", fmt(ascensions)], ["Gems earned: ", fmt(gemsTotal)],
+      ["Milestones: ", `${Object.keys(msDone).length} / ${MILESTONES.length}`], ["Challenges: ", `${Object.keys(chDone).length} / ${CHALLENGES.length}`]]],
+  ];
+  for (const [title, lines] of groups) w.appendChild(card("", title, lines));
+}
+
+// ---------- Settings ----------
+const timerless = () => !sfx.ctx;
+let resetArmed = 0, importArmed = 0;
+// a save code is the save, base64-encoded; plain JSON (e.g. from a file) is accepted too
+function parseSaveCode(text) {
+  const t = (text || "").trim();
+  let data = null;
+  try { data = JSON.parse(decodeURIComponent(escape(atob(t)))); } catch { try { data = JSON.parse(t); } catch { data = null; } }
+  return data && typeof data.bank === "number" ? data : null;
+}
+const exportCode = () => { save(); try { return btoa(unescape(encodeURIComponent(localStorage.getItem(SAVE_KEY) || ""))); } catch { return ""; } };
+function renderSettings() {
+  const w = cardsWrap("");
+  // sound
+  const snd = card("", "Sound", [["Chiptune sound effects for drops, pegs and payouts.", ""]]);
+  const tg = document.createElement("button"); tg.type = "button"; tg.textContent = settings.sound ? "SOUND: ON" : "SOUND: OFF";
+  tg.addEventListener("click", () => { settings.sound = !settings.sound; saveSettings(); sfx.unlock(); sfx.click(); renderTree(); });
+  const lab = document.createElement("label"); lab.className = "vol"; lab.htmlFor = "volSlider"; lab.textContent = `Volume ${Math.round(settings.volume * 100)}%`;
+  const vol = document.createElement("input"); vol.type = "range"; vol.id = "volSlider"; vol.min = "0"; vol.max = "1"; vol.step = "0.05"; vol.value = settings.volume;
+  vol.addEventListener("input", () => { settings.volume = +vol.value; lab.textContent = `Volume ${Math.round(settings.volume * 100)}%`; saveSettings(); });
+  vol.addEventListener("change", () => { sfx.unlock(); sfx.click(); });
+  snd.append(tg, lab, vol); w.appendChild(snd);
+  // motion
+  const mo = card("", "Motion", [["Calm mode stops the flashing chase lights and makes popups fade in place instead of floating.", ""]]);
+  const mb = document.createElement("button"); mb.type = "button"; mb.textContent = settings.calm ? "CALM MODE: ON" : "CALM MODE: OFF";
+  mb.addEventListener("click", () => { settings.calm = !settings.calm; saveSettings(); renderTree(); });
+  mo.appendChild(mb); w.appendChild(mo);
+  // music
+  const mu = card("", "Music", [[`Five original chiptune tracks that shuffle: ${TRACKS.map(t => t.name).join(", ")}.`, ""]]);
+  const mt = document.createElement("button"); mt.type = "button"; mt.textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
+  mt.addEventListener("click", () => { music.toggle(!settings.music); renderTree(); });
+  const ml = document.createElement("label"); ml.className = "vol"; ml.htmlFor = "musicSlider"; ml.textContent = `Music volume ${Math.round(settings.musicVol * 100)}%`;
+  const mv = document.createElement("input"); mv.type = "range"; mv.id = "musicSlider"; mv.min = "0"; mv.max = "1"; mv.step = "0.05"; mv.value = settings.musicVol;
+  mv.addEventListener("input", () => { settings.musicVol = +mv.value; ml.textContent = `Music volume ${Math.round(settings.musicVol * 100)}%`; saveSettings(); music.volume(); });
+  const np = document.createElement("p"); np.id = "nowPlaying"; np.textContent = timerless() ? "Starts when you click or press a key." : `Now playing: ${music.name}`;
+  const sk = document.createElement("button"); sk.type = "button"; sk.className = "quit"; sk.textContent = "SKIP TRACK";
+  sk.addEventListener("click", () => { sfx.unlock(); music.skip(); });
+  mu.append(mt, ml, mv, np, sk); w.appendChild(mu);
+  // save backup
+  const bk = card("", "Save backup", [["Your progress is saved in this browser only. Copy this code somewhere safe; paste it back here to restore your game on any browser or device.", ""]]);
+  const ta = document.createElement("textarea"); ta.className = "code"; ta.id = "saveCode"; ta.rows = 3; ta.value = exportCode(); ta.setAttribute("aria-label", "Save code");
+  ta.addEventListener("focus", () => ta.select());
+  const row = document.createElement("div"); row.className = "row";
+  const cp = document.createElement("button"); cp.type = "button"; cp.textContent = "COPY CODE";
+  cp.addEventListener("click", () => {
+    ta.value = exportCode();
+    const done = () => { cp.textContent = "COPIED"; setTimeout(() => { cp.textContent = "COPY CODE"; }, 1500); };
+    try { navigator.clipboard.writeText(ta.value).then(done, () => { ta.focus(); ta.select(); cp.textContent = "SELECTED: PRESS CTRL+C"; }); }
+    catch { ta.focus(); ta.select(); cp.textContent = "SELECTED: PRESS CTRL+C"; }
+  });
+  const ld = document.createElement("button"); ld.type = "button"; ld.className = "quit";
+  ld.textContent = Date.now() - importArmed < 3000 ? "CLICK TO REPLACE YOUR GAME" : "LOAD PASTED CODE";
+  const msg = document.createElement("p");
+  ld.addEventListener("click", () => {
+    let data;
+    data = parseSaveCode(ta.value);
+    if (!data) { msg.textContent = "That code doesn't look like a Coin Cascade save. Paste the whole code and try again."; return; }
+    if (Date.now() - importArmed > 3000) { importArmed = Date.now(); ld.textContent = "CLICK TO REPLACE YOUR GAME"; msg.textContent = "This replaces your current game with the pasted one."; setTimeout(() => { ld.textContent = "LOAD PASTED CODE"; }, 3000); return; }
+    store.set(SAVE_KEY, data); saveBlocked = true; location.reload();
+  });
+  row.append(cp, ld); bk.append(ta, row, msg); w.appendChild(bk);
+  // back to the title screen
+  const ti = card("", "Title screen", [[`Coin Cascade v${VERSION}`, ""]]);
+  const tb = document.createElement("button"); tb.type = "button"; tb.textContent = "BACK TO TITLE";
+  tb.addEventListener("click", () => { $("tree").hidden = true; save(); openTitle(); });
+  ti.appendChild(tb); w.appendChild(ti);
+  // reset
+  const rs = card("", "Reset", [["Wipe everything and start a brand-new game. This can't be undone, so copy your save code first if you might want it back.", ""]]);
+  const rb = document.createElement("button"); rb.type = "button"; rb.className = "quit";
+  rb.textContent = Date.now() - resetArmed < 3000 ? "CLICK AGAIN TO WIPE EVERYTHING" : "RESET PROGRESS";
+  rb.addEventListener("click", () => {
+    if (Date.now() - resetArmed < 3000) { store.set(SAVE_KEY, null); saveBlocked = true; location.reload(); return; }
+    resetArmed = Date.now(); renderTree(); setTimeout(() => { if (treeId === "set") renderTree(); }, 3100);
+  });
+  rs.appendChild(rb); w.appendChild(rs);
+}
+function renderShop() { refreshShop(); }
+
+// ---------- Milestones ----------
+// Permanent goals; each pays a small permanent bonus the moment it's reached.
+const MILESTONES = [
+  { id: "earn100", name: "Pocket Change", goal: 100, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
+  { id: "earn1k", name: "Coin Collector", goal: 1000, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
+  { id: "earn10k", name: "High Roller", goal: 10000, val: () => earned, unit: "coins earned", reward: "+10% payouts", pay: 0.1 },
+  { id: "earn100k", name: "Coin Baron", goal: 100000, val: () => earned, unit: "coins earned", reward: "+10% payouts", pay: 0.1 },
+  { id: "drop500", name: "Busy Hands", goal: 500, val: () => dropped, unit: "coins dropped", reward: "Regen 10% faster" },
+  { id: "drop5k", name: "Drop Machine", goal: 5000, val: () => dropped, unit: "coins dropped", reward: "Drop cooldown 10% shorter" },
+  { id: "jack10", name: "Bullseye", goal: 10, val: () => stats.jackpots, unit: "×5 hits", reward: "+4% Lucky Bounce" },
+  { id: "jack100", name: "Jackpot Junkie", goal: 100, val: () => stats.jackpots, unit: "×5 hits", reward: "5% more coins stay in the ×5" },
+  { id: "vault1k", name: "Full Vault", goal: 1000, val: () => stats.maxBank, unit: "coins held at once", reward: "+5 regen cap" },
+  { id: "streak5", name: "Hot Streak", goal: 5, val: () => stats.bestStreak, unit: "flips won in a row", reward: "+2% flip odds" },
+  { id: "reb1", name: "Born Again", goal: 1, val: () => rebirths, unit: "rebirths", reward: "+5 regen cap" },
+  { id: "reb5", name: "Old Soul", goal: 5, val: () => rebirths, unit: "rebirths", reward: "+10% tokens" },
+  { id: "asc1", name: "Ascended", goal: 1, val: () => ascensions, unit: "ascensions", reward: "+25% payouts" },
+  { id: "gems10", name: "Gem Hoarder", goal: 10, val: () => gemsTotal, unit: "gems earned", reward: "+10% tokens" },
+  { id: "chal3", name: "Up for Anything", goal: 3, val: () => Object.keys(chDone).length, unit: "challenges done", reward: "+10% payouts", pay: 0.1 },
+];
+const msPayout = () => MILESTONES.reduce((a, m) => a + (m.pay && msDone[m.id] ? m.pay : 0), 0);
+
+// ---------- Challenges ----------
+// A challenge restarts your run (no tokens) with a handicap. Earn the goal in that run to beat it.
+const CHALLENGES = [
+  { id: "nojack", name: "No Jackpot", rule: "The middle slot pays ×0.", goal: 500, need: 1, reward: "The middle slot pays +1 more, forever" },
+  { id: "slow", name: "Slow Hands", rule: "Drops take 3× as long.", goal: 500, need: 1, reward: "Drops 15% faster, forever" },
+  { id: "leaky", name: "Leaky Machine", rule: "Every payout is halved.", goal: 400, need: 1, reward: "Payouts +15%, forever" },
+  { id: "dry", name: "Dry Spell", rule: "No regen. You start with 20 coins.", goal: 300, need: 3, start: 20, reward: "Regen 25% faster, forever" },
+  { id: "allnothing", name: "All or Nothing", rule: "The ×1 slots pay ×0.", goal: 300, need: 3, reward: "Edge slots pay +1 more, forever" },
+  { id: "heavy", name: "Heavy Coins", rule: "Coins and the pusher move at half speed.", goal: 500, need: 3, reward: "Pusher 15% faster, forever" },
+  { id: "pocketless", name: "Pocketless", rule: "Regen only fills up to 2 coins.", goal: 1500, need: 0, needAsc: 1, reward: "Regen cap +10, forever" },
+  { id: "nopegs", name: "No Pegs", rule: "Special pegs do nothing.", goal: 2000, need: 0, needAsc: 1, reward: "Golden pegs give +1 more, forever" },
+  { id: "jackonly", name: "Jackpot Only", rule: "Only the middle slot pays.", goal: 1000, need: 0, needAsc: 1, reward: "The middle slot pays +2 more, forever" },
+];
+// a fresh run keeps everything permanent and resets the machine
+function doRebirth() {
+  const n = tokenGain(); if (n < 1) return;
+  tokens += n; tokensAsc += n; rebirths++; stats.tokensTotal = (stats.tokensTotal || 0) + n;
+  store.set(SAVE_KEY, freshRun({ bank: startCoins(), chActive: null }));
+  saveBlocked = true; location.reload();
+}
+function doAscend() {
+  const g = gemGain(); if (g < 1) return;
+  gems += g; gemsTotal += g; ascensions++; tokensAsc = 0; tokens = 0;
+  for (const k in rups) delete rups[k];
+  store.set(SAVE_KEY, freshRun({ bank: 0, chActive: null }));
+  saveBlocked = true; location.reload();
+}
+// the machine upgrades a new run starts with (Running Start, Peg Keeper)
+function startUps() {
+  const u = {}, L = al("startups");
+  if (L) for (const id of ["regen", "cooldown", "coinspeed"]) u[id] = Math.min(2 * L, UPGRADES.find(x => x.id === id).max);
+  if (al("keeppegs")) for (const id of ["goldpeg", "splitpeg", "doublepeg", "pegpower"]) if (ups[id]) u[id] = ups[id];
+  return u;
+}
+function freshRun(extra) {
+  return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
+    stats, msDone, chDone, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
+    goldRandom: true, t: Date.now(), coins: null }, extra);
+}
+let toastTimer = 0;
+function showToast(title, text) {
+  $("toastTitle").textContent = title; $("toastText").textContent = text; $("toast").hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 3500);
+  sfx.achieve();
+}
+function checkGoals() {
+  checkCosmetics();
+  if (al("autoreb") && autoRebOn && !chActive && !saveBlocked && tokenGain() >= autoRebAt) { doRebirth(); return; }
+  stats.maxBank = Math.max(stats.maxBank, Math.floor(bank));
+  for (const m of MILESTONES) {
+    if (!msDone[m.id] && m.val() >= m.goal) { msDone[m.id] = true; applyUpgrades(); showToast("MILESTONE: " + m.name.toUpperCase(), m.reward); save(); }
+  }
+  if (chActive) {
+    const c = CHALLENGES.find(x => x.id === chActive);
+    $("bonusbar").textContent = `CHALLENGE ${c.name}: ${fmt(runEarned)} / ${fmt(c.goal)} earned`;
+    if (runEarned >= c.goal) {
+      chDone[c.id] = true; chActive = null; applyUpgrades();
+      showToast("CHALLENGE BEATEN: " + c.name.toUpperCase(), c.reward); save();
+    }
+  }
+}
+const cardsWrap = note => { const area = $("treeArea"); area.style.width = "auto"; area.style.height = "auto"; area.textContent = "";
+  if (note) { const n = document.createElement("p"); n.className = "listNote"; n.textContent = note; area.appendChild(n); }
+  const w = document.createElement("div"); w.className = "cards"; area.appendChild(w); return w; };
+function card(cls, title, lines) {
+  const c = document.createElement("div"); c.className = "card " + cls;
+  const h = document.createElement("h3"); h.textContent = title; c.appendChild(h);
+  for (const [label, value] of lines) { const p = document.createElement("p"); p.textContent = label; if (value) { const b = document.createElement("b"); b.textContent = value; p.appendChild(b); } c.appendChild(p); }
+  return c;
+}
+function progressBar(frac) { const d = document.createElement("div"); d.className = "prog"; const i = document.createElement("i"); i.style.width = Math.round(Math.min(1, frac) * 100) + "%"; d.appendChild(i); return d; }
+function renderGoals() {
+  const w = cardsWrap(`Milestones are permanent and pay out automatically. ${Object.keys(msDone).length} of ${MILESTONES.length} done.`);
+  for (const m of MILESTONES) {
+    const done = msHas(m.id), v = Math.min(m.val(), m.goal);
+    const c = card(done ? "done" : "", (done ? "✓ " : "") + m.name, [["Goal: ", `${fmt(m.goal)} ${m.unit}`], ["Reward: ", m.reward]]);
+    c.appendChild(progressBar(v / m.goal));
+    const p = document.createElement("p"); p.textContent = done ? "Done" : `${fmt(v)} / ${fmt(m.goal)}`; c.appendChild(p);
+    w.appendChild(c);
+  }
+}
+let chArmed = { id: null, t: 0 };
+function renderChallenges() {
+  const w = cardsWrap("Starting a challenge restarts your run with a handicap. You don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Earn the goal in the challenge run to beat it for good.");
+  for (const c of CHALLENGES) {
+    const done = chHas(c.id), on = chOn(c.id), locked = rebirths < c.need || ascensions < (c.needAsc || 0);
+    const cd = card(done ? "done" : on ? "active" : locked ? "locked" : "", (done ? "✓ " : "") + c.name,
+      [["Rule: ", c.rule], ["Goal: ", `earn ${fmt(c.goal)} coins in the run`], ["Reward: ", c.reward]]);
+    if (on) {
+      cd.appendChild(progressBar(runEarned / c.goal));
+      const p = document.createElement("p"); p.textContent = `${fmt(runEarned)} / ${fmt(c.goal)} earned`; cd.appendChild(p);
+      const q = document.createElement("button"); q.type = "button"; q.className = "quit"; q.textContent = "GIVE UP";
+      q.addEventListener("click", () => { chActive = null; applyUpgrades(); save(); renderTree(); });
+      cd.appendChild(q);
+    } else if (locked) {
+      const p = document.createElement("p"); p.textContent = c.needAsc ? "Unlocks after your first ascension." : `Unlocks after ${c.need} rebirth${c.need > 1 ? "s" : ""}.`; cd.appendChild(p);
+    } else if (!chActive) {
+      const b = document.createElement("button"); b.type = "button";
+      const armed = chArmed.id === c.id && Date.now() - chArmed.t < 3000;
+      b.textContent = armed ? "CLICK TO START" : done ? "PLAY AGAIN" : "START";
+      b.addEventListener("click", () => {
+        if (!(chArmed.id === c.id && Date.now() - chArmed.t < 3000)) { chArmed = { id: c.id, t: Date.now() }; renderTree(); setTimeout(renderTree, 3100); return; }
+        store.set(SAVE_KEY, freshRun({ bank: c.start != null ? c.start : startCoins(), chActive: c.id }));
+        saveBlocked = true; location.reload();
+      });
+      cd.appendChild(b);
+    }
+    w.appendChild(cd);
+  }
+}
+
+// ---------- Random events ----------
+const EVENTS = [
+  { id: "gold", name: "GOLD RUSH", desc: "Coins are worth double", dur: 20 },
+  { id: "frenzy", name: "FRENZY", desc: "Fast drops, and they're free", dur: 15 },
+  { id: "shower", name: "COIN SHOWER", desc: "Free coins rain onto the board", dur: 6 },
+  { id: "magnet", name: "JACKPOT MAGNET", desc: "Every coin reaching the middle stays in it", dur: 20 },
+];
+let ev = null, evEnd = 0, nextEv = 0, showerT = 0;
+const eventOn = id => ev && ev.id === id;
+function startEvent(e) {
+  ev = e; evEnd = performance.now() / 1000 + ev.dur * eventLen();
+  $("evName").textContent = ev.name; $("eventBanner").hidden = false;
+  applyUpgrades(); sfx.event(e.id); music.bonusTime(true);
+}
+function updateEvents(dt) {
+  if (!eventsLvl() && !ev) return;
+  const now = performance.now() / 1000;
+  if (!nextEv && eventsLvl()) nextEv = now + 20 + Math.random() * 20;
+  if (ev && now >= evEnd) {
+    ev = null; $("eventBanner").hidden = true; applyUpgrades(); music.bonusTime(false);
+    nextEv = now + eventGap() * (0.6 + Math.random() * 0.8);
+  }
+  if (!ev && eventsLvl() && now >= nextEv) startEvent(EVENTS[Math.floor(Math.random() * EVENTS.length)]);
+  if (ev) {
+    $("evDesc").textContent = `${ev.desc} · ${Math.ceil(evEnd - now)}s`;
+    if (ev.id === "shower" && (showerT += dt) > 0.45) { showerT = 0; boardDrop(board, (Math.random() - 0.5) * BOARD.aimMax * 2).v = coinValue(); }
+  }
+}
+
+// ---------- Save ----------
+let saveBlocked = false;
+function save() {
+  if (saveBlocked) return;
+  const r3 = v => Math.round(v * 1000) / 1000;
+  store.set(SAVE_KEY, {
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
+    coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
+  });
+}
+setInterval(save, 5000);
+addEventListener("pagehide", save);
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+
+// ---------- Coin vault ----------
+// A jar of little coins that roll and settle. Each place value has its own coin (1s, 10s, 100s,
+// 1000s, ...), so 347 coins = 3 big, 4 medium, 7 small. Earn a tenth coin and the ten drop out
+// while a bigger one falls in; the rest shuffle around it.
+const jar = $("jar"), jg = jar.getContext("2d"); jg.imageSmoothingEnabled = false;
+const JW = jar.width, JH = jar.height, FLOOR = JH - 6;
+// each place value is drawn as the real coin for that value: 1, 10, 100, 1K, ...
+const vaultFaces = new Map();
+const vaultFace = e => { if (!vaultFaces.has(e)) vaultFaces.set(e, valueFace(10 ** e).image); return vaultFaces.get(e); };
+const RADII = [8, 8, 8, 8];
+const vcoins = []; // { exp, r, x, y, vx, vy, out, a }
+function vaultTarget() {
+  const t = new Map(), b = Math.floor(bank);
+  if (b < 1) return t;
+  const top = Math.floor(Math.log10(b));
+  for (let i = 0; i < 4 && top - i >= 0; i++) {
+    const e = top - i, d = i === 0 ? Math.floor(b / 10 ** e) : Math.floor(b / 10 ** e) % 10;
+    if (d) t.set(e, { n: d, r: RADII[i] });
+  }
+  return t;
+}
+function updateJar(dt) {
+  const target = vaultTarget();
+  // remove coins whose place value is gone, or that are over the count for their place
+  const live = vcoins.filter(c => !c.out);
+  for (const c of live) if (!target.has(c.exp)) c.out = true;
+  for (const [e, { n, r }] of target) {
+    const mine = live.filter(c => c.exp === e && !c.out);
+    for (const c of mine) c.r += (r - c.r) * Math.min(1, dt * 6);
+    if (mine.length > n) mine.sort((a, b) => a.y - b.y).slice(0, mine.length - n).forEach(c => { c.out = true; });
+    for (let k = mine.length; k < n; k++) vcoins.push({ exp: e, r, x: 6 + r + Math.random() * (JW - 12 - 2 * r), y: -r - k * 2 * r, vx: 0, vy: 0, out: false, a: 1 });
+  }
+  // physics: gravity, walls, floor, and coins pushing each other apart
+  const sub = 3, h = Math.min(dt, 0.05) / sub;
+  for (let s = 0; s < sub; s++) {
+    for (const c of vcoins) {
+      c.vy += 900 * h; c.x += c.vx * h; c.y += c.vy * h; c.vx *= 0.995;
+      if (c.out) { c.a -= h * 2.2; continue; }
+      if (c.x < 5 + c.r) { c.x = 5 + c.r; c.vx = Math.abs(c.vx) * 0.3; }
+      if (c.x > JW - 5 - c.r) { c.x = JW - 5 - c.r; c.vx = -Math.abs(c.vx) * 0.3; }
+      if (c.y > FLOOR - c.r) { c.y = FLOOR - c.r; c.vy = -c.vy * 0.2; c.vx *= 0.85; }
+    }
+    for (let i = 0; i < vcoins.length; i++) for (let j = i + 1; j < vcoins.length; j++) {
+      const a = vcoins[i], b = vcoins[j];
+      if (a.out || b.out) continue;
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r;
+      if (d >= m || d === 0) continue;
+      const nx = dx / d, ny = dy / d, push = (m - d), wa = b.r * b.r / (a.r * a.r + b.r * b.r);
+      a.x -= nx * push * wa; a.y -= ny * push * wa; b.x += nx * push * (1 - wa); b.y += ny * push * (1 - wa);
+      const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rv < 0) { const imp = -rv * 0.6; a.vx -= imp * nx * wa; a.vy -= imp * ny * wa; b.vx += imp * nx * (1 - wa); b.vy += imp * ny * (1 - wa); }
+    }
+  }
+  for (let i = vcoins.length - 1; i >= 0; i--) if (vcoins[i].out && (vcoins[i].a <= 0 || vcoins[i].y > JH + 20)) vcoins.splice(i, 1);
+  // draw
+  jg.clearRect(0, 0, JW, JH);
+  jg.fillStyle = "#ffffff0d"; jg.fillRect(4, 4, JW - 8, FLOOR - 4);
+  jg.fillStyle = P.metalDark; jg.fillRect(2, 2, 2, FLOOR); jg.fillRect(JW - 4, 2, 2, FLOOR); jg.fillRect(2, FLOOR, JW - 4, 3);
+  for (const c of vcoins) {
+    jg.globalAlpha = Math.max(0, c.a);
+    jg.drawImage(vaultFace(c.exp), Math.round(c.x - 8), Math.round(c.y - 8));
+  }
+  jg.globalAlpha = 1;
+  $("jarCount").textContent = fmt(bank);
+}
+
+// ---------- Double or Nothing (coin flip side game) ----------
+const STAKES = [1, 5, 25, "10%"];
+let stakeIx = 0, flipT = -1, flipCall = "H", flipResult = "H", face = "H";
+const stakeAmt = () => STAKES[stakeIx] === "10%" ? Math.max(1, Math.floor(bank * 0.1)) : STAKES[stakeIx];
+function renderFlip() {
+  const st = $("stakes"); st.textContent = "";
+  STAKES.forEach((v, i) => {
+    const b = document.createElement("button"); b.type = "button";
+    b.textContent = v === "10%" ? "10%" : String(v); b.className = i === stakeIx ? "on" : "";
+    b.disabled = inPlay > 0 || flipT >= 0;
+    b.addEventListener("click", () => { stakeIx = i; renderFlip(); });
+    st.appendChild(b);
+  });
+  $("flipPlay").textContent = inPlay > 0 ? `On the line: ${fmt(inPlay)}` : `Bet: ${fmt(stakeAmt())}`;
+  $("callH").disabled = $("callT").disabled = flipT >= 0 || (inPlay === 0 && bank < stakeAmt());
+  $("cashOut").disabled = flipT >= 0 || inPlay === 0;
+  $("cashOut").textContent = inPlay > 0 ? `CASH OUT ${fmt(inPlay)}` : "CASH OUT";
+}
+function call(side) {
+  if (flipT >= 0) return;
+  if (inPlay === 0) {
+    const amt = stakeAmt();
+    if (bank < amt) { $("flipMsg").textContent = "Not enough coins for that bet."; return; }
+    bank -= amt; inPlay = amt; refreshHud();
+  }
+  flipCall = side;
+  flipResult = Math.random() < flipOdds() ? side : side === "H" ? "T" : "H";
+  flipT = 0; $("flipMsg").textContent = "Flipping…"; sfx.drop(); renderFlip();
+}
+let flipStreak = 0;
+function landFlip() {
+  face = flipResult; flipT = -1;
+  const name = face === "H" ? "HEADS" : "TAILS";
+  if (flipResult === flipCall) { flipStreak++; stats.bestStreak = Math.max(stats.bestStreak, flipStreak); inPlay *= 2; $("flipMsg").textContent = `${name}! Now worth ${fmt(inPlay)}. Go again or cash out.`; sfx.win(2); }
+  else { $("flipMsg").textContent = `${name}. Lost ${fmt(inPlay)}.`; inPlay = 0; flipStreak = 0; sfx.lost(); }
+  save(); renderFlip();
+}
+// The toss: the coin launches up spinning, lands, bounces twice and settles on the face that came up.
+const fc = $("flipCoin"), fg = fc.getContext("2d");
+const TOSS = 1.0, SETTLE = 0.5, GROUND = 72, HEIGHT = 52, SPINS = 5;
+function drawCoinFace(shown, sy) {
+  fg.save(); fg.scale(1, Math.max(0.08, sy));
+  fg.fillStyle = "#8a5a10"; fg.beginPath(); fg.arc(0, 0, 13, 0, 7); fg.fill();
+  fg.fillStyle = P.gold; fg.beginPath(); fg.arc(0, 0, 11, 0, 7); fg.fill();
+  fg.fillStyle = "#a8600a";
+  const g = shown === "H" ? ["#.#.#", "#####", "#####", ".....", "#####"] : ["#####", "..#..", "..#..", "..#..", "..#.."];
+  g.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === "#") fg.fillRect(-7 + x * 3, -7 + y * 3, 3, 3); }));
+  fg.restore();
+}
+function drawFlipCoin(dt) {
+  if ($("flip").hidden) return;
+  let y = GROUND - 14, ang = face === "H" ? 0 : Math.PI;
+  if (flipT >= 0) {
+    flipT += dt;
+    const end = SPINS * 2 * Math.PI + (flipResult === "H" ? 0 : Math.PI);
+    if (flipT < TOSS) {
+      const u = flipT / TOSS;
+      y = GROUND - 14 - HEIGHT * 4 * u * (1 - u);     // up and back down
+      ang = end * (1 - Math.pow(1 - u, 1.6));          // fast spin that slows near the landing
+    } else {
+      const u = Math.min(1, (flipT - TOSS) / SETTLE);
+      const hop = Math.abs(Math.sin(u * Math.PI * 2)) * (1 - u) * 10; // two small bounces
+      y = GROUND - 14 - hop;
+      ang = end + Math.sin(u * Math.PI * 4) * (1 - u) * 0.9;          // wobble, then flat
+      if (u >= 1) landFlip();
+    }
+  }
+  fg.clearRect(0, 0, fc.width, fc.height);
+  const lift = (GROUND - 14 - y) / HEIGHT;
+  fg.fillStyle = "#00000055"; fg.beginPath(); fg.ellipse(32, GROUND, 12 - lift * 5, 3, 0, 0, 7); fg.fill();
+  fg.save(); fg.translate(32, y);
+  drawCoinFace(Math.cos(ang) >= 0 ? "H" : "T", Math.abs(Math.cos(ang)));
+  fg.restore();
+}
+$("flipBtn").addEventListener("click", () => { $("flip").hidden = !$("flip").hidden; $("wheel").hidden = true; renderFlip(); });
+$("flipClose").addEventListener("click", () => { $("flip").hidden = true; });
+$("callH").addEventListener("click", () => { sfx.unlock(); call("H"); });
+$("callT").addEventListener("click", () => { sfx.unlock(); call("T"); });
+$("cashOut").addEventListener("click", () => {
+  if (inPlay <= 0 || flipT >= 0) return;
+  bank += inPlay; $("flipMsg").textContent = `Cashed out ${fmt(inPlay)} coins.`; inPlay = 0; flipStreak = 0; sfx.bonus(); save(); refreshHud(); renderFlip();
+});
+
+// ---------- Regen ----------
+let regenT = 0;
+function updateRegen(dt) {
+  if (chOn("dry")) { regenT = 0; $("regen").textContent = "OFF"; return; }
+  if (bank >= regenCap()) { regenT = 0; $("regen").textContent = "FULL"; return; }
+  regenT += dt;
+  const iv = regenInterval();
+  if (regenT >= iv) { regenT -= iv; bank++; refreshHud(); }
+  $("regen").textContent = Math.ceil(iv - regenT) + "s";
+}
+
+renderShop();
+
+// ---------- Start: restore the saved machine, or set up a new one with a starter pile ----------
+trimPegs();
+if (!(saved && saved.goldRandom)) for (const id of Object.keys(pegMap)) if (pegMap[id] === "gold") delete pegMap[id]; // old hand-placed ones get re-rolled once
+fillGold(); drawSpecialPegs();
+function fillMachine() {
+  for (let i = 0; i < 100; i++) {
+    const x = (Math.random() - 0.5) * (HALF_W * 2 - 1);
+    spawnCoin(x, 0.12 + (i % 6) * 0.22 + Math.random() * 0.15, 0.6 + Math.random() * (FLOOR_FRONT - 0.9), i % 23 === 0 ? 3 : 1, 0.3);
+  }
+  for (let i = 0; i < 50; i++) {
+    spawnCoin((Math.random() - 0.5) * (HALF_W * 2 - 1), PUSH_TOP + 0.15 + (i % 3) * 0.2 + Math.random() * 0.1, BACK_WALL_Z + 0.3 + Math.random() * 2.4, 1, 0.3);
+  }
+}
+applyUpgrades();
+if (saved && saved.coins) {
+  setLoad("Loading your machine…", 0.6);
+  pusherT = saved.pusherT || 0;
+  pusherBody.setTranslation({ x: 0, y: PUSH_TOP / 2 + 0.01, z: pusherZ(pusherT) }, true);
+  for (const [k, v, x, y, z, qx, qy, qz, qw] of saved.coins) {
+    const c = spawnCoin(x, y, z, v, 0, new THREE.Quaternion(qx, qy, qz, qw));
+    if (k === "m") c.mystery = true;
+    c.body.sleep();
+  }
+  bank += saved.inflight || 0; // coins that were mid-board when you left come back
+  // regen that happened while the game was closed
+  const away = Math.max(0, (Date.now() - (saved.t || Date.now())) / 1000);
+  const before = bank;
+  if (bank < regenCap()) bank = Math.min(regenCap(), bank + Math.floor(away / regenInterval()));
+  const regenGot = bank - before;
+  // offline earnings: with the Auto Dropper on, 50% of your recent income, for up to 8 hours away
+  let offline = 0;
+  if (autoOwned() && autoOn && !chActive) {
+    offline = Math.floor(Math.min(away, 8 * 3600) * incomeRate * 0.5);
+    bank += offline; earned += offline; runEarned += offline;
+  }
+  if (away >= 60) welcome = { away, regenGot, offline };
+} else {
+  fillMachine();
+  // let the pile settle: a moment with the pusher parked, then a few strokes (nothing counts yet)
+  for (let i = 0; i < 120; i++) {
+    pusherBody.setNextKinematicTranslation({ x: 0, y: PUSH_TOP / 2 + 0.01, z: PUSH_BACK });
+    world.step();
+    for (let j = coins.length - 1; j >= 0; j--) if (coins[j].body.translation().y < -1) removeCoin(j);
+    if (i % 20 === 0) { setLoad("Filling the machine with coins…", 0.3 + 0.3 * i / 120); await nextFrame(); }
+  }
+  for (let i = 0; i < Math.round(PUSH_PERIOD * 1 / STEP); i++) {
+    stepPhysics(false); if (i % 4 === 0) settleCoins();
+    if (i % 20 === 0) { setLoad("Filling the machine with coins…", 0.6 + 0.4 * i / (PUSH_PERIOD * 1 / STEP)); await nextFrame(); }
+  }
+}
+warm = true;
+$("loading").hidden = true;
+refreshHud();
+
+// ---------- Mystery coins ----------
+// average about ×1.6, but a third of them turn out to be worth nothing
+const MYSTERY = [[0, 35], [1, 35], [2, 18], [5, 8], [10, 3.5], [25, 0.5]];
+function rollMystery() {
+  let r = Math.random() * 100;
+  for (const [m, w] of MYSTERY) if ((r -= w) <= 0) return m;
+  return 1;
+}
+
+// ---------- Slot reels (spun by every ×5 hit) ----------
+const REEL_SYMS = [1, 3, 5, 10, 7];
+const reelFaces = REEL_SYMS.map(v => valueFace(v).image);
+const rc = $("reelCanvas"), rg = rc.getContext("2d"); rg.imageSmoothingEnabled = false;
+let reelT = -1, reelRes = [0, 0, 0], reelShown = [0, 0, 0], reelIdle = 0;
+function reelPick() {
+  const hot = 1 + 0.25 * lvl("reelluck"), w = [40, 25, 18, 12 * hot, 5 * hot], tot = w.reduce((a, b) => a + b, 0);
+  let r = Math.random() * tot;
+  for (let i = 0; i < w.length; i++) if ((r -= w[i]) <= 0) return i;
+  return 0;
+}
+function reelPayout(res) {
+  const [a, b, c] = res.map(i => REEL_SYMS[i]);
+  if (a === b && b === c) return { 7: 100, 10: 30, 5: 15, 3: 8, 1: 3 }[a];
+  const pair = a === b ? a : b === c ? b : a === c ? a : null;
+  return pair === 7 ? 5 : pair ? 1 : 0;
+}
+function drawReels() {
+  rg.fillStyle = "#0b0e14"; rg.fillRect(0, 0, rc.width, rc.height);
+  for (let i = 0; i < 3; i++) {
+    const x = 3 + i * 27;
+    rg.fillStyle = "#e8ecf2"; rg.fillRect(x, 3, 24, 24);
+    let sym = reelShown[i], off = 0;
+    if (reelT >= 0 && reelT < 0.7 + 0.35 * i) { const roll = reelT * 18 + i * 2; sym = Math.floor(roll) % REEL_SYMS.length; off = Math.round((roll % 1) * 24) - 12; }
+    rg.save(); rg.beginPath(); rg.rect(x, 3, 24, 24); rg.clip();
+    rg.drawImage(reelFaces[sym], x + 4, 7 + off);
+    rg.restore();
+  }
+  rg.fillStyle = P.gold; rg.fillRect(0, 14, 2, 2); rg.fillRect(rc.width - 2, 14, 2, 2);
+}
+function updateReels(dt) {
+  if ($("reels").hidden) return;
+  if (reelT < 0 && reelQueue > 0) {
+    reelQueue--; reelT = 0; reelRes = [reelPick(), reelPick(), reelPick()];
+    $("reels").classList.remove("win"); $("reelMsg").textContent = "Spinning…"; sfx.drop();
+  }
+  if (reelT >= 0) {
+    const was = reelT; reelT += dt;
+    for (let i = 0; i < 3; i++) if (was < 0.7 + 0.35 * i && reelT >= 0.7 + 0.35 * i) { reelShown[i] = reelRes[i]; sfx.click(); }
+    if (reelT >= 1.6) {
+      reelT = -1;
+      const mult = reelPayout(reelRes), win = mult * coinValue() * payoutMult();
+      if (win > 0) {
+        bank += win; earned += win; runEarned += win; rateEarn += win; wheelCharge += win;
+        $("reels").classList.add("win"); $("reelMsg").textContent = `${mult >= 30 ? "JACKPOT! " : ""}+${fmtV(win)} coins`;
+        if (mult >= 100) stats.reel777 = (stats.reel777 || 0) + 1;
+        if (mult >= 15) showToast(mult >= 100 ? "777 JACKPOT!" : "BIG REEL WIN", `+${fmt(win)} coins`); else sfx.win(mult);
+        refreshHud();
+      } else $("reelMsg").textContent = "No match";
+    }
+  }
+  // tuck the reels away (on phones) a few seconds after the last spin
+  reelIdle = reelT >= 0 ? 0 : reelIdle + dt;
+  $("reels").classList.toggle("idle", reelIdle > 4);
+  drawReels();
+}
+
+// ---------- Prize wheel (charged by earning) ----------
+const WHEEL = [
+  { label: "COINS ×1", coins: 1 }, { label: "SHOWER", ev: "shower" }, { label: "COINS ×2", coins: 2 }, { label: "GOLD RUSH", ev: "gold" },
+  { label: "COINS ×1", coins: 1 }, { label: "FRENZY", ev: "frenzy" }, { label: "COINS ×3", coins: 3 }, { label: "MAGNET", ev: "magnet" },
+];
+const WHEEL_COLS = ["#f5b83d", "#1f8a8a", "#e04a4a", "#4a8ae0", "#f5b83d", "#1f8a8a", "#e04a4a", "#4a8ae0"];
+const wheelNeed = () => Math.max(100, incomeRate * 120) / (1 + 0.2 * lvl("wheelfast")); // about two minutes of income
+const wheelReward = n => Math.ceil(n * Math.max(20 * coinValue(), incomeRate * 60));     // n minutes of income
+const wc = $("wheelCanvas"), wg = wc.getContext("2d");
+let wheelAng = 0, wheelFrom = 0, wheelTo = 0, wheelT = -1, wheelPrize = 0;
+function drawWheel() {
+  const R = 92, seg = Math.PI * 2 / WHEEL.length;
+  wg.clearRect(0, 0, 200, 200);
+  wg.save(); wg.translate(100, 104); wg.rotate(wheelAng);
+  WHEEL.forEach((w, i) => {
+    wg.fillStyle = WHEEL_COLS[i]; wg.beginPath(); wg.moveTo(0, 0); wg.arc(0, 0, R, -Math.PI / 2 + i * seg, -Math.PI / 2 + (i + 1) * seg); wg.closePath(); wg.fill();
+    wg.save(); wg.rotate(-Math.PI / 2 + (i + 0.5) * seg); wg.fillStyle = "#11161f"; wg.font = '7px "Press Start 2P", monospace'; wg.textAlign = "right"; wg.textBaseline = "middle";
+    wg.fillText(w.label, R - 6, 0); wg.restore();
+  });
+  wg.strokeStyle = "#11161f"; wg.lineWidth = 3; wg.beginPath(); wg.arc(0, 0, R, 0, 7); wg.stroke();
+  wg.fillStyle = "#11161f"; wg.beginPath(); wg.arc(0, 0, 10, 0, 7); wg.fill();
+  wg.restore();
+  wg.fillStyle = "#ffffff"; wg.beginPath(); wg.moveTo(92, 2); wg.lineTo(108, 2); wg.lineTo(100, 18); wg.closePath(); wg.fill(); // pointer
+}
+function renderWheel() {
+  const ready = wheelCharge >= wheelNeed(), pctDone = Math.min(100, Math.floor(wheelCharge / wheelNeed() * 100));
+  $("wheelBtn").textContent = ready ? "SPIN!" : `WHEEL ${pctDone}%`; $("wheelBtn").classList.toggle("ready", ready);
+  if ($("wheel").hidden) return;
+  $("wheelSpin").disabled = !ready || wheelT >= 0;
+  if (wheelT < 0 && !$("wheelMsg").dataset.result) $("wheelMsg").textContent = ready ? "Ready! Spin for a prize." : `Charging: ${pctDone}%. Earning coins fills it up.`;
+}
+function spinWheel() {
+  if (wheelT >= 0 || wheelCharge < wheelNeed()) return;
+  wheelCharge = 0; wheelPrize = Math.floor(Math.random() * WHEEL.length);
+  const seg = Math.PI * 2 / WHEEL.length;
+  wheelFrom = wheelAng % (Math.PI * 2); wheelTo = Math.PI * 2 * 5 - (wheelPrize + 0.5) * seg + (Math.random() - 0.5) * seg * 0.6;
+  wheelT = 0; delete $("wheelMsg").dataset.result; $("wheelMsg").textContent = "Spinning…"; sfx.drop(); renderWheel();
+}
+function updateWheel(dt) {
+  if ($("wheelBtn").hidden) return;
+  if (wheelT >= 0) {
+    wheelT += dt; const u = Math.min(1, wheelT / 3), e = 1 - Math.pow(1 - u, 3);
+    const prev = wheelAng; wheelAng = wheelFrom + (wheelTo - wheelFrom) * e;
+    if (Math.floor(prev / (Math.PI / 4)) !== Math.floor(wheelAng / (Math.PI / 4))) sfx.peg();
+    if (u >= 1) {
+      wheelT = -1; const w = WHEEL[wheelPrize];
+      let txt;
+      if (w.coins) { const c = wheelReward(w.coins); bank += c; earned += c; runEarned += c; txt = `+${fmt(c)} coins!`; }
+      else { startEvent(EVENTS.find(e => e.id === w.ev)); txt = `${EVENTS.find(e => e.id === w.ev).name}!`; }
+      $("wheelMsg").textContent = `${w.label}: ${txt}`; $("wheelMsg").dataset.result = "1";
+      setTimeout(() => { delete $("wheelMsg").dataset.result; }, 4000);
+      sfx.fanfare(); refreshHud(); save();
+    }
+  }
+  renderWheel();
+  if (!$("wheel").hidden) drawWheel();
+}
+$("wheelBtn").addEventListener("click", () => { $("wheel").hidden = !$("wheel").hidden; $("flip").hidden = true; renderWheel(); drawWheel(); });
+$("wheelClose").addEventListener("click", () => { $("wheel").hidden = true; });
+$("wheelSpin").addEventListener("click", () => { sfx.unlock(); spinWheel(); });
+
+// ---------- Welcome back ----------
+const dur = s => s < 3600 ? `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s` : s < 86400 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+if (welcome) {
+  const lines = [`You were away for ${dur(welcome.away)}.`];
+  lines.push(welcome.regenGot > 0 ? `Regen refilled ${fmt(welcome.regenGot)} coin${welcome.regenGot === 1 ? "" : "s"}.` : "Your regen was already full.");
+  if (welcome.offline > 0) lines.push(`The Auto Dropper earned ${fmt(welcome.offline)} coins while you were gone.`);
+  else if (!autoOwned()) lines.push("Get the Auto Dropper to keep earning while you're away.");
+  $("welcomeText").textContent = lines.join(" ");
+  welcomeReady = true; // shown once you press start on the title screen
+}
+$("welcomeOk").addEventListener("click", () => { $("welcome").hidden = true; sfx.unlock(); sfx.bonus(); });
+
+// ---------- Loop ----------
+const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _m = new THREE.Matrix4();
+const clock = new THREE.Clock();
+let acc = 0, lightT = 0;
+// one frame of game logic (dt seconds); frame() below draws it
+function tick(dt) {
+  acc += dt;
+  let steps = 0;
+  while (acc >= STEP && steps < 3) { stepPhysics(true); acc -= STEP; steps++; }
+  if (steps === 3) acc = 0;
+  settleCoins();
+
+  if (keys.ArrowLeft || keys.KeyA) aimX = Math.max(-BOARD.aimMax, aimX - 4 * dt);
+  if (keys.ArrowRight || keys.KeyD) aimX = Math.min(BOARD.aimMax, aimX + 4 * dt);
+  if (holding || keys.Space || (autoOwned() && autoOn)) dropCoin();
+  stepBoard(Math.min(dt, 0.05));
+  updateRegen(dt); updateEvents(dt); updateReels(dt); updateWheel(dt);
+  stats.playTime = (stats.playTime || 0) + dt; runTime += dt;
+  // a smoothed coins-per-second, used for offline earnings
+  if ((rateT += dt) >= 10) { incomeRate = incomeRate * 0.8 + (rateEarn / rateT) * 0.2; rateEarn = 0; rateT = 0; }
+}
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  if (!titleOpen) tick(dt);
+  updateJar(dt); drawFlipCoin(dt);
+  const coolFrac = Math.min(1, (performance.now() - lastDrop) / (dropCooldown() * 1000));
+  $("coolBar").style.width = Math.round(coolFrac * 100) + "%";
+  ghost.position.x += (aimX - ghost.position.x) * 0.4;
+  ghost.visible = bank >= 1;
+  ghost.children[0].material.opacity = coolFrac >= 1 ? 0.6 : 0.15;
+
+  const pz = pusherBody.translation();
+  pusherMesh.position.set(pz.x, pz.y, pz.z);
+  for (const L of looks.values()) L.n = 0;
+  for (const c of coins) {
+    const t = c.body.translation(), r = c.body.rotation();
+    _p.set(t.x, t.y, t.z); _q.set(r.x, r.y, r.z, r.w); _m.compose(_p, _q, _s);
+    const L = lookFor(c.mystery ? "?" : c.value);
+    if (L.n < MAX_PER_LOOK) L.inst.setMatrixAt(L.n++, _m);
+  }
+  for (const L of looks.values()) { L.inst.count = L.n; L.inst.instanceMatrix.needsUpdate = true; }
+  updateBoardCoins();
+
+  lightT += dt;
+  const chase = Math.floor(lightT * 8);
+  bulbs.forEach((m, i) => m.color.setHex(settings.calm ? hex(P.bulbOn) : (i + chase) % 3 === 0 ? hex(P.bulbOn) : hex(P.bulbOff)));
+  const blink = Math.floor(lightT * 2) % 2;
+  pinkL.intensity = settings.calm ? 22 : blink ? 26 : 18; cyanL.intensity = settings.calm ? 22 : blink ? 18 : 26;
+
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  post.uniforms.tColor.value = rt.texture;
+  renderer.render(postScene, postCam);
+  requestAnimationFrame(frame);
+}
+// "#sim" runs the game logic without drawing, for automated balance testing; players never see it
+// ---------- Title screen ----------
+// Shown when the game is opened; rebirths, theme changes and loads inside a session skip it.
+let newArmed = 0;
+function openTitle() {
+  titleOpen = true; holding = false;
+  $("ver").textContent = `v${VERSION}`;
+  const has = !!saved || earned > 0;
+  $("tContinue").textContent = has ? "CONTINUE" : "START";
+  $("tCopy").hidden = !has;
+  $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
+  $("tInfo").textContent = has ? `Save: ${fmt(bank)} coins · ${fmt(earned)} earned · ${rebirths} rebirth${rebirths === 1 ? "" : "s"}${ascensions ? ` · ${ascensions} ascension${ascensions === 1 ? "" : "s"}` : ""}` : "No save yet: press START.";
+  $("tNew").hidden = !has;
+  $("menu").hidden = false; $("loadBox").hidden = true;
+  $("title").hidden = false;
+  setTimeout(() => $("tContinue").focus(), 50);
+}
+function startGame() {
+  titleOpen = false; $("title").hidden = true;
+  try { sessionStorage.setItem("cc_inGame", "1"); } catch {}
+  sfx.unlock(); sfx.bonus();
+  clock.getDelta(); // don't count the time spent on the title
+  if (welcomeReady) { welcomeReady = false; $("welcome").hidden = false; }
+}
+const goInGame = () => { try { sessionStorage.setItem("cc_inGame", "1"); } catch {} };
+$("tContinue").addEventListener("click", startGame);
+$("tNew").addEventListener("click", () => {
+  if (Date.now() - newArmed > 3000) { newArmed = Date.now(); $("tNew").textContent = "CLICK AGAIN: WIPES YOUR SAVE"; $("tInfo").textContent = "Starting a new game deletes your current one. Copy your save code first if you want to keep it."; setTimeout(() => { $("tNew").textContent = "NEW GAME"; }, 3000); return; }
+  store.set(SAVE_KEY, null); saveBlocked = true; goInGame(); location.reload();
+});
+$("tCopy").addEventListener("click", () => {
+  const code = exportCode(), b = $("tCopy");
+  try { navigator.clipboard.writeText(code).then(() => { b.textContent = "COPIED"; setTimeout(() => { b.textContent = "COPY SAVE CODE"; }, 1500); }, () => { $("menu").hidden = true; $("loadBox").hidden = false; $("tCode").value = code; $("tCode").select(); $("tInfo").textContent = "Copy this code (Ctrl+C) and keep it somewhere safe."; }); }
+  catch { $("menu").hidden = true; $("loadBox").hidden = false; $("tCode").value = code; $("tCode").select(); }
+});
+$("tMusic").addEventListener("click", () => { music.toggle(!settings.music); $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF"; });
+$("tLoad").addEventListener("click", () => { $("menu").hidden = true; $("loadBox").hidden = false; $("tCode").value = ""; $("tInfo").textContent = ""; $("tCode").focus(); });
+$("tBack").addEventListener("click", () => { $("loadBox").hidden = true; $("menu").hidden = false; openTitle(); });
+$("tFile").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => { $("tCode").value = String(r.result || ""); $("tInfo").textContent = `Loaded ${f.name}. Press LOAD to use it.`; }; r.readAsText(f);
+});
+$("tLoadGo").addEventListener("click", () => {
+  const data = parseSaveCode($("tCode").value);
+  if (!data) { $("tInfo").textContent = "That doesn't look like a Coin Cascade save. Paste the whole code and try again."; return; }
+  store.set(SAVE_KEY, data); saveBlocked = true; goInGame(); location.reload();
+});
+// keyboard: arrows move between menu buttons, Enter presses
+$("title").addEventListener("keydown", e => {
+  const btns = [...$("title").querySelectorAll(".mbtn")].filter(b => b.offsetParent && !b.disabled);
+  const i = btns.indexOf(document.activeElement);
+  if (e.code === "ArrowDown" || e.code === "ArrowUp") { e.preventDefault(); btns.at((i + (e.code === "ArrowDown" ? 1 : -1) + btns.length) % btns.length)?.focus(); }
+});
+// any first click or key on the title also starts the music (browsers need a gesture first)
+$("title").addEventListener("pointerdown", () => sfx.unlock());
+$("title").addEventListener("keydown", () => sfx.unlock());
+// ---------- Install button ----------
+// Chrome and Edge hand us an install prompt; on iPhone and iPad it's Share, then Add to Home Screen.
+let installEvt = null;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function updateInstall() { $("tInstall").hidden = !HOSTED || isStandalone() || !(installEvt || isIOS()); }
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; updateInstall(); });
+addEventListener("appinstalled", () => { installEvt = null; updateInstall(); });
+$("tInstall").addEventListener("click", async () => {
+  if (installEvt) { const e = installEvt; installEvt = null; try { e.prompt(); await e.userChoice; } catch {} updateInstall(); return; }
+  $("tInfo").textContent = "In Safari, tap Share (the square with an arrow), then Add to Home Screen. It then opens full screen like an app.";
+});
+if (HOSTED && "serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => {});
+updateInstall();
+
+// ---------- Mini window ----------
+// On a computer, the game can run in a small phone-shaped window to keep in a corner while you work.
+// Chrome and Edge use an always-on-top picture-in-picture window; other browsers get a plain popup.
+// Only one window plays at a time: this one stops saving while the mini one runs, then reloads its save.
+const IS_MINI = location.hash === "#mini";
+const MINI_W = 380, MINI_H = 700;
+const chan = "BroadcastChannel" in window ? new BroadcastChannel("cc_mini") : null;
+let miniWin = null, awayOn = false;
+function canMini() { return !IS_MINI && innerWidth >= 700 && !matchMedia("(pointer: coarse)").matches; }
+function updateMini() { $("tMini").hidden = !canMini(); }
+function goAway(win) {
+  miniWin = win; awayOn = true; saveBlocked = true; titleOpen = true; holding = false;
+  music.stop(); $("title").hidden = true; $("away").hidden = false;
+  const watch = setInterval(() => { if (!miniWin || miniWin.closed) { clearInterval(watch); comeBack(); } }, 500);
+}
+function comeBack() {
+  if (!awayOn) return; awayOn = false;
+  try { if (miniWin && !miniWin.closed) miniWin.close(); } catch {}
+  goInGame(); setTimeout(() => location.reload(), 300); // give the mini window a moment to save
+}
+async function openMini() {
+  save();
+  const url = location.href.split("#")[0] + "#mini";
+  if ("documentPictureInPicture" in window) {
+    try {
+      const pip = await documentPictureInPicture.requestWindow({ width: MINI_W, height: MINI_H });
+      pip.document.title = "Coin Cascade";
+      pip.document.body.style.cssText = "margin:0;background:#06090f;overflow:hidden";
+      const f = pip.document.createElement("iframe");
+      f.src = url; f.allow = "autoplay; clipboard-write"; f.style.cssText = "border:0;width:100vw;height:100vh;display:block";
+      pip.document.body.appendChild(f);
+      pip.addEventListener("pagehide", () => { f.remove(); comeBack(); });
+      goAway(pip); return;
+    } catch {}
+  }
+  const w = open(url, "cc_mini", `popup,width=${MINI_W},height=${MINI_H}`);
+  if (!w) { $("tInfo").textContent = "Your browser blocked the mini window. Allow popups for this site and try again."; return; }
+  goAway(w);
+}
+$("tMini").addEventListener("click", openMini);
+$("awayBack").addEventListener("click", () => { chan?.postMessage("return"); comeBack(); });
+if (chan) chan.onmessage = e => {
+  if (IS_MINI && e.data === "return") { save(); saveBlocked = true; chan.postMessage("saved"); try { close(); } catch {} }
+  if (!IS_MINI && e.data === "back") comeBack();
+};
+// the mini window saves as it closes; the big one reloads to pick that save up
+// (a reload inside the mini window, such as a theme change, has already saved and set saveBlocked, so it doesn't count)
+if (IS_MINI) addEventListener("pagehide", () => { if (saveBlocked) return; save(); saveBlocked = true; chan?.postMessage("back"); });
+addEventListener("resize", updateMini);
+updateMini();
+
+let inGame = IS_MINI;
+try { inGame = inGame || sessionStorage.getItem("cc_inGame") === "1"; } catch {}
+if (location.hash !== "#sim") { if (inGame) startGame(); else openTitle(); }
+
+if (location.hash === "#sim") {
+  window.__cc = {
+    tick, UPGRADES, RUPGRADES, TREES, nodeState, buy, stopPlacing, drawSpecialPegs, pegMap, tokenGain, lvl, rl, save, msDone,
+    get bank() { return bank; }, get runEarned() { return runEarned; }, get earned() { return earned; }, get dropped() { return dropped; },
+    get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
+    get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
+  };
+} else frame();
+
+addEventListener("resize", resize);
+</script>
+
+</body>
+</html>
