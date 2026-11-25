@@ -301,7 +301,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 
 /* ---- shop panel: a rail of labelled icons, and a panel that slides out of it ---- */
 #flipBtn, #wheelBtn, #treeBtn, #cogBtn { display: none !important; }
-.rail { position: fixed; z-index: 11; top: 0; right: 0; bottom: 0; width: 84px; display: flex; flex-direction: column; gap: 8px;
+.rail { position: fixed; z-index: 11; top: 0; right: 0; bottom: 0; width: 84px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;
   padding: calc(12px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) 8px;
   background: var(--bg); border-left: 3px solid var(--ink); box-shadow: inset 2px 0 0 var(--panel-edge); }
 .rb { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 0 8px; font-family: var(--display); font-size: 7px; color: var(--muted);
@@ -403,6 +403,31 @@ body.compact > *:not(#compact) { display: none !important; }
 @keyframes bankPulse { 50% { background: var(--fg); } }
 @media (prefers-reduced-motion: reduce) { .bankBtn.nudge { animation: none; outline: 3px solid var(--fg); } }
 @media (max-width: 760px) { .bankBtn { font-size: 9px; padding: 8px 9px; right: 7px; } }
+
+/* achievements grid */
+.achWrap { display: grid; gap: 10px; padding: 2px 2px 8px; }
+.achRow h3 { margin: 0 0 6px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; align-items: baseline; font-family: var(--display); font-weight: 400; font-size: 8px; line-height: 1.5; color: var(--gold); }
+.achRow h3 em { min-width: 0; margin-left: auto; font-style: normal; font-family: var(--body); font-size: 15px; color: var(--muted); text-align: right; }
+.achRow h3.done em { color: var(--cyan); }
+.achGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.ach { aspect-ratio: 1; min-width: 0; font-family: var(--display); font-size: 9px; color: #6b778a; background: var(--panel); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge); cursor: pointer; padding: 0; }
+.ach.got { color: var(--ink); background: var(--gold); box-shadow: inset 0 -3px 0 #0003; }
+.ach.sel { outline: 3px solid var(--fg); outline-offset: 1px; }
+.ach:focus-visible { outline: 3px solid var(--cyan); outline-offset: 1px; }
+.achInfo { position: sticky; bottom: 0; display: grid; gap: 4px; padding: 10px 12px; }
+.achInfo b { font-family: var(--display); font-weight: 400; font-size: 9px; line-height: 1.5; color: var(--gold); }
+.achInfo span { font-size: 17px; line-height: 1.1; color: var(--fg); }
+/* pop-ups sit off the board: top-left on a computer, just above the coin tray on phones */
+.toast { left: max(16px, env(safe-area-inset-left, 0px)); top: calc(70px + env(safe-area-inset-top, 0px)); transform: none; text-align: left; max-width: min(320px, calc(100vw - var(--panelW, 84px) - 32px)); padding: 8px 12px; }
+.toast b { font-size: 10px; } .toast span { font-size: 16px; }
+@media (max-width: 760px) {
+  .toast { top: auto; bottom: calc(var(--dockH, 64px) + 96px); left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); max-width: none; }
+  body.panelOpen .toast { bottom: auto; top: calc(8px + env(safe-area-inset-top, 0px)); right: 60px; } /* the shop sheet is up: pop-ups go to the top instead */
+}
+/* on a computer the tray sits under the machine: narrower and deeper, more like a jar */
+@media (min-width: 761px) {
+  .vault { left: calc((100vw - var(--panelW, 84px)) / 2); right: auto; width: min(560px, calc(100vw - var(--panelW, 84px) - 32px)); transform: translateX(-50%); height: 120px; }
+}
 </style>
 </head>
 <body>
@@ -662,7 +687,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.7.2";
+const VERSION = "1.8.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -692,6 +717,87 @@ const stats = Object.assign({ jackpots: 0, bestStreak: 0, maxBank: 0 }, (saved &
 // the most coins held at once this run: Bigger Refill can only refill up to this (so buying it doesn't skip the climb)
 let runMax = saved && saved.runMax != null ? saved.runMax : saved ? Math.floor(saved.bank || 0) : 0;
 const msDone = (saved && saved.msDone) || {}, chDone = (saved && saved.chDone) || {};
+// ---------- Achievements ----------
+// 48 little goals in rows of 8. Each one is worth +1% payouts; finishing a row gives that row's reward. Secret ones
+// hide what they want until you stumble into them.
+const achDone = (saved && saved.ach) || {};
+const S = k => stats[k] || 0;
+const ACH = [
+  // row 1: first steps
+  { id: "a_drop", name: "First Drop", how: "Drop a coin", ok: () => dropped >= 1 },
+  { id: "a_bank", name: "Clink", how: "Bank the tray for the first time", ok: () => S("banks") >= 1 },
+  { id: "a_hold25", name: "Pocket Money", how: "Hold 25 coins at once", ok: () => stats.maxBank >= 25 },
+  { id: "a_buy", name: "Shiny New Part", how: "Buy an upgrade", ok: () => S("buys") >= 1 },
+  { id: "a_jack", name: "Bullseye", how: "Land a coin in the ×5", ok: () => stats.jackpots >= 1 },
+  { id: "a_lost", name: "Butterfingers", how: "Lose a coin off the side", ok: () => S("lost") >= 1 },
+  { id: "a_full", name: "Full Up", how: "Fill the tray until it banks itself", ok: () => S("fullBanks") >= 1 },
+  { id: "a_lv10", name: "Tinkerer", how: "Own 10 machine upgrade levels at once", ok: () => machineLevels() >= 10 },
+  // row 2: getting the hang of it
+  { id: "a_run1k", name: "Thousandaire", how: "Earn 1,000 coins in one run", ok: () => runEarned >= 1000 },
+  { id: "a_gold", name: "Golden Touch", how: "Hit a golden peg", ok: () => S("goldHits") >= 1 },
+  { id: "a_split", name: "Split Decision", how: "Have a coin split on a splitter peg", ok: () => S("splits") >= 1 },
+  { id: "a_doubler", name: "Double Trouble", how: "Have a coin doubled by a doubler peg", ok: () => S("doubles") >= 1 },
+  { id: "a_reel", name: "Spin City", how: "Spin the slot reels", ok: () => S("reelSpins") >= 1 },
+  { id: "a_flip", name: "Heads Up", how: "Win a coin flip", ok: () => S("flipWins") >= 1 },
+  { id: "a_coin25", name: "Heavy Coin", how: "Have a single coin pay 25 or more", ok: () => S("bestCoin") >= 25 },
+  { id: "a_jack25", name: "Sharpshooter", how: "Land 25 coins in the ×5", ok: () => stats.jackpots >= 25 },
+  // row 3: pusher pro
+  { id: "a_reb", name: "Fresh Start", how: "Rebirth", ok: () => rebirths >= 1 },
+  { id: "a_event", name: "Eventful", how: "See a random event", ok: () => S("events") >= 1 },
+  { id: "a_wheel", name: "Round and Round", how: "Spin the prize wheel", ok: () => S("wheelSpins") >= 1 },
+  { id: "a_myst10", name: "Mystery Solved", how: "Have a mystery coin pay ×10 or more", ok: () => S("myst10") >= 1 },
+  { id: "a_myst0", name: "Nothing Ventured", how: "Have a mystery coin pay ×0", ok: () => S("myst0") >= 1 },
+  { id: "a_bank30", name: "Big Haul", how: "Bank 30 or more coins by hand at once", ok: () => S("bigBank") >= 30 },
+  { id: "a_earn10k", name: "Ten Grand", how: "Earn 10,000 coins in total", ok: () => earned >= 1e4 },
+  { id: "a_half", name: "Halfway There", how: "Own half of all machine upgrade levels at once", ok: () => machineLevels() >= UPGRADES.reduce((a, u) => a + u.max, 0) / 2 },
+  // row 4: arcade regular
+  { id: "a_streak5", name: "On a Roll", how: "Win 5 coin flips in a row", ok: () => stats.bestStreak >= 5 },
+  { id: "a_reb5", name: "Again and Again", how: "Rebirth 5 times", ok: () => rebirths >= 5 },
+  { id: "a_chal", name: "Challenger", how: "Beat a challenge", ok: () => Object.keys(chDone).length >= 1 },
+  { id: "a_tok25", name: "Token Collector", how: "Earn 25 tokens in total", ok: () => S("tokensTotal") >= 25 || tokens >= 25 },
+  { id: "a_hold1k", name: "Overflowing", how: "Hold 1,000 coins at once", ok: () => stats.maxBank >= 1000 },
+  { id: "a_777", name: "Lucky Sevens", how: "Hit 7-7-7 on the slot reels", ok: () => S("reel777") >= 1 },
+  { id: "a_auto", name: "Hands Free", how: "Own the Auto Dropper", ok: () => lvl("auto") > 0 || rl("autostart") > 0 },
+  { id: "a_speed", name: "Speed Run", how: "Rebirth less than 10 minutes into a run", ok: () => S("fastReb") >= 1 },
+  // row 5: high roller
+  { id: "a_asc", name: "Ascended", how: "Ascend", ok: () => ascensions >= 1 },
+  { id: "a_gem10", name: "Gem Collector", how: "Earn 10 gems in total", ok: () => gemsTotal >= 10 },
+  { id: "a_earn100k", name: "Hundred Grand", how: "Earn 100,000 coins in total", ok: () => earned >= 1e5 },
+  { id: "a_max", name: "Maxed Out", how: "Max out any machine upgrade", ok: () => UPGRADES.some(u => u.max > 1 && lvl(u.id) >= u.max) },
+  { id: "a_gold6", name: "Peg Royalty", how: "Own all 6 golden pegs", ok: () => lvl("goldpeg") >= 6 },
+  { id: "a_streak8", name: "Daredevil", how: "Win 8 coin flips in a row", ok: () => stats.bestStreak >= 8 },
+  { id: "a_5h", name: "Marathon", how: "Play for 5 hours in total", ok: () => S("playTime") >= 5 * 3600 },
+  { id: "a_chal6", name: "Champion", how: "Beat 6 challenges", ok: () => Object.keys(chDone).length >= 6 },
+  // row 6: oddities (secret until earned)
+  { id: "a_idle", name: "Patience", how: "Don't drop a coin for 10 minutes with the game open", secret: true, ok: () => S("playTime") - lastDropPlay >= 600 },
+  { id: "a_unlucky", name: "Unlucky", how: "Lose 3 coin flips in a row", secret: true, ok: () => S("flipLossBest") >= 3 },
+  { id: "a_side100", name: "Sideways", how: "Lose 100 coins off the sides", secret: true, ok: () => S("lost") >= 100 },
+  { id: "a_penny", name: "Penny Pincher", how: "Bank the tray with just one coin in it", secret: true, ok: () => S("penny") >= 1 },
+  { id: "a_allin", name: "All In", how: "Lose a coin flip with 100 or more at stake", secret: true, ok: () => S("allIn") >= 1 },
+  { id: "a_owl", name: "Night Owl", how: "Play between midnight and 4 a.m.", secret: true, ok: () => new Date().getHours() < 4 },
+  { id: "a_hoard", name: "Brim Full", how: "Bank the tray by hand when it's one coin from full", secret: true, ok: () => S("hoard") >= 1 },
+  { id: "a_all", name: "Completionist", how: "Get every other achievement", secret: true, ok: () => ACH.every(a => a.id === "a_all" || achDone[a.id]) },
+];
+const ACH_ROWS = [
+  { name: "First Steps", reward: "+5% payouts" },
+  { name: "Getting the Hang of It", reward: "Regen 10% faster" },
+  { name: "Pusher Pro", reward: "Drops 5% faster" },
+  { name: "Arcade Regular", reward: "+10% tokens per rebirth" },
+  { name: "High Roller", reward: "+10% payouts" },
+  { name: "Oddities", reward: "+15% payouts" },
+];
+let lastDropPlay = stats.playTime || 0; // for Patience
+function achRow(r) { for (let i = r * 8; i < r * 8 + 8; i++) if (!achDone[ACH[i].id]) return false; return true; }
+function achCount() { let n = 0; for (const a of ACH) if (achDone[a.id]) n++; return n; }
+function achPayMult() { return (1 + 0.01 * achCount()) * (achRow(0) ? 1.05 : 1) * (achRow(4) ? 1.1 : 1) * (achRow(5) ? 1.15 : 1); }
+function checkAch() {
+  for (const a of ACH) if (!achDone[a.id] && a.ok()) {
+    achDone[a.id] = true; showToast("ACHIEVEMENT: " + a.name.toUpperCase(), a.how);
+    const r = Math.floor(ACH.indexOf(a) / 8);
+    if (achRow(r)) setTimeout(() => showToast("ROW COMPLETE: " + ACH_ROWS[r].name.toUpperCase(), ACH_ROWS[r].reward), 3600);
+    save();
+  }
+}
 let chActive = (saved && saved.chActive) || null;
 const msHas = id => !!msDone[id], chHas = id => !!chDone[id], chOn = id => chActive === id;
 const pegMap = (saved && saved.pegs) || {}; // "row:index" -> "gold" | "split" | "double"
@@ -1408,11 +1514,11 @@ function onSpecialPeg(c, L) {
   const type = !chOn("nopegs") && L.pegId && pegMap[L.pegId];
   if (!type) return;
   const at = new THREE.Vector3(L.x1, L.y1 + 0.35, BOARD_Z);
-  if (type === "gold") { c.v = (c.v || 1) + goldAmt(); popAt(at, "+" + goldAmt(), ""); retint(c); sfx.golden(); }
-  else if (type === "double") { c.v = (c.v || 1) * 2; popAt(at, "×2", "big"); retint(c); sfx.doubler(); }
+  if (type === "gold") { stats.goldHits = S("goldHits") + 1; c.v = (c.v || 1) + goldAmt(); popAt(at, "+" + goldAmt(), ""); retint(c); sfx.golden(); }
+  else if (type === "double") { stats.doubles = S("doubles") + 1; c.v = (c.v || 1) * 2; popAt(at, "×2", "big"); retint(c); sfx.doubler(); }
   else if (type === "split" && Math.random() < splitChance()) {
     const [k, j] = L.pegId.split(":").map(Number);
-    if (k < BOARD.rows - 1) { boardDrop(board, 0, { k, j }).v = c.v || 1; popAt(at, "SPLIT", ""); sfx.split(); }
+    if (k < BOARD.rows - 1) { stats.splits = S("splits") + 1; boardDrop(board, 0, { k, j }).v = c.v || 1; popAt(at, "SPLIT", ""); sfx.split(); }
   }
 }
 // a board coin changes its face when its value changes
@@ -1467,7 +1573,7 @@ function dropCoin() {
   const now = performance.now();
   if (now - lastDrop < dropCooldown() * (eventOn("frenzy") ? 0.35 : 1) * 1000) return;
   lastDrop = now;
-  dropped++;
+  dropped++; lastDropPlay = stats.playTime || 0;
   // a coin costs what it's worth; if you can't afford a full one, you drop the biggest coin you can afford
   let value = coinValue();
   if (eventOn("frenzy") || Math.random() < freeDrop()) { popAt(new THREE.Vector3(aimX, BOARD.dropY + 0.5, BOARD_Z), "FREE", ""); if (!eventOn("frenzy")) sfx.free(); }
@@ -1692,9 +1798,10 @@ function stepPhysics(counting) {
         earned += v; runEarned += v; rateEarn += v; // counts as earned now; spendable once it's banked from the tray
         popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), "+" + fmtV(v), v > 1 ? "big" : "");
         if (v > 0) flyToVault(new THREE.Vector3(t.x, 0.1, FLOOR_FRONT + 0.3), v);
+        stats.bestCoin = Math.max(S("bestCoin"), v); if (c.mystery && mult >= 10) stats.myst10 = 1; if (c.mystery && mult === 0) stats.myst0 = 1;
         sfx.win(v);
       } else {
-        popAt(new THREE.Vector3(t.x, 0, t.z), "LOST", "lost");
+        popAt(new THREE.Vector3(t.x, 0, t.z), "LOST", "lost"); stats.lost = S("lost") + 1;
         sfx.lost();
       }
       refreshHud();
@@ -1710,8 +1817,8 @@ const lvl = id => ups[id] || 0;
 const rl = id => rups[id] || 0;
 const fmtV = v => v < 10 && v % 1 ? v.toFixed(1) : fmt(v);
 const coinValue = (l = lvl("value")) => 1 + l;
-const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (msHas("drop5k") ? 0.9 : 1) * (chHas("slow") ? 0.85 : 1)) * (chOn("slow") ? 3 : 1);
-const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (msHas("drop500") ? 0.9 : 1) * (chHas("dry") ? 0.75 : 1);
+const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (achRow(2) ? 0.95 : 1) * (msHas("drop5k") ? 0.9 : 1) * (chHas("slow") ? 0.85 : 1)) * (chOn("slow") ? 3 : 1);
+const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (achRow(1) ? 0.9 : 1) * (msHas("drop500") ? 0.9 : 1) * (chHas("dry") ? 0.75 : 1);
 // regenCap = what Bigger Refill allows; regenLimit = what regen actually fills to right now
 const regenLimit = () => Math.min(regenCap(), Math.max(5, runMax)); // every run starts refilling to 5, then follows your best vault
 const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + (chHas("pocketless") ? 10 : 0);
@@ -1725,10 +1832,10 @@ const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1));
 const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
 const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
 // rebirth tree effects
-const payoutMult = (l = rl("golden")) => (1 + 0.25 * l) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.25 : 1) * (1 + msPayout()) * (chHas("leaky") ? 1.15 : 1) * (chOn("leaky") ? 0.5 : 1);
+const payoutMult = (l = rl("golden")) => achPayMult() * (1 + 0.25 * l) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.25 : 1) * (1 + msPayout()) * (chHas("leaky") ? 1.15 : 1) * (chOn("leaky") ? 0.5 : 1);
 const HEADSTART = [0, 10, 30, 100, 300, 1000];
 const startCoins = (l = rl("headstart")) => HEADSTART[l];
-const tokenMult = (l = rl("tokens")) => (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
+const tokenMult = (l = rl("tokens")) => (achRow(3) ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
 // rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
 const REBIRTH_AT = 1000;
 const LATE = 1.25;   // each level of a node costs this much more than the last step did
@@ -1835,7 +1942,7 @@ function applyUpgrades() {
 function buy(T, u) {
   const c = T.cost(u);
   if (nodeState(T, u) !== "open" || T.lv(u.id) >= u.max || T.has() < c) return;
-  T.pay(c); T.set(u.id, T.lv(u.id) + 1);
+  T.pay(c); T.set(u.id, T.lv(u.id) + 1); stats.buys = S("buys") + 1;
   applyUpgrades(); sfx.bonus(); save(); refreshHud(); renderTree();
   if (u.peg && fillPegs().length) {
     drawSpecialPegs(); save();
@@ -1860,7 +1967,7 @@ function renderTree() {
   if (listTab) {
     $("rebirthBar").hidden = true; $("treeCoins").textContent = `${fmt(bank)} coins`;
     const a = $("treeArea"); a.style.width = ""; a.style.height = "";
-    return treeId === "mainlist" ? renderList() : treeId === "arcade" ? renderArcade() : treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : renderSettings();
+    return treeId === "mainlist" ? renderList() : treeId === "arcade" ? renderArcade() : treeId === "ach" ? renderAch() : treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : renderSettings();
   }
   const T = TREES[treeId], e = extents(T), area = $("treeArea");
   $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`;
@@ -2011,7 +2118,7 @@ function centerTree() {
 const SECTIONS = {
   up: { name: "UPGRADES", tabs: [["main", "TREE"], ["mainlist", "LIST"]] },
   arcade: { name: "ARCADE", tabs: [["arcade", "ARCADE"]] },
-  goals: { name: "GOALS", tabs: [["goals", "MILESTONES"], ["ch", "CHALLENGES", () => rebirths > 0]] },
+  goals: { name: "GOALS", tabs: [["ach", "ACHIEVEMENTS"], ["goals", "MILESTONES"], ["ch", "CHALLENGES", () => rebirths > 0]] },
   prestige: { name: "PRESTIGE", tabs: [["reb", "REBIRTH"], ["asc", "ASCEND", () => rebirths >= 3 || ascensions > 0]] },
   menu: { name: "MENU", tabs: [["set", "SETTINGS"], ["stats", "STATS"], ["style", "STYLE"]] },
 };
@@ -2029,7 +2136,7 @@ function renderSubtabs() {
 }
 function openTab(id) { treeId = id; lastTab[sectionOf(id)] = id; shopSig = ""; renderTree(); if (TREES[id]) centerTree(); else $("treeScroll").scrollTo(0, 0); }
 function setPanel(open) {
-  $("tree").hidden = !open; $("tree").style.transform = "";
+  $("tree").hidden = !open; $("tree").style.transform = ""; document.body.classList.toggle("panelOpen", open);
   settings.panel = open; saveSettings();
   if (open) { shopSig = ""; renderTree(); if (TREES[treeId]) centerTree(); else $("treeScroll").scrollTo(0, 0); }
   updateRail(); fitCamera();
@@ -2107,6 +2214,41 @@ function renderList() {
   wrap.appendChild(note); area.appendChild(wrap);
   if (!byId(T, selectedIn.main) || !live.includes(byId(T, selectedIn.main))) { if (live[0]) selectedIn.main = live[0].id; }
   renderInfo();
+}
+// Achievements: rows of 8 tiles, Antimatter Dimensions style. Tap a tile to see what it wants.
+let achSel = null;
+function renderAch() {
+  const area = $("treeArea"); area.textContent = "";
+  const wrap = document.createElement("div"); wrap.className = "achWrap";
+  const n = achCount(), head = document.createElement("p"); head.className = "listNote2";
+  head.textContent = `${n} of ${ACH.length} earned. Each one adds +1% to payouts (+${n}% now), and every full row has its own reward.`;
+  wrap.appendChild(head);
+  const info = document.createElement("div"); info.className = "achInfo box";
+  const showInfo = a => {
+    const got = achDone[a.id], hide = a.secret && !got;
+    info.innerHTML = "<b></b><span></span>";
+    info.querySelector("b").textContent = (got ? "✓ " : "") + (hide ? "Secret achievement" : a.name);
+    info.querySelector("span").textContent = hide ? "Keep playing and you might stumble into it." : a.how;
+  };
+  ACH_ROWS.forEach((row, r) => {
+    const box = document.createElement("div"); box.className = "achRow";
+    const got = ACH.slice(r * 8, r * 8 + 8).filter(a => achDone[a.id]).length, done = got === 8;
+    const h = document.createElement("h3"); h.innerHTML = "<span></span><em></em>";
+    h.firstChild.textContent = row.name; h.lastChild.textContent = done ? `✓ ${row.reward}` : `${got}/8 · ${row.reward}`;
+    h.classList.toggle("done", done); box.appendChild(h);
+    const grid = document.createElement("div"); grid.className = "achGrid";
+    for (let i = 0; i < 8; i++) {
+      const a = ACH[r * 8 + i], b = document.createElement("button"); b.type = "button";
+      b.className = "ach" + (achDone[a.id] ? " got" : "") + (achSel === a.id ? " sel" : "");
+      b.textContent = a.secret && !achDone[a.id] ? "?" : String(r * 8 + i + 1);
+      b.setAttribute("aria-label", a.secret && !achDone[a.id] ? "Secret achievement" : a.name);
+      b.addEventListener("click", () => { achSel = a.id; grid.parentNode.parentNode.querySelectorAll(".ach.sel").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); showInfo(a); });
+      grid.appendChild(b);
+    }
+    box.appendChild(grid); wrap.appendChild(box);
+  });
+  const first = ACH.find(a => a.id === achSel) || ACH.find(a => !achDone[a.id]) || ACH[0];
+  showInfo(first); wrap.appendChild(info); area.appendChild(wrap);
 }
 // All the gambles in one place
 function renderArcade() {
@@ -2325,6 +2467,7 @@ const CHALLENGES = [
 function doRebirth() {
   const n = tokenGain(); if (n < 1) return;
   tokens += n; tokensAsc += n; rebirths++; stats.tokensTotal = (stats.tokensTotal || 0) + n;
+  if (runTime < 600) stats.fastReb = 1;
   store.set(SAVE_KEY, freshRun({ bank: startCoins(), chActive: null }));
   saveBlocked = true; location.reload();
 }
@@ -2344,7 +2487,7 @@ function startUps() {
 }
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
-    stats, msDone, chDone, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
+    stats, msDone, chDone, ach: achDone, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
     goldRandom: true, pegsRandom: true, runMax: 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
@@ -2354,7 +2497,7 @@ function showToast(title, text) {
   sfx.achieve();
 }
 function checkGoals() {
-  checkCosmetics();
+  checkCosmetics(); checkAch();
   if (al("autoreb") && autoRebOn && !chActive && !saveBlocked && tokenGain() >= autoRebAt) { doRebirth(); return; }
   stats.maxBank = Math.max(stats.maxBank, Math.floor(bank)); runMax = Math.max(runMax, Math.floor(bank));
   for (const m of MILESTONES) {
@@ -2429,6 +2572,7 @@ const EVENTS = [
 let ev = null, evEnd = 0, nextEv = 0, showerT = 0;
 const eventOn = id => ev && ev.id === id;
 function startEvent(e) {
+  stats.events = S("events") + 1;
   ev = e; evEnd = performance.now() / 1000 + ev.dur * eventLen();
   $("evName").textContent = ev.name; $("eventBanner").hidden = false;
   applyUpgrades(); sfx.event(e.id); music.bonusTime(true);
@@ -2454,7 +2598,7 @@ function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
-    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
@@ -2511,6 +2655,9 @@ function bankTray(auto) {
   const live = trayLive(); if (!live.length) return;
   let amt = 0;
   for (const c of live) { amt += c.v; c.out = true; c.vy = 30 + Math.random() * 40; c.vx = 0; }
+  stats.banks = S("banks") + 1;
+  if (auto) stats.fullBanks = S("fullBanks") + 1;
+  else { stats.bigBank = Math.max(S("bigBank"), live.length); if (live.length === 1) stats.penny = 1; if (live.length === TRAY_CAP - 1) stats.hoard = 1; }
   bank += amt; bankedFx = 1.2;
   $("jarUnit").textContent = `${auto ? "Tray full: banked" : "Banked"} +${fmtV(amt)}`;
   sfx.bonus(); refreshHud(); save(); updateTrayHud();
@@ -2632,6 +2779,7 @@ let flipStreak = 0;
 function landFlip() {
   face = flipResult; flipT = -1;
   const name = face === "H" ? "HEADS" : "TAILS";
+  if (flipResult === flipCall) { stats.flipWins = S("flipWins") + 1; stats.flipLossRow = 0; } else { stats.flipLossRow = S("flipLossRow") + 1; stats.flipLossBest = Math.max(S("flipLossBest"), stats.flipLossRow); if (inPlay >= 100) stats.allIn = 1; }
   if (flipResult === flipCall) { flipStreak++; stats.bestStreak = Math.max(stats.bestStreak, flipStreak); inPlay *= 2; $("flipMsg").textContent = `${name}! Now worth ${fmt(inPlay)}. Go again or cash out.`; sfx.win(2); }
   else { $("flipMsg").textContent = `${name}. Lost ${fmt(inPlay)}.`; inPlay = 0; flipStreak = 0; sfx.lost(); }
   save(); renderFlip();
@@ -2793,7 +2941,7 @@ function drawReels() {
 function updateReels(dt) {
   if ($("reels").hidden) return;
   if (reelT < 0 && reelQueue > 0) {
-    reelQueue--; reelT = 0; reelRes = [reelPick(), reelPick(), reelPick()];
+    reelQueue--; reelT = 0; stats.reelSpins = S("reelSpins") + 1; reelRes = [reelPick(), reelPick(), reelPick()];
     $("reels").classList.remove("win"); $("reelMsg").textContent = "Spinning…"; sfx.drop();
   }
   if (reelT >= 0) {
@@ -2849,6 +2997,7 @@ function renderWheel() {
   if (wheelT < 0 && !$("wheelMsg").dataset.result) $("wheelMsg").textContent = ready ? "Ready! Spin for a prize." : `Charging: ${pctDone}%. Earning coins fills it up.`;
 }
 function spinWheel() {
+  stats.wheelSpins = S("wheelSpins") + 1;
   if (wheelT >= 0 || wheelCharge < wheelNeed()) return;
   wheelCharge = 0; wheelPrize = Math.floor(Math.random() * WHEEL.length);
   const seg = Math.PI * 2 / WHEEL.length;
