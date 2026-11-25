@@ -33,7 +33,7 @@
 [hidden] { display: none !important; }
 * { -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
-body { background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #game { position: fixed; inset: 0; cursor: pointer; }
 #game canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
 
@@ -437,7 +437,7 @@ body.compact > *:not(#compact) { display: none !important; }
 .xfer .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 
 /* the tray belongs to the cabinet: its trim on three sides, open at the top where the shelf drops coins in */
-.vault { background: var(--cab2, #1c2028); border: 4px solid var(--trimC, #f5b83d); border-top: 0; box-shadow: 0 6px 0 var(--ink); }
+.vault { box-sizing: border-box; background: var(--cab2, #1c2028); border: 4px solid var(--trimC, #f5b83d); border-top: 0; box-shadow: 0 6px 0 var(--ink); }
 .vault canvas { background: #00000040; }
 </style>
 </head>
@@ -696,7 +696,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.13.1";
+const VERSION = "1.13.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1612,7 +1612,14 @@ function dropCoin() {
 
 const gameEl = $("game");
 gameEl.addEventListener("pointermove", aimFromPointer);
-gameEl.addEventListener("pointerdown", e => { sfx.unlock(); if (placing) { placeAt(e); return; } aimFromPointer(e); holding = true; dropCoin(); });
+gameEl.addEventListener("pointerdown", e => {
+  sfx.unlock(); if (placing) { placeAt(e); return; }
+  try { gameEl.setPointerCapture(e.pointerId); } catch {} // keep the hold even if the finger slides off the canvas
+  aimFromPointer(e); holding = true; dropCoin();
+});
+// a long press on a phone would open the browser's menu, select text or show a magnifier, and cancel the hold
+gameEl.addEventListener("contextmenu", e => e.preventDefault());
+gameEl.addEventListener("selectstart", e => e.preventDefault());
 addEventListener("pointerup", () => { holding = false; });
 addEventListener("pointercancel", () => { holding = false; });
 const keys = {};
