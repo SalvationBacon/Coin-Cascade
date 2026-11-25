@@ -484,6 +484,16 @@ body.compact > *:not(#compact) { display: none !important; }
 @keyframes rotPhone { 0%, 30% { transform: rotate(90deg); } 60%, 100% { transform: rotate(0deg); } }
 @media (prefers-reduced-motion: reduce) { .rotIcon { animation: none; } }
 @media (orientation: landscape) and (pointer: coarse) and (max-height: 520px) { .rotate { display: flex; } }
+
+#towerCanvas { width: 140px; height: 210px; image-rendering: pixelated; }
+.scratchRow { display: flex; gap: 8px; }
+.scell { width: 64px; height: 64px; display: grid; place-items: center; font-family: var(--display); font-size: 16px; color: var(--ink); background: repeating-linear-gradient(45deg, #c8d0dc 0 6px, #aab3c0 6px 12px);
+  border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); cursor: pointer; padding: 0; }
+.scell:disabled { cursor: default; }
+.scell.open { background: var(--panel); color: var(--gold); }
+.scell img { width: 40px; height: 40px; image-rendering: pixelated; }
+.scratchTable { margin: 0; font-size: 14px; line-height: 1.2; color: var(--muted); }
+@media (max-width: 760px) { #towerCanvas { width: 100px; height: 150px; } .scell { width: 54px; height: 54px; } }
 </style>
 </head>
 <body>
@@ -535,6 +545,22 @@ body.compact > *:not(#compact) { display: none !important; }
   <div class="stakes" id="stakes"></div>
   <div class="calls"><button class="call" id="callH" type="button">HEADS</button><button class="call" id="callT" type="button">TAILS</button></div>
   <button class="cash" id="cashOut" type="button" disabled>CASH OUT</button>
+</div>
+<div class="flip box" id="towerPanel" hidden>
+  <div class="flipHead"><h2>Coin Tower</h2><button class="treeClose" id="towerClose" type="button">CLOSE</button></div>
+  <canvas id="towerCanvas" width="100" height="150"></canvas>
+  <p class="flipPlay" id="towerPlay"></p>
+  <p class="flipMsg" id="towerMsg">Stack coins for a bigger payout. Every coin makes it wobblier. Cash out before it topples.</p>
+  <div class="stakes" id="towerStakes"></div>
+  <div class="calls"><button class="call" id="towerGo" type="button">START</button></div>
+  <button class="cash" id="towerCash" type="button" disabled>CASH OUT</button>
+</div>
+<div class="flip box" id="scratchPanel" hidden>
+  <div class="flipHead"><h2>Scratch Card</h2><button class="treeClose" id="scratchClose" type="button">CLOSE</button></div>
+  <div class="scratchRow" id="scratchRow"></div>
+  <p class="flipMsg" id="scratchMsg">Buy a card, then scratch all three. Two alike pays a little, three alike pays big.</p>
+  <button class="call" id="scratchBuy" type="button">BUY CARD</button>
+  <p class="scratchTable">Pairs: 1 ×0.4 · 2 ×1 · 5 ×2 · 10 ×4 · ★ ×8<br>Three: 1 ×2 · 2 ×6 · 5 ×15 · 10 ×40 · ★ ×200</p>
 </div>
 <div class="placeBanner box" id="placeBanner" hidden><span id="placeText"></span><button class="treeClose" id="placeDone" type="button">DONE</button></div>
 <div class="title" id="title" hidden>
@@ -746,7 +772,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.19.0";
+const VERSION = "1.20.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1173,7 +1199,7 @@ const pegX = (B, k, j) => (j - k / 2) * B.spacing;
 function boardDrop(bd, x, from) {
   const B = bd.B, rand = bd.rand, top = B.coinR + B.pegR, legs = [];
   const mid = (B.slots.length - 1) / 2;
-  let px, cy, cx, rights, dir, k0;
+  let px, cy, cx, rights, dir, k0, magnet = false;
   if (from) {
     // a split coin carries on from the peg it split on
     k0 = from.k; rights = from.j; px = pegX(B, from.k, from.j); cx = px; cy = B.pegTop - from.k * B.rowDy + top; dir = rand() < 0.5 ? 1 : -1;
@@ -1185,7 +1211,11 @@ function boardDrop(bd, x, from) {
   for (let k = k0; k < B.rows; k++) {
     const pRight = k === 0 && !from ? 0.5 + 0.35 * (x / B.aimMax) : from && k === k0 ? 0.5 : dir > 0 ? B.keepGoing : 1 - B.keepGoing;
     dir = rand() < pRight ? 1 : -1;
-    if (B.luck && rand() < B.luck) {
+    if (magnet && rand() < 0.7) {
+      // past a magnet peg: pulled toward the middle slot
+      const proj = rights + (B.rows - k) / 2;
+      if (Math.abs(proj - mid) > 0.25) dir = mid > proj ? 1 : -1;
+    } else if (B.luck && rand() < B.luck) {
       // a lucky bounce steers toward the nearest bonus slot (the middle or an edge)
       const proj = rights + (B.rows - k) / 2, goal = [0, mid, B.slots.length - 1].reduce((a, g) => Math.abs(g - proj) < Math.abs(a - proj) ? g : a);
       if (goal !== proj) dir = goal > proj ? 1 : -1;
@@ -1195,6 +1225,7 @@ function boardDrop(bd, x, from) {
       px += (dir * B.spacing) / 2;
       const ny = B.pegTop - (k + 1) * B.rowDy + top;
       legs.push(Object.assign(leg(B, cx, cy, px, ny, 0.3 + rand() * 0.06, true), { pegId: `${k + 1}:${rights}` }));
+      if (typeof pegMap !== "undefined" && pegMap[`${k + 1}:${rights}`] === "magnet" && !(typeof chOn === "function" && chOn("nopegs"))) magnet = true;
       cx = px; cy = ny;
     }
   }
@@ -1366,7 +1397,9 @@ const PEG_TYPES = {
   gold: { name: "Golden Peg", up: "goldpeg", color: 0xffd24a },
   split: { name: "Splitter Peg", up: "splitpeg", color: 0x46e0ff },
   double: { name: "Doubler Peg", up: "doublepeg", color: 0xff5a5a },
+  magnet: { name: "Magnet Peg", count: () => wl("magnetpeg"), color: 0x5fe0b0 }, // Workshop: coins that touch it get pulled toward the jackpot
 };
+const pegCount = type => PEG_TYPES[type].count ? PEG_TYPES[type].count() : lvl(PEG_TYPES[type].up);
 const specialGroup = new THREE.Group(); scene.add(specialGroup);
 const specialGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.34, 10); specialGeo.rotateX(Math.PI / 2);
 const haloGeo = new THREE.RingGeometry(0.17, 0.22, 16);
@@ -1551,7 +1584,7 @@ const pegsPlaced = type => Object.values(pegMap).filter(t => t === type).length;
 function trimPegs() {
   // never more placed than owned (e.g. after a rebirth)
   for (const type in PEG_TYPES) {
-    let extra = pegsPlaced(type) - lvl(PEG_TYPES[type].up);
+    let extra = pegsPlaced(type) - pegCount(type);
     for (const id of Object.keys(pegMap)) if (extra > 0 && pegMap[id] === type) { delete pegMap[id]; extra--; }
   }
 }
@@ -1577,7 +1610,7 @@ function nearestPeg(e) {
 function fillPegs() {
   const added = [];
   for (const type in PEG_TYPES) {
-    while (pegsPlaced(type) < lvl(PEG_TYPES[type].up)) {
+    while (pegsPlaced(type) < pegCount(type)) {
       const free = [];
       for (let k = 0; k < BOARD.rows; k++) for (let j = 0; j <= k; j++) if (!pegMap[`${k}:${j}`]) free.push(`${k}:${j}`);
       if (!free.length) break;
@@ -1604,6 +1637,7 @@ function onSpecialPeg(c, L) {
   if (!type) return;
   const at = new THREE.Vector3(L.x1, L.y1 + 0.35, BOARD_Z);
   if (type === "gold") { stats.goldHits = S("goldHits") + 1; c.v = (c.v || 1) + goldAmt(); popAt(at, "+" + goldAmt(), ""); retint(c); sfx.golden(); }
+  else if (type === "magnet") { popAt(at, "MAGNET", ""); sfx.peg(); }
   else if (type === "double") { stats.doubles = S("doubles") + 1; c.v = (c.v || 1) * 2; popAt(at, "×2", "big"); retint(c); sfx.doubler(); }
   else if (type === "split" && Math.random() < splitChance()) {
     const [k, j] = L.pegId.split(":").map(Number);
@@ -1646,7 +1680,13 @@ function onSlot(c, mult, slot) {
   }
   // Hand the coin to the pusher, standing on edge, now worth its multiplier
   _eq.setFromAxisAngle(new THREE.Vector3(0, 0, 1), c.a).multiply(_qx);
-  const value = mult * (c.v || 1) * (eventOn("gold") ? 2 : 1);
+  let value = mult * (c.v || 1) * (eventOn("gold") ? 2 : 1);
+  // Flip Gates: a coin in a paying slot may hit a gate and flip: heads doubles it, tails halves it
+  if (mult > 0 && lvl("flipgate") && Math.random() < 0.08 * lvl("flipgate")) {
+    const heads = Math.random() < 0.5; value = heads ? value * 2 : Math.max(1, Math.round(value / 2));
+    popAt(new THREE.Vector3(at.x, at.y + 0.5, at.z), heads ? "HEADS ×2" : "TAILS ½", heads ? "big" : "lost"); heads ? sfx.heads() : sfx.tails();
+    stats.gates = S("gates") + 1;
+  }
   const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, value, 0, _eq.clone());
   if (Math.random() < mysteryChance()) coin.mystery = true; // its value stays hidden until it pays out
   coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
@@ -1728,6 +1768,14 @@ const sfx = (() => {
     free() { if (!ok("free", 150)) return; seq([1568, 2093, 2637], 0.045, 0.08, "triangle", 0.06); },                       // rising sparkle
     extra() { if (!ok("extra", 150)) return; tone(1319, 0.06, "square", 0.04); tone(1976, 0.25, "square", 0.04, 0.06); },   // ka-ching
     golden() { if (!ok("golden", 250)) return; tone(2637, 0.4, "sine", 0.06); tone(3951, 0.25, "sine", 0.025); },            // bell
+    kaching() { seq([1319, 1760, 2637], 0.05, 0.12, "square", 0.04); },
+    tick() { if (!ok("tick", 120)) return; tone(1500, 0.03, "triangle", 0.03); },
+    stack() { tone(700 + Math.random() * 200, 0.06, "square", 0.035); tone(1200, 0.05, "triangle", 0.025, 0.04); },
+    crash() { slide(600, 80, 0.5, "sawtooth", 0.05); for (let i = 0; i < 6; i++) tone(300 + Math.random() * 900, 0.05, "square", 0.025, 0.05 + i * 0.06); },
+    scratch() { slide(2400, 1400, 0.12, "triangle", 0.03); },
+    heads() { if (!ok("heads", 150)) return; tone(1047, 0.06, "square", 0.035); tone(2093, 0.1, "square", 0.035, 0.06); },
+    tails() { if (!ok("tails", 150)) return; slide(700, 350, 0.18, "triangle", 0.04); },
+    rebuilt() { seq([523, 659, 784, 1047, 784, 1047, 1319, 1568], 0.09, 0.2, "square", 0.05); },
     doubler() { if (!ok("doubler", 200)) return; tone(880, 0.06, "square", 0.04); tone(1760, 0.1, "square", 0.04, 0.07); },   // blip, octave up
     split() { if (!ok("split", 200)) return; slide(300, 900, 0.18, "triangle", 0.09); },                                    // boing
     lucky() { if (!ok("lucky", 200)) return; seq([523, 659, 784], 0.06, 0.1, "triangle", 0.07); },                          // rescue arpeggio
@@ -1974,6 +2022,9 @@ const UPGRADES = [
   { id: "mystery", name: "Mystery Coins", x: -2, y: -1, parent: "luck", max: 6, base: 80, grow: 1.9, text: l => `${pct(mysteryChance(l))} of coins become ? coins` },
   { id: "lucky", name: "Lucky Zero", x: -1, y: -3, parent: "jackpot", max: 5, base: 50, grow: 1.8, text: l => `${pct(luckyZero(l))} of ×0 coins saved as ×1` },
   { id: "luck", name: "Lucky Bounce", x: -1, y: -1, parent: "edge", max: 10, base: 35, grow: 1.8, text: l => `${pct(0.04 * l)} of bounces steer toward a bonus slot` },
+  { id: "tower", name: "Coin Tower", x: 2, y: -1, parent: "flip", max: 1, base: 300, grow: 1, text: l => l ? "Coin Tower unlocked in the Arcade" : "Unlocks the Coin Tower gamble" },
+  { id: "scratch", name: "Scratch Cards", x: 1, y: -2, parent: "flip", max: 1, base: 500, grow: 1, text: l => l ? "Scratch cards unlocked in the Arcade" : "Unlocks scratch cards" },
+  { id: "flipgate", name: "Flip Gates", x: -1, y: -2, parent: "luck", max: 3, base: 400, grow: 2.5, text: l => l ? `${pct(0.08 * l)} of coins hit a flip gate in their slot: heads ×2, tails ×½` : "No flip gates" },
   { id: "flip", name: "Double or Nothing", x: 1, y: -1, parent: "edge", max: 1, base: 50, grow: 1, text: l => l ? "Coin flip side game unlocked" : "Unlocks the coin flip side game" },
   { id: "goldpeg", name: "Golden Peg", x: 0, y: 1, parent: "regen", get max() { return 6 + wl("morepegs"); }, base: 40, grow: 2.2, peg: "gold", text: l => `${l} golden peg${l === 1 ? "" : "s"} on random pegs: +${goldAmt()} value per touch` },
   { id: "pegpower", name: "Peg Power", x: 0, y: 2, parent: "goldpeg", max: 5, base: 150, grow: 2.2, text: l => `Golden pegs +${1 + l} · splitters ${pct(0.25 + 0.05 * l)}` },
@@ -2049,6 +2100,8 @@ const WUPGRADES = [
   { id: "gempress", name: "Gem Press", x: -2, y: 0, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% gems per ascension` },
   { id: "tokpress", name: "Token Press", x: -1, y: 1, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${100 * l}% tokens per rebirth` },
   { id: "tokvault", name: "Token Vault", x: -1, y: 2, parent: "tokpress", max: 5, base: 3, grow: 2, text: l => `Keep ${10 * l}% of your tokens when you ascend` },
+  { id: "magnetpeg", name: "Magnet Pegs", x: 1, y: 1, parent: "morepegs", max: 2, base: 4, grow: 3, text: l => l ? `${l} magnet peg${l > 1 ? "s" : ""} on random pegs: coins that touch one get pulled toward the jackpot` : "No magnet pegs" },
+  { id: "neigh", name: "Lucky Neighbours", x: 2, y: -1, parent: "zeros", max: 2, base: 5, grow: 2.5, text: l => l ? `The slots beside the jackpot pay at least ×${1 + l}` : "The slots beside the jackpot pay their usual amount" },
   { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? `Ascends for you at ${autoAscAt} gems` : "You ascend by hand" },
 ];
 const TREES = {
@@ -2070,7 +2123,13 @@ const nodeState = (T, u) => {
 };
 let railsBuilt = false;
 function applyUpgrades() {
-  BOARD.slots = BASE_SLOTS.map(m => {
+  const midSlot = (BASE_SLOTS.length - 1) / 2;
+  BOARD.slots = BASE_SLOTS.map((m, i) => slotPay(m, i, midSlot));
+  function slotPay(m, i, mid) {
+    const v = baseSlotPay(m);
+    return Math.abs(i - mid) === 1 && wl("neigh") && !chOn("jackonly") && !chOn("edgeonly") ? Math.max(v, 1 + wl("neigh")) : v; // Lucky Neighbours
+  }
+  function baseSlotPay(m) {
     if (m === 5) return chOn("nojack") || chOn("edgeonly") ? 0 : (wl("jack10") ? 10 : 5) + lvl("jackpot") + chHas("nojack") + 2 * al("fever") + 2 * chHas("jackonly") + (msHas("jack500") ? 1 : 0);
     if (chOn("jackonly")) return 0;
     if (m === 3) return 3 + lvl("edge") + chHas("allnothing") + chHas("edgeonly") + wl("edges");
@@ -2078,7 +2137,7 @@ function applyUpgrades() {
     if (m === 1 && chOn("allnothing")) return 0;
     if (m === 0) return wl("zeros"); // No More Zeros
     return m;
-  });
+  }
   BOARD.jackpotKeep = eventOn("magnet") ? 1 : Math.min(1, 0.45 + 0.08 * lvl("wide") + 0.03 * rl("sticky") + (msHas("jack100") ? 0.03 : 0));
   BOARD.luck = 0.04 * lvl("luck") + (msHas("jack10") ? 0.02 : 0) + 0.05 * al("gemluck");
   drawBoard();
@@ -2094,6 +2153,7 @@ function applyUpgrades() {
   }
 }
 function buy(T, u) {
+  if (u.id === "magnetpeg") setTimeout(() => { if (fillPegs().length) { drawSpecialPegs(); save(); } }, 0);
   const c = T.cost(u);
   if (nodeState(T, u) !== "open" || T.lv(u.id) >= u.max || T.has() < c) return;
   T.pay(c); T.set(u.id, T.lv(u.id) + 1); stats.buys = S("buys") + 1;
@@ -2273,7 +2333,7 @@ function refreshShop() {
   const T = TREES[treeKey()];
   if (!T && treeId !== "arcade") return;
   const sig = treeId + "|" + (T ? T.list.map(u => nodeState(T, u)[0] + T.lv(u.id) + (T.has() >= T.cost(u) ? "y" : "n")).join("")
-    : [ups.flip, ups.wheel, ups.reels, ups.mystery, ups.events, inPlay > 0, $("wheelBtn").classList.contains("ready")].join());
+    : [ups.flip, ups.wheel, ups.reels, ups.mystery, ups.events, ups.tower, ups.scratch, ups.flipgate, inPlay > 0, $("wheelBtn").classList.contains("ready")].join());
   if (sig !== shopSig) { shopSig = sig; renderTree(); return; }
   if (T) { $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`; renderRebirthBar(); updateInfoCost(); }
   else { $("treeCoins").textContent = `${fmt(bank)} coins`; const m = $("arcWheel"); if (m) m.style.width = wheelPct() + "%"; }
@@ -2385,7 +2445,7 @@ $("treeClose").addEventListener("click", () => setPanel(false));
   head.addEventListener("pointerup", end); head.addEventListener("pointercancel", end);
 }
 $("placeDone").addEventListener("click", stopPlacing);
-addEventListener("keydown", e => { if (e.code === "Escape") { if (!$("tree").hidden) setPanel(false); $("flip").hidden = true; stopPlacing(); } });
+addEventListener("keydown", e => { if (e.code === "Escape") { if (!$("tree").hidden) setPanel(false); $("flip").hidden = true; if (!$("towerPanel").hidden) $("towerClose").click(); if (!$("scratchPanel").hidden) $("scratchClose").click(); stopPlacing(); } });
 
 // The upgrade tree as a list: what you can buy now, cheapest first
 function renderList() {
@@ -2465,6 +2525,10 @@ function renderArcade() {
   const meter = document.createElement("div"); meter.className = "meter"; meter.innerHTML = '<i id="arcWheel"></i>'; meter.firstChild.style.width = wheelPct() + "%";
   const ready = $("wheelBtn").classList.contains("ready");
   tile("Prize Wheel", ups.wheel > 0, "wheel", ready ? "The wheel is charged. Spin it!" : "Charges up as you earn. Spin for a pile of coins or a free event.", ready ? "SPIN" : "OPEN", wheelOpen, meter);
+  const openPanel = id => { if (innerWidth <= 760) setPanel(false); for (const pid of ["flip", "wheel", "towerPanel", "scratchPanel"]) $(pid).hidden = pid !== id; if (id === "towerPanel") renderTower(); if (id === "scratchPanel") renderScratch(); };
+  tile("Coin Tower", ups.tower > 0, "tower", "Stack coins for a bigger payout. Every coin makes it wobblier: cash out before it topples.", "PLAY", () => openPanel("towerPanel"));
+  tile("Scratch Cards", ups.scratch > 0, "scratch", `Buy a card for ${fmt(scratchCost())} and scratch three symbols. Three alike pays up to ×200.`, "PLAY", () => openPanel("scratchPanel"));
+  tile("Flip Gates", ups.flipgate > 0, "flipgate", `${pct(0.08 * (ups.flipgate || 0))} of coins hit a gate in their slot and flip: heads ×2, tails ×½.`);
   tile("Slot Reels", ups.reels > 0, "reels", "Every ×5 hit spins the reels. Three 7s pay big.");
   tile("Mystery Coins", ups.mystery > 0, "mystery", "Some coins hide their value until they pay out: anything from ×0 to ×25.");
   tile("Random Events", ups.events > 0, "events", "Gold Rush, Frenzy, Coin Shower and Jackpot Magnet turn up every few minutes.");
@@ -2686,6 +2750,7 @@ function doRebuild() {
   for (const k in rups) delete rups[k];
   for (const k in aups) delete aups[k];
   layout = "classic";
+  try { sessionStorage.setItem("cc_rebuilt", String(n)); } catch {}
   store.set(SAVE_KEY, freshRun({ bank: 0, chActive: null }));
   saveBlocked = true; location.reload();
 }
@@ -2901,6 +2966,7 @@ function bankTray(auto) {
   else { stats.bigBank = Math.max(S("bigBank"), live.length); if (live.length === 1) stats.penny = 1; if (live.length === TRAY_CAP - 1) stats.hoard = 1; }
   const bonus = (auto ? 0 : amt * 0.03 * rl("bankbonus")) + amt * 0.05 * al("goldtray"); // Bank Bonus: pressing BANK yourself pays a little extra
   bank += amt + bonus; bankedFx = 1.2;
+  if (bonus > 0) setTimeout(() => sfx.kaching(), 120);
   $("jarUnit").textContent = `${auto ? "Tray full: banked" : "Banked"} +${fmtV(amt + bonus)}${bonus ? ` (bonus ${fmtV(bonus)})` : ""}`;
   sfx.bonus(); refreshHud(); save(); updateTrayHud();
 }
@@ -2987,6 +3053,104 @@ function drawFlyers(dt) {
     flyG.drawImage(f.face, Math.round(f.x - size / 2), Math.round(f.y - size / 2), size, size);
   }
 }
+
+// ---------- Coin Tower ----------
+// Bet, then stack coins one at a time: each coin raises the payout but makes the tower more likely to topple.
+const towerMult = h => 1 + 0.18 * h, towerRisk = h => 0.1 + 0.07 * h;
+let towerStake = 0, towerH = 0, towerIx = 0, towerFall = -1, towerSway = [];
+const towerAmt = () => STAKES[towerIx] === "10%" ? Math.max(1, Math.floor(bank * 0.1)) : STAKES[towerIx];
+function renderTower() {
+  const live = towerStake > 0;
+  $("towerPlay").textContent = live ? `${towerH} coin${towerH === 1 ? "" : "s"} · cash out for ${fmt(Math.floor(towerStake * towerMult(towerH)))}` : `Bet: ${fmt(towerAmt())}`;
+  const st = $("towerStakes"); st.textContent = ""; st.hidden = live;
+  STAKES.forEach((v, i) => { const b = document.createElement("button"); b.type = "button"; b.textContent = v === "10%" ? "10%" : fmt(v); b.className = i === towerIx ? "on" : "";
+    b.disabled = (v === "10%" ? bank < 1 : bank < v); b.addEventListener("click", () => { towerIx = i; renderTower(); }); st.appendChild(b); });
+  $("towerGo").textContent = live ? `STACK (${pct(1 - towerRisk(towerH))} safe)` : "START";
+  $("towerGo").disabled = towerFall >= 0 || (!live && bank < towerAmt());
+  $("towerCash").disabled = !live || towerH === 0 || towerFall >= 0;
+  drawTower(0);
+}
+function drawTower(dt) {
+  const cv = $("towerCanvas"), g = cv.getContext("2d"); g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.fillStyle = P.metalDark; g.fillRect(10, cv.height - 6, cv.width - 20, 4);
+  const face = flyFace(Math.max(1, coinValue()));
+  if (towerFall >= 0) {
+    towerFall += dt;
+    towerSway.forEach(c => { c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 260 * dt; c.r += c.vr * dt;
+      g.save(); g.translate(c.x, Math.min(c.y, cv.height - 10)); g.rotate(c.r); g.drawImage(face, -14, -4, 28, 9); g.restore(); });
+    if (towerFall > 1) { towerFall = -1; towerSway = []; renderTower(); }
+    return;
+  }
+  const t = performance.now() / 1000;
+  for (let i = 0; i < towerH; i++) {
+    const wob = Math.sin(t * 3 + i) * i * 0.35 * (towerH / 6);
+    g.drawImage(face, Math.round(cv.width / 2 - 14 + (towerSway[i] || 0) + wob), cv.height - 16 - i * 7, 28, 9);
+  }
+}
+$("towerGo").addEventListener("click", () => {
+  sfx.unlock();
+  if (!towerStake) { const a = towerAmt(); if (bank < a) return; bank -= a; towerStake = a; towerH = 0; towerSway = []; refreshHud(); renderTower(); $("towerMsg").textContent = "Stack a coin, then cash out whenever you like."; return; }
+  if (Math.random() < towerRisk(towerH)) {
+    const cv = $("towerCanvas");
+    towerSway = Array.from({ length: towerH + 1 }, (_, i) => ({ x: cv.width / 2, y: cv.height - 16 - i * 7, vx: (Math.random() - 0.5) * 120, vy: -40 - Math.random() * 60, r: 0, vr: (Math.random() - 0.5) * 12 }));
+    towerFall = 0; $("towerMsg").textContent = `It toppled at ${towerH + 1}. Lost ${fmt(towerStake)}.`; towerStake = 0; towerH = 0; sfx.crash(); stats.towerFalls = S("towerFalls") + 1;
+  } else {
+    towerH++; towerSway.push((Math.random() - 0.5) * 3); sfx.stack(); stats.bestTower = Math.max(S("bestTower"), towerH);
+    $("towerMsg").textContent = towerH >= 8 ? "That's a tall one. Brave." : "Steady… stack another, or cash out.";
+  }
+  save(); renderTower();
+});
+$("towerCash").addEventListener("click", () => {
+  const win = Math.floor(towerStake * towerMult(towerH)); bank += win;
+  $("towerMsg").textContent = `Cashed out ${fmt(win)} from a ${towerH}-coin tower.`; towerStake = 0; towerH = 0; sfx.bonus(); refreshHud(); save(); renderTower();
+});
+$("towerClose").addEventListener("click", () => { if (towerStake && towerH > 0) $("towerCash").click(); else if (towerStake) { bank += towerStake; towerStake = 0; refreshHud(); } $("towerPanel").hidden = true; });
+
+// ---------- Scratch cards ----------
+// Three hidden symbols; reveal them all. Pairs pay a little, three of a kind pays big (about break-even on average).
+const SCR_SYMS = [1, 2, 5, 10, "★"], SCR_W = [40, 28, 18, 10, 4];
+const SCR_PAIR = [0.4, 1, 2, 4, 8], SCR_THREE = [2, 6, 15, 40, 200];
+let scratchCard = null; // { cells: [symbol index], open: [bool], cost }
+const scratchCost = () => 10 * coinValue();
+function scrPick() { let r = Math.random() * 100; for (let i = 0; i < SCR_W.length; i++) if ((r -= SCR_W[i]) <= 0) return i; return 0; }
+function renderScratch() {
+  const row = $("scratchRow"); row.textContent = "";
+  for (let i = 0; i < 3; i++) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "scell";
+    if (scratchCard && scratchCard.open[i]) {
+      b.classList.add("open"); const sym = SCR_SYMS[scratchCard.cells[i]];
+      if (sym === "★") b.textContent = "★"; else { const im = new Image(); im.src = flyFace(sym).toDataURL(); im.alt = String(sym); b.appendChild(im); }
+      b.disabled = true;
+    } else { b.textContent = scratchCard ? "?" : ""; b.disabled = !scratchCard; b.setAttribute("aria-label", "Scratch"); b.addEventListener("click", () => scratchCell(i)); }
+    row.appendChild(b);
+  }
+  $("scratchBuy").textContent = `BUY CARD · ${fmt(scratchCost())}`;
+  $("scratchBuy").disabled = !!scratchCard || bank < scratchCost();
+}
+function scratchCell(i) {
+  if (!scratchCard || scratchCard.open[i]) return;
+  scratchCard.open[i] = true; sfx.scratch();
+  if (scratchCard.open.every(Boolean)) {
+    const c = scratchCard.cells, counts = {}; c.forEach(x => { counts[x] = (counts[x] || 0) + 1; });
+    let best = 0, label = "No match";
+    for (const k in counts) { const n = counts[k], m = n === 3 ? SCR_THREE[k] : n === 2 ? SCR_PAIR[k] : 0; if (m > best) { best = m; label = `${n === 3 ? "Three" : "A pair of"} ${SCR_SYMS[k]}${n === 3 ? "s" : ""}`; } }
+    const win = Math.floor(scratchCard.cost * best);
+    bank += win; $("scratchMsg").textContent = win ? `${label}! Won ${fmt(win)}.` : "No match this time.";
+    if (best >= 15) sfx.fanfare(); else if (win) sfx.bonus(); else sfx.sad();
+    stats.scratches = S("scratches") + 1; stats.bestScratch = Math.max(S("bestScratch"), best);
+    scratchCard = null; refreshHud(); save();
+    renderScratch(); for (let j = 0; j < 3; j++) { const cell = $("scratchRow").children[j]; cell.classList.add("open"); const sym = SCR_SYMS[c[j]]; cell.textContent = ""; if (sym === "★") cell.textContent = "★"; else { const im = new Image(); im.src = flyFace(sym).toDataURL(); cell.appendChild(im); } cell.disabled = true; }
+    return;
+  }
+  renderScratch();
+}
+$("scratchBuy").addEventListener("click", () => {
+  sfx.unlock(); const cost = scratchCost(); if (scratchCard || bank < cost) return;
+  bank -= cost; scratchCard = { cells: [scrPick(), scrPick(), scrPick()], open: [false, false, false], cost };
+  $("scratchMsg").textContent = "Scratch all three."; refreshHud(); renderScratch();
+});
+$("scratchClose").addEventListener("click", () => { if (scratchCard) for (let i = 0; i < 3; i++) scratchCell(i); $("scratchPanel").hidden = true; });
 
 // ---------- Double or Nothing (coin flip side game) ----------
 const STAKES = [1, 5, 25, "10%"];
@@ -3293,7 +3457,7 @@ function tick(dt) {
   if (al("autobuy") && autoBuyOn && (autoBuyT += dt) >= 2) {
     autoBuyT = 0; const T = TREES.main;
     const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
-    if (u) buy(T, u);
+    if (u) { buy(T, u); sfx.tick(); }
   }
   // Piggy Bank: 1% interest on your coins every minute, capped
   if (rl("piggy") && (piggyT += dt) >= 60) { piggyT = 0; const add = Math.min(bank * 0.01, 25 * rl("piggy") * coinValue()); if (add >= 0.01) { bank += add; earned += add; runEarned += add; refreshHud(); } }
@@ -3317,7 +3481,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   { const r = jar.getBoundingClientRect(); trayTopPx = compactOn || document.hidden || !r.height ? Infinity : r.top + 2; }
   if (!titleOpen) tick(dt);
-  updateJar(dt); drawFlyers(dt); drawFlipCoin(dt);
+  updateJar(dt); drawFlyers(dt); drawFlipCoin(dt); if (!$("towerPanel").hidden) drawTower(dt);
   const coolFrac = Math.min(1, (performance.now() - lastDrop) / (dropCooldown() * 1000));
   $("coolBar").style.width = Math.round(coolFrac * 100) + "%";
   ghost.position.x += (aimX - ghost.position.x) * 0.4;
@@ -3372,6 +3536,7 @@ function openTitle() {
 }
 function startGame() {
   titleOpen = false; $("title").hidden = true;
+  try { const n = sessionStorage.getItem("cc_rebuilt"); if (n) { sessionStorage.removeItem("cc_rebuilt"); setTimeout(() => { sfx.rebuilt(); showToast("MACHINE REBUILT", `+${n} part${n === "1" ? "" : "s"}: spend them in the Workshop`); }, 700); } } catch {}
   try { sessionStorage.setItem("cc_inGame", "1"); } catch {}
   sfx.unlock(); sfx.bonus();
   clock.getDelta(); // don't count the time spent on the title
