@@ -705,7 +705,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.11.0";
+const VERSION = "1.12.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -3341,7 +3341,9 @@ $("recvNo").addEventListener("click", () => {
 // ---------- Cloud save (Firebase, free plan) ----------
 // Sign in with Google once per device; the save then syncs on its own. Each upload carries a revision number, so a
 // device only overwrites the cloud if it has seen the latest revision. If two devices both moved on, you choose.
-const FIREBASE = null; // the web app config from the Firebase console goes here: { apiKey, authDomain, projectId, appId }
+// the web app's Firebase settings (public by design: the Firestore rules are what keep each player's save private)
+const FIREBASE = { apiKey: "AIzaSyDHU6U6jmZYNurHGe63jIcavoV7_NfWTQQ", authDomain: "coin-cascade-a4967.firebaseapp.com", projectId: "coin-cascade-a4967",
+  storageBucket: "coin-cascade-a4967.firebasestorage.app", messagingSenderId: "1011669328996", appId: "1:1011669328996:web:fe4f4941ee518ea6b8ab71" };
 const FB_SDK = "https://cdn.jsdelivr.net/npm/firebase@10.12.2/";
 let fb = null, fbUser = null, fbLoading = null, lastUp = "", cloudBusy = false, cloudMsg = "";
 const syncMeta = { get() { try { return JSON.parse(localStorage.getItem("cc_sync") || "{}"); } catch { return {}; } }, set(m) { try { localStorage.setItem("cc_sync", JSON.stringify(m)); } catch {} } };
@@ -3358,7 +3360,10 @@ function loadScript(u) { return new Promise((res, rej) => { const sc = document.
 function loadFirebase() {
   if (!syncReady()) return Promise.reject(new Error("off"));
   if (!fbLoading) fbLoading = (async () => {
-    if (!window.firebase) for (const f of ["firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js"]) await loadScript(FB_SDK + f);
+    // the game's own copy first (works with ad blockers), then the CDN
+    if (!window.firebase) for (const f of ["firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js"]) {
+      try { await loadScript("lib/" + f); } catch { await loadScript(FB_SDK + f); }
+    }
     firebase.initializeApp(FIREBASE);
     fb = { auth: firebase.auth(), db: firebase.firestore() };
     try { await fb.auth.getRedirectResult(); } catch {}

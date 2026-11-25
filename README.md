@@ -21,12 +21,16 @@ The big window pauses until you close the mini one or press **BRING IT BACK HERE
 
 Menu → Settings → **Send to another device** (or SEND TO DEVICE on the title screen) shows a QR code and a link with your progress inside. Scan it or open the link on your other phone or computer, and the game there asks before loading it. Nothing is stored online.
 
+## Cloud save (optional)
+
+Menu → Settings → **Cloud save** → Sign in with Google keeps your game in sync across devices, using a free Firebase project (`coin-cascade-a4967`). It's entirely optional: nothing loads unless you sign in. Each player's save is private to their account (Firestore rules: `saves/{uid}` readable and writable only by that user).
+
 ## Files
 
 | File | What it is |
 | --- | --- |
 | `index.html` | The whole game |
-| `lib/` | Three.js 0.160.0, Rapier 3D (compat) 0.12.0 and qrcode-generator 1.4.4 (MIT), so the game works offline |
+| `lib/` | Three.js 0.160.0, Rapier 3D (compat) 0.12.0 qrcode-generator 1.4.4 (MIT) and the Firebase 10.12.2 compat SDK (Apache-2.0, loaded only for cloud save) |
 | `manifest.json`, `sw.js` | Installable app and offline cache |
 | `icon-*.png`, `apple-touch-icon.png`, `favicon.png` | Icons, made by `node tools/make-icons.js` |
 
