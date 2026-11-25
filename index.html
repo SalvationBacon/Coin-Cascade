@@ -3899,6 +3899,8 @@ if (location.hash === "#sim") {
     get bank() { return bank; }, get runEarned() { return runEarned; }, get earned() { return earned; }, get dropped() { return dropped; },
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
     get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
+    WUPGRADES, wl, partGain, rebuild: doRebuild, get parts() { return parts; }, get gemsRb() { return gemsRb; }, get ascensions() { return ascensions; }, get rebirths() { return rebirths; },
+    get stats() { return stats; }, achCount, chLevelsTotal, get playTime() { return stats.playTime || 0; },
   };
 } else frame();
 
