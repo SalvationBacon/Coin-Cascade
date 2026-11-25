@@ -1,6 +1,6 @@
 // Offline support. Bump CACHE on every release so players get the new version.
-const CACHE = 'cc-v1.12.0';
-const ASSETS = ['./', './index.html', './manifest.json', './lib/three.module.js', './lib/rapier.es.js', './lib/qrcode.js',
+const CACHE = 'cc-v1.13.0';
+const ASSETS = ['./', './index.html', './manifest.json', './lib/three.module.js', './lib/rapier.es.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', './favicon.png'];
 
 self.addEventListener('install', e => {

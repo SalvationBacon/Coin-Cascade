@@ -498,28 +498,19 @@ body.compact > *:not(#compact) { display: none !important; }
     <div class="menu" id="menu" role="menu">
       <button class="mbtn" id="tContinue" type="button" role="menuitem">CONTINUE</button>
       <button class="mbtn" id="tNew" type="button" role="menuitem">NEW GAME</button>
-      <button class="mbtn" id="tLoad" type="button" role="menuitem">LOAD SAVE</button>
-      <button class="mbtn alt" id="tCopy" type="button" role="menuitem">COPY SAVE CODE</button>
-      <button class="mbtn alt" id="tSend" type="button" role="menuitem">SEND TO DEVICE</button>
+      <button class="mbtn alt" id="tCloud" type="button" role="menuitem">CLOUD SAVE</button>
+      <button class="mbtn alt" id="tLoad" type="button" role="menuitem">IMPORT SAVE</button>
+      <button class="mbtn alt" id="tCopy" type="button" role="menuitem">EXPORT SAVE</button>
       <button class="mbtn alt" id="tMusic" type="button" role="menuitem">MUSIC: ON</button>
       <button class="mbtn alt" id="tMini" type="button" role="menuitem" hidden>MINI WINDOW</button>
       <button class="mbtn alt" id="tInstall" type="button" role="menuitem" hidden>INSTALL APP</button>
     </div>
-    <div class="loadBox" id="loadBox" hidden>
-      <label for="tCode">Paste a save code, or pick a save file.</label>
-      <textarea id="tCode" rows="4" spellcheck="false"></textarea>
-      <input id="tFile" type="file" accept=".txt,.json,text/plain">
-      <div class="lrow"><button class="mbtn" id="tLoadGo" type="button">LOAD</button><button class="mbtn quiet" id="tBack" type="button">BACK</button></div>
-    </div>
+    <input id="tFile" type="file" accept=".json,.txt,application/json,text/plain" hidden>
     <p class="tInfo" id="tInfo"></p>
   </div>
   <span class="ver" id="ver"></span>
 </div>
 <div class="overlay" id="away" hidden><div class="card box"><h2>In the mini window</h2><p>Coin Cascade is running in its small window, so this one is paused. Close the mini window, or bring it back here.</p><button id="awayBack" type="button">BRING IT BACK HERE</button></div></div>
-<div class="overlay xfer" id="sendBox" hidden><div class="card box sendCard"><h2>Send to another device</h2>
-  <canvas id="qr" width="10" height="10" aria-label="QR code with your progress"></canvas>
-  <p id="sendMsg">Scan this with your other device's camera, or open the link there. It asks before replacing anything.</p>
-  <div class="row"><button id="sendCopy" type="button">COPY LINK</button><button id="sendClose" class="quit" type="button">CLOSE</button></div></div></div>
 <div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2 id="recvTitle">Load progress from another device?</h2><p id="recvMsg"></p>
   <div class="row"><button id="recvYes" type="button">LOAD IT</button><button id="recvNo" class="quit" type="button">KEEP THIS ONE</button></div></div></div>
 <div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
@@ -705,7 +696,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.12.0";
+const VERSION = "1.13.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2449,28 +2440,14 @@ function renderSettings() {
   const sk = document.createElement("button"); sk.type = "button"; sk.className = "quit"; sk.textContent = "SKIP TRACK";
   sk.addEventListener("click", () => { sfx.unlock(); music.skip(); });
   mu.append(mt, ml, mv, np, sk); w.appendChild(mu);
-  // save backup
-  const bk = card("", "Save backup", [["Your progress is saved in this browser only. Copy this code somewhere safe; paste it back here to restore your game on any browser or device.", ""]]);
-  const ta = document.createElement("textarea"); ta.className = "code"; ta.id = "saveCode"; ta.rows = 3; ta.value = exportCode(); ta.setAttribute("aria-label", "Save code");
-  ta.addEventListener("focus", () => ta.select());
+  // save file
+  const bk = card("", "Save file", [["Download your progress as a file to keep somewhere safe, or load one back in." + (HOSTED ? "" : " Downloads only work in the app or on the GitHub page."), ""]]);
   const row = document.createElement("div"); row.className = "row";
-  const cp = document.createElement("button"); cp.type = "button"; cp.textContent = "COPY CODE";
-  cp.addEventListener("click", () => {
-    ta.value = exportCode();
-    const done = () => { cp.textContent = "COPIED"; setTimeout(() => { cp.textContent = "COPY CODE"; }, 1500); };
-    try { navigator.clipboard.writeText(ta.value).then(done, () => { ta.focus(); ta.select(); cp.textContent = "SELECTED: PRESS CTRL+C"; }); }
-    catch { ta.focus(); ta.select(); cp.textContent = "SELECTED: PRESS CTRL+C"; }
-  });
-  const ld = document.createElement("button"); ld.type = "button"; ld.className = "quit";
-  ld.textContent = Date.now() - importArmed < 3000 ? "CLICK TO REPLACE YOUR GAME" : "LOAD PASTED CODE";
-  const msg = document.createElement("p");
-  ld.addEventListener("click", () => {
-    let data;
-    data = parseSaveCode(ta.value);
-    if (!data) { msg.textContent = "That code doesn't look like a Coin Cascade save. Paste the whole code and try again."; return; }
-    if (Date.now() - importArmed > 3000) { importArmed = Date.now(); ld.textContent = "CLICK TO REPLACE YOUR GAME"; msg.textContent = "This replaces your current game with the pasted one."; setTimeout(() => { ld.textContent = "LOAD PASTED CODE"; }, 3000); return; }
-    store.set(SAVE_KEY, data); saveBlocked = true; location.reload();
-  });
+  const ex = document.createElement("button"); ex.type = "button"; ex.textContent = "EXPORT SAVE FILE";
+  ex.addEventListener("click", () => { if (exportSaveFile()) ex.textContent = "DOWNLOADED"; });
+  const im = document.createElement("button"); im.type = "button"; im.className = "quit"; im.textContent = "IMPORT SAVE FILE";
+  im.addEventListener("click", importSaveFile);
+  row.append(ex, im); bk.appendChild(row);
   // cloud save
   const cs = card("", "Cloud save", [[cloudStatus(), ""]]);
   cs.querySelector("p").id = "cloudStatus";
@@ -2482,9 +2459,7 @@ function renderSettings() {
     const so = document.createElement("button"); so.type = "button"; so.className = "quit"; so.textContent = "SIGN OUT"; so.addEventListener("click", cloudSignOut); crow.appendChild(so);
   }
   cs.appendChild(crow); w.appendChild(cs);
-  const sd = document.createElement("button"); sd.type = "button"; sd.textContent = "SEND TO ANOTHER DEVICE";
-  sd.addEventListener("click", openSend);
-  row.append(cp, ld); bk.append(ta, row, sd, msg); w.appendChild(bk);
+  w.appendChild(bk);
   // back to the title screen
   const ti = card("", "Title screen", [[`Coin Cascade v${VERSION}`, ""]]);
   const tb = document.createElement("button"); tb.type = "button"; tb.textContent = "BACK TO TITLE";
@@ -3203,11 +3178,11 @@ function openTitle() {
   $("ver").textContent = `v${VERSION}`;
   const has = !!saved || earned > 0;
   $("tContinue").textContent = has ? "CONTINUE" : "START";
-  $("tCopy").hidden = !has; $("tSend").hidden = !has;
+  $("tCopy").hidden = !has; updateTitleCloud();
   $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
   $("tInfo").textContent = has ? `Save: ${fmt(bank)} coins · ${fmt(earned)} earned · ${rebirths} rebirth${rebirths === 1 ? "" : "s"}${ascensions ? ` · ${ascensions} ascension${ascensions === 1 ? "" : "s"}` : ""}` : "No save yet: press START.";
   $("tNew").hidden = !has;
-  $("menu").hidden = false; $("loadBox").hidden = true;
+  $("menu").hidden = false;
   $("title").hidden = false;
   setTimeout(() => $("tContinue").focus(), 50);
 }
@@ -3221,25 +3196,15 @@ function startGame() {
 const goInGame = () => { try { sessionStorage.setItem("cc_inGame", "1"); } catch {} };
 $("tContinue").addEventListener("click", startGame);
 $("tNew").addEventListener("click", () => {
-  if (Date.now() - newArmed > 3000) { newArmed = Date.now(); $("tNew").textContent = "CLICK AGAIN: WIPES YOUR SAVE"; $("tInfo").textContent = "Starting a new game deletes your current one. Copy your save code first if you want to keep it."; setTimeout(() => { $("tNew").textContent = "NEW GAME"; }, 3000); return; }
+  if (Date.now() - newArmed > 3000) { newArmed = Date.now(); $("tNew").textContent = "CLICK AGAIN: WIPES YOUR SAVE"; $("tInfo").textContent = "Starting a new game deletes your current one. Export your save first if you want to keep it."; setTimeout(() => { $("tNew").textContent = "NEW GAME"; }, 3000); return; }
   store.set(SAVE_KEY, null); saveBlocked = true; goInGame(); location.reload();
 });
-$("tCopy").addEventListener("click", () => {
-  const code = exportCode(), b = $("tCopy");
-  try { navigator.clipboard.writeText(code).then(() => { b.textContent = "COPIED"; setTimeout(() => { b.textContent = "COPY SAVE CODE"; }, 1500); }, () => { $("menu").hidden = true; $("loadBox").hidden = false; $("tCode").value = code; $("tCode").select(); $("tInfo").textContent = "Copy this code (Ctrl+C) and keep it somewhere safe."; }); }
-  catch { $("menu").hidden = true; $("loadBox").hidden = false; $("tCode").value = code; $("tCode").select(); }
-});
+$("tCopy").addEventListener("click", () => { $("tInfo").textContent = exportSaveFile() ? "Save file downloaded. Keep it somewhere safe." : "Your browser blocked the download."; });
 $("tMusic").addEventListener("click", () => { music.toggle(!settings.music); $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF"; });
-$("tLoad").addEventListener("click", () => { $("menu").hidden = true; $("loadBox").hidden = false; $("tCode").value = ""; $("tInfo").textContent = ""; $("tCode").focus(); });
-$("tBack").addEventListener("click", () => { $("loadBox").hidden = true; $("menu").hidden = false; openTitle(); });
-$("tFile").addEventListener("change", e => {
-  const f = e.target.files && e.target.files[0]; if (!f) return;
-  const r = new FileReader(); r.onload = () => { $("tCode").value = String(r.result || ""); $("tInfo").textContent = `Loaded ${f.name}. Press LOAD to use it.`; }; r.readAsText(f);
-});
-$("tLoadGo").addEventListener("click", () => {
-  const data = parseSaveCode($("tCode").value);
-  if (!data) { $("tInfo").textContent = "That doesn't look like a Coin Cascade save. Paste the whole code and try again."; return; }
-  store.set(SAVE_KEY, data); saveBlocked = true; goInGame(); location.reload();
+$("tLoad").addEventListener("click", importSaveFile);
+$("tCloud").addEventListener("click", async () => {
+  if (syncReady() && !fbUser) await cloudSignIn(); else if (fbUser) await cloudSync(true);
+  $("tInfo").textContent = cloudStatus(); updateTitleCloud();
 });
 // keyboard: arrows move between menu buttons, Enter presses
 $("title").addEventListener("keydown", e => {
@@ -3279,39 +3244,34 @@ async function unpackSave(code) {
     const d = JSON.parse(json); return d && typeof d.bank === "number" ? d : null;
   } catch { return null; }
 }
-function loadQrLib() {
-  return new Promise((res, rej) => {
-    if (window.qrcode) return res();
-    const urls = [...(HOSTED ? ["lib/qrcode.js"] : []), "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"];
-    const next = () => { const u = urls.shift(); if (!u) return rej(new Error("no QR library")); const sc = document.createElement("script"); sc.src = u; sc.onload = () => res(); sc.onerror = () => { sc.remove(); next(); }; document.head.appendChild(sc); };
-    next();
-  });
-}
-let sendLink = "";
-async function openSend() {
-  const d = transferSave(); if (!d) return;
-  sendLink = GAME_URL + "#load=" + await packSave(d);
-  $("sendBox").hidden = false; $("sendCopy").textContent = "COPY LINK";
-  $("sendMsg").textContent = "Scan this with your other device's camera, or open the link there. It asks before replacing anything.";
-  const cv = $("qr");
+// ---------- Save files ----------
+// Export downloads your whole save as a small .json file; import reads one back in (older save codes in a file work too).
+function exportSaveFile() {
+  save();
+  const raw = localStorage.getItem(SAVE_KEY) || "{}", d = new Date(), pad = n => String(n).padStart(2, "0");
   try {
-    await loadQrLib();
-    const qr = qrcode(0, "L"); qr.addData(sendLink); qr.make();
-    const n = qr.getModuleCount(), q = 4, sc = Math.max(2, Math.floor(280 / (n + q * 2)));
-    cv.width = cv.height = (n + q * 2) * sc; cv.hidden = false;
-    const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = "#000";
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) g.fillRect((c + q) * sc, (r + q) * sc, sc, sc);
-  } catch {
-    cv.hidden = true;
-    $("sendMsg").textContent = "Copy the link and open it on your other device. It asks before replacing anything.";
-  }
+    const url = URL.createObjectURL(new Blob([raw], { type: "application/json" })), a = document.createElement("a");
+    a.href = url; a.download = `coin-cascade-save-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
+    return true;
+  } catch { return false; }
 }
-$("sendCopy").addEventListener("click", () => {
-  const done = () => { $("sendCopy").textContent = "COPIED"; };
-  try { navigator.clipboard.writeText(sendLink).then(done, () => { $("sendMsg").textContent = sendLink; }); } catch { $("sendMsg").textContent = sendLink; }
+function importSaveFile() { const f = $("tFile"); f.value = ""; f.click(); }
+$("tFile").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const data = parseSaveCode(String(r.result || ""));
+    if (!data) { const m = "That file isn't a Coin Cascade save."; if (titleOpen) $("tInfo").textContent = m; else showToast("COULDN'T LOAD", m); return; }
+    cloudPending = null; recvData = data;
+    $("recvTitle").textContent = "Load this save file?"; $("recvYes").textContent = "LOAD IT"; $("recvNo").textContent = "KEEP THIS ONE"; $("recvYes").hidden = false;
+    $("recvMsg").textContent = `The file has: ${saveLine(data)}. This game has: ${saveLine({ earned, rebirths, ascensions })}. Loading replaces this game.`;
+    $("recvBox").hidden = false;
+  };
+  r.readAsText(f);
 });
-$("sendClose").addEventListener("click", () => { $("sendBox").hidden = true; });
-$("tSend").addEventListener("click", openSend);
+function updateTitleCloud() { const b = $("tCloud"); if (b) b.textContent = fbUser ? "CLOUD SAVE: ON" : "CLOUD SAVE"; }
+
 // arriving with a #load= link: offer to swap this device's progress for the one in the link
 let recvData = null;
 const saveLine = d => `${fmt(d.earned || 0)} coins earned · ${d.rebirths || 0} rebirth${d.rebirths === 1 ? "" : "s"}${d.ascensions ? ` · ${d.ascensions} ascension${d.ascensions === 1 ? "" : "s"}` : ""}`;
@@ -3367,7 +3327,7 @@ function loadFirebase() {
     firebase.initializeApp(FIREBASE);
     fb = { auth: firebase.auth(), db: firebase.firestore() };
     try { await fb.auth.getRedirectResult(); } catch {}
-    fb.auth.onAuthStateChanged(u => { fbUser = u; settings.cloud = !!u; saveSettings(); if (!$("tree").hidden && treeId === "set") renderTree(); if (u) cloudSync(false); });
+    fb.auth.onAuthStateChanged(u => { fbUser = u; updateTitleCloud(); settings.cloud = !!u; saveSettings(); if (!$("tree").hidden && treeId === "set") renderTree(); if (u) cloudSync(false); });
   })();
   return fbLoading;
 }
