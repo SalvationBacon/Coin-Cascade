@@ -2444,7 +2444,7 @@ function renderSettings() {
   const bk = card("", "Save file", [["Download your progress as a file to keep somewhere safe, or load one back in." + (HOSTED ? "" : " Downloads only work in the app or on the GitHub page."), ""]]);
   const row = document.createElement("div"); row.className = "row";
   const ex = document.createElement("button"); ex.type = "button"; ex.textContent = "EXPORT SAVE FILE";
-  ex.addEventListener("click", () => { if (exportSaveFile()) ex.textContent = "DOWNLOADED"; });
+  ex.addEventListener("click", () => { if (HOSTED && exportSaveFile()) ex.textContent = "DOWNLOADED"; });
   const im = document.createElement("button"); im.type = "button"; im.className = "quit"; im.textContent = "IMPORT SAVE FILE";
   im.addEventListener("click", importSaveFile);
   row.append(ex, im); bk.appendChild(row);
@@ -3199,7 +3199,10 @@ $("tNew").addEventListener("click", () => {
   if (Date.now() - newArmed > 3000) { newArmed = Date.now(); $("tNew").textContent = "CLICK AGAIN: WIPES YOUR SAVE"; $("tInfo").textContent = "Starting a new game deletes your current one. Export your save first if you want to keep it."; setTimeout(() => { $("tNew").textContent = "NEW GAME"; }, 3000); return; }
   store.set(SAVE_KEY, null); saveBlocked = true; goInGame(); location.reload();
 });
-$("tCopy").addEventListener("click", () => { $("tInfo").textContent = exportSaveFile() ? "Save file downloaded. Keep it somewhere safe." : "Your browser blocked the download."; });
+$("tCopy").addEventListener("click", () => {
+  if (!HOSTED) { $("tInfo").textContent = "Save files can only be downloaded in the app or on the GitHub page."; return; }
+  $("tInfo").textContent = exportSaveFile() ? "Save file downloaded. Keep it somewhere safe." : "Your browser blocked the download.";
+});
 $("tMusic").addEventListener("click", () => { music.toggle(!settings.music); $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF"; });
 $("tLoad").addEventListener("click", importSaveFile);
 $("tCloud").addEventListener("click", async () => {
