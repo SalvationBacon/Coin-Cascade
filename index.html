@@ -195,6 +195,11 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 .card button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 .card .code { width: 100%; min-height: 64px; resize: vertical; font-family: var(--body); font-size: 14px; line-height: 1.1; color: var(--fg); background: #0008; border: 2px solid var(--ink); padding: 6px; overflow-wrap: anywhere; }
 .card .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.card.help { cursor: pointer; grid-column: 1 / -1; }
+.card.help h3::after { content: " +"; opacity: .6; }
+.card.help.open h3::after { content: " −"; }
+.card.help .helpBody { text-align: left; }
+.card.help .helpBody p { margin: 8px 0 0; line-height: 1.5; }
 .card .bkrow { align-items: center; justify-content: space-between; margin-top: 6px; font-size: 13px; }
 .card .bkrow span { flex: 1 1 180px; opacity: .85; }
 .card .vol { font-size: 17px; color: var(--muted); }
@@ -776,7 +781,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.21.2";
+const VERSION = "1.22.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2116,7 +2121,7 @@ const TREES = {
   reb: { list: RUPGRADES, lv: rl, set: (id, v) => { rups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, rl(u.id))), has: () => tokens, pay: c => { tokens -= c; }, unit: "tokens" },
 };
 let treeId = "main";
-const COG_TABS = ["set", "stats", "style"];
+const COG_TABS = ["set", "stats", "style", "help"];
 const selectedIn = { main: "regen", reb: "golden", asc: "shine", work: "plating" };
 const byId = (T, id) => T.list.find(u => u.id === id);
 // open = can be bought; locked = shown as "?" next to something open; hidden = not shown yet
@@ -2185,7 +2190,7 @@ function renderTree() {
   if (listTab) {
     $("rebirthBar").hidden = true; $("treeCoins").textContent = `${fmt(bank)} coins`;
     const a = $("treeArea"); a.style.width = ""; a.style.height = "";
-    return treeId === "mainlist" ? renderList() : treeId === "arcade" ? renderArcade() : treeId === "ach" ? renderAch() : treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : renderSettings();
+    return treeId === "mainlist" ? renderList() : treeId === "arcade" ? renderArcade() : treeId === "ach" ? renderAch() : treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : treeId === "help" ? renderHelp() : renderSettings();
   }
   const T = TREES[treeId], e = extents(T), area = $("treeArea");
   $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`;
@@ -2380,7 +2385,7 @@ const SECTIONS = {
   arcade: { name: "ARCADE", tabs: [["arcade", "ARCADE"]] },
   goals: { name: "GOALS", tabs: [["ach", "ACHIEVEMENTS"], ["goals", "MILESTONES"], ["ch", "CHALLENGES", () => rebirths > 0]] },
   prestige: { name: "PRESTIGE", tabs: [["reb", "REBIRTH"], ["asc", "ASCEND", () => rebirths >= 3 || ascensions > 0], ["work", "WORKSHOP", () => ascensions >= 3 || rebuilds > 0 || parts > 0]] },
-  menu: { name: "MENU", tabs: [["set", "SETTINGS"], ["stats", "STATS"], ["style", "STYLE"]] },
+  menu: { name: "MENU", tabs: [["set", "SETTINGS"], ["stats", "STATS"], ["style", "STYLE"], ["help", "HELP"]] },
 };
 const sectionOf = id => Object.keys(SECTIONS).find(k => SECTIONS[k].tabs.some(t => t[0] === id)) || "up";
 const lastTab = {};
@@ -2605,6 +2610,91 @@ function renderStats() {
   ];
   for (const [title, lines] of groups) w.appendChild(card("", title, lines));
 }
+
+// ---------- Help ----------
+// How every system works, in plain words. The numbers come from the game's own formulas, so they stay right.
+function renderHelp() {
+  const w = cardsWrap("How everything in Coin Cascade works. Tap a topic to open it. You can replay the quick tour from Settings → Show Tutorial.");
+  const topics = [
+    ["The basics", [
+      "Drop coins onto the pegs. Each one bounces into a slot at the bottom, and the slot multiplies its value (×0, ×1, ×3, ×5 and so on).",
+      "Paid-out coins land on the pusher shelf. The pusher shoves them forward, and the ones that fall off the front drop into your coin tray.",
+      "Each drop costs one coin. Regen slowly gives coins back, so you can always keep playing. The gold coin at the top of the board fills up to show when your next drop is ready. Hold to keep dropping.",
+      "THIS RUN at the top counts the coins you've earned since your last rebirth.",
+    ]],
+    ["The coin tray", [
+      "Coins that fall off the pusher pile up in the tray. They aren't yours to spend until you press BANK.",
+      "When the tray is full it banks itself, so nothing is ever lost. Upgrades can make the tray bigger or pay a bonus when you bank by hand.",
+    ]],
+    ["Upgrades", [
+      "The Upgrades tree makes the machine better: faster regen, faster drops, more valuable coins, better slots, more pegs and more.",
+      "Buying an upgrade reveals the ones next to it, so the tree grows as you go. Each level costs more than the last.",
+      "Some branches are locked until you buy something in a prestige tree; they show which one they need.",
+      "Machine upgrades reset when you rebirth. Use the LIST tab to see everything at once.",
+    ]],
+    ["Arcade", [
+      "The Arcade holds the extras. Each one is unlocked by an upgrade in the Upgrades tree:",
+      "Double or Nothing: bet coins on a flip and keep doubling, then cash out before you miss.",
+      "Prize Wheel: charges up as you earn. Spin it for a pile of coins or a free event.",
+      "Coin Tower: stack coins for a bigger payout. Each coin makes it wobblier, so cash out before it topples.",
+      "Scratch Cards: three matching symbols pay up to ×200.",
+      "Flip Gates, Slot Reels and Mystery Coins change how coins pay out on the board.",
+      "Random Events (Gold Rush, Frenzy, Coin Shower, Jackpot Magnet) turn up every few minutes. A bar shows when the next one is due.",
+    ]],
+    ["Rebirth (prestige 1)", [
+      `Earn ${fmt(REBIRTH_AT)} coins in a single run and you can rebirth for tokens. The more you earn in the run, the more tokens you get: 2 × √(coins this run ÷ ${fmt(REBIRTH_AT)}). So ${fmt(REBIRTH_AT)} coins gives 2 tokens, ${fmt(REBIRTH_AT * 4)} gives 4 and ${fmt(REBIRTH_AT * 9)} gives 6, before any bonuses.`,
+      "Rebirthing resets your coins and machine upgrades.",
+      "You keep your tokens and the Rebirth tree, plus achievements, milestones, challenges and everything from the later layers.",
+      "Tokens buy permanent upgrades in the Rebirth tree (Prestige → Rebirth), so every run starts stronger and goes further.",
+      "Tip: rebirth when a run starts to slow down. Short, quick runs usually beat one long one.",
+    ]],
+    ["Ascension (prestige 2)", [
+      `Opens after 3 rebirths. Once you've earned ${ASC_AT} tokens since your last ascension, you can ascend for gems: 3 × √(tokens ÷ ${ASC_AT}). So ${ASC_AT} tokens gives 3 gems, ${ASC_AT * 3} gives 5 and ${ASC_AT * 4} gives 6, plus bonuses.`,
+      "Ascending resets your coins, machine upgrades, tokens and the Rebirth tree.",
+      "You keep your gems and the Ascension tree, plus achievements, milestones and challenges.",
+      "Gems buy big permanent upgrades in the Ascension tree, including automation such as auto-rebirth.",
+      "Tip: waiting longer gives more gems per ascension, but ascending sooner gets the gem upgrades working for you earlier.",
+    ]],
+    ["The Workshop (prestige 3)", [
+      `Opens after 3 ascensions. Once you've earned ${RB_AT} gems since your last rebuild, you can rebuild the machine for parts: 2 × √(gems ÷ ${RB_AT}). So ${RB_AT} gems gives 2 parts and ${RB_AT * 4} gives 4.`,
+      "Rebuilding resets everything below it: coins, machine upgrades, tokens, gems, and the Rebirth and Ascension trees.",
+      "You keep your parts and the Workshop, plus achievements, milestones and challenges.",
+      "Parts buy the strongest upgrades in the game in the Workshop (Prestige → Workshop), such as Magnet Pegs and more gems per ascension.",
+    ]],
+    ["Milestones", [
+      "Milestones (Goals → Milestones) are big targets, such as lifetime coins earned or rebirths.",
+      "Each pays a permanent reward the moment you reach it, and it's kept through every reset.",
+    ]],
+    ["Achievements", [
+      "Achievements (Goals → Achievements) are smaller feats spread across the game.",
+      "Each one you earn adds +1% to all payouts for good, and finishing a whole row gives that row's extra reward.",
+      "A few are secret until you get them.",
+    ]],
+    ["Challenges", [
+      "Challenges (Goals → Challenges) open after your first rebirth. Starting one restarts your run with a handicap, such as no jackpot slot or no regen.",
+      "Reach the goal to beat a level and earn its reward. Each challenge has 5 levels: the same handicap with a bigger goal each time, and the reward again at every level.",
+      "Challenge rewards are permanent.",
+      "You don't get tokens for the run you leave when you start a challenge, so rebirth first if you have tokens waiting.",
+    ]],
+    ["Saving and backups", [
+      "The game saves itself every few seconds on this device.",
+      "Menu → Settings → Backups keeps older copies (the newest few, plus your best ever) that you can restore.",
+      "Export Save File downloads your save to keep somewhere safe; Import Save File loads one back.",
+      "Cloud Save (sign in with Google, completely optional) keeps your game online and syncs it between your phone and computer. It's the best protection if your browser data ever gets cleared.",
+      "Only one copy of the game plays at a time. If you open it in another tab or window, the older one pauses so they can't overwrite each other.",
+    ]],
+  ];
+  for (const [title, lines] of topics) {
+    const c = card("help", title, []); c.tabIndex = 0; c.setAttribute("role", "button");
+    const body = document.createElement("div"); body.className = "helpBody"; body.hidden = !helpOpen.has(title);
+    for (const t of lines) { const p = document.createElement("p"); p.textContent = t; body.appendChild(p); }
+    c.classList.toggle("open", !body.hidden);
+    const flip = () => { if (helpOpen.has(title)) helpOpen.delete(title); else helpOpen.add(title); body.hidden = !helpOpen.has(title); c.classList.toggle("open", !body.hidden); };
+    c.addEventListener("click", flip); c.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+    c.appendChild(body); w.appendChild(c);
+  }
+}
+const helpOpen = new Set();
 
 // ---------- Settings ----------
 const timerless = () => !sfx.ctx;
