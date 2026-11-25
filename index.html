@@ -130,6 +130,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 .node.maxed .lv { color: var(--cyan); }
 .node.locked { cursor: default; opacity: 0.45; }
 .node.locked .nm { font-size: 18px; color: var(--muted); }
+.node.gated .nm { font-size: 8px; } .node.gated .lv { font-size: 13px; line-height: 1; }
 .node.sel { outline: 3px solid var(--fg); outline-offset: 3px; }
 .treeInfo { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 10px 14px; }
 .treeInfo h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 11px; color: var(--gold); }
@@ -383,13 +384,13 @@ body.compact > *:not(#compact) { display: none !important; }
 /* ---- the vault: a wide coin tray along the bottom of the play area ---- */
 #hint { display: none !important; }
 .vault { top: auto; left: max(16px, env(safe-area-inset-left, 0px)); right: calc(var(--panelW, 84px) + 16px); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  padding: 4px 6px; height: 84px; display: block; }
+  padding: 4px 6px; height: 92px; display: block; }
 .vault canvas { width: 100%; height: 100%; }
 .vault b { position: absolute; left: 12px; top: 8px; margin: 0; font-size: 14px; z-index: 1; }
 .vault span { position: absolute; left: 12px; top: 28px; font-size: 14px; }
 .flyLayer { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
 @media (max-width: 760px) {
-  .vault { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(var(--dockH, 64px) + 8px); height: 66px; padding: 3px 4px; }
+  .vault { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(var(--dockH, 64px) + 8px); height: 80px; padding: 3px 4px; }
   .vault canvas { width: 100%; height: 100%; }
   .vault b { font-size: 11px; left: 9px; top: 6px; } .vault span { display: none; }
 }
@@ -673,6 +674,7 @@ let runTime = (saved && saved.runTime) || 0, incomeRate = (saved && saved.income
 const al = id => aups[id] || 0;
 let runEarned = saved ? (saved.runEarned != null ? saved.runEarned : saved.earned) : 0;
 const rups = (saved && saved.rup) || {};
+if (rups.autostart && !rups.autounlock) rups.autounlock = 1; // older saves: Auto From Start already implies Automation
 let inPlay = (saved && saved.inPlay) || 0;
 // milestones + challenges (permanent; survive rebirths)
 const stats = Object.assign({ jackpots: 0, bestStreak: 0, maxBank: 0 }, (saved && saved.stats) || {});
@@ -793,7 +795,7 @@ function resize() {
 }
 // Narrow screens (phones, the mini window): fit the whole machine, from the dropper at the top to the
 // prize shelf at the bottom, into the gap between the counters and the buttons, whatever the window's shape.
-const FIT_PTS = [[0, 10.1, -2.4], [-3.9, 10.1, -2.4], [3.9, 10.1, -2.4], [0, -0.3, 3.6], [-4.4, 4, 1.2], [4.4, 4, 1.2], [-4.4, 0, 3.4], [4.4, 0, 3.4]].map(a => new THREE.Vector3(...a));
+const FIT_PTS = [[0, 10.1, -2.4], [-3.9, 10.1, -2.4], [3.9, 10.1, -2.4], [-4.4, 4, 1.2], [4.4, 4, 1.2], [-3.7, 0, 3.0], [3.7, 0, 3.0], [0, 0, 3.0]].map(a => new THREE.Vector3(...a)); // top of the sign, the sides, and the front shelf (the base below it tucks behind the coin tray)
 // Frame the machine in the part of the screen the HUD and shop panel leave free.
 function fitCamera() {
   const W = innerWidth, H = innerHeight, narrow = W <= 760, root = document.documentElement.style;
@@ -803,7 +805,7 @@ function fitCamera() {
   const right = narrow ? W : W - railR.width - (tree && !tree.hidden ? tree.getBoundingClientRect().width : 0);
   root.setProperty("--panelW", (W - right) + "px");
   root.setProperty("--dockH", (narrow ? railR.height : 0) + "px");
-  if (!narrow && right >= 860) {
+  if (false) { // (old wide-screen framing; every screen now fits the machine onto the coin tray)
     // plenty of room: the usual view, slid left to sit in the middle of the free space
     camera.position.copy(camBase); camera.lookAt(camLook); camera.updateProjectionMatrix();
     camera.setViewOffset(W, H, (W - right) / 2, 0, W, H); camera.updateProjectionMatrix();
@@ -811,7 +813,7 @@ function fitCamera() {
   }
   const topR = document.querySelector(".top")?.getBoundingClientRect(), vR = $("vault")?.getBoundingClientRect(), hR = $("hint")?.getBoundingClientRect();
   const safeTop = Math.min(H * 0.4, (topR ? topR.bottom : 100) + 4);
-  const lowest = vR && vR.height ? vR.top : H - 120; // stop above the coin tray
+  const lowest = vR && vR.height ? vR.top + 6 : H - 120; // the front shelf meets the top edge of the coin tray
   fitInto(right, safeTop, Math.max(safeTop + H * 0.3, lowest - 4));
 }
 // pull the camera back until the machine fits (closest that fits = biggest on screen), then slide it into the gap
@@ -827,7 +829,8 @@ function fitInto(right, safeTop, safeBot) {
   let lo = 0.6, hi = 4;
   for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2, s = span(m); if (s.y1 - s.y0 <= safeBot - safeTop && s.x1 - s.x0 <= right - 8) hi = m; else lo = m; }
   const s = span(hi);
-  camera.setViewOffset(W, H, (s.x0 + s.x1) / 2 - right / 2, (s.y0 + s.y1) / 2 - (safeTop + safeBot) / 2, W, H);
+  // sit the machine right on top of the coin tray; any spare room goes above it
+  camera.setViewOffset(W, H, (s.x0 + s.x1) / 2 - right / 2, s.y1 - safeBot, W, H);
   camera.updateProjectionMatrix();
 }
 resize();
@@ -1698,7 +1701,7 @@ const coinValue = (l = lvl("value")) => 1 + l;
 const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (msHas("drop5k") ? 0.9 : 1) * (chHas("slow") ? 0.85 : 1)) * (chOn("slow") ? 3 : 1);
 const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (msHas("drop500") ? 0.9 : 1) * (chHas("dry") ? 0.75 : 1);
 // regenCap = what Bigger Refill allows; regenLimit = what regen actually fills to right now
-const regenLimit = () => Math.min(regenCap(), Math.max(regenCap(0), runMax));
+const regenLimit = () => Math.min(regenCap(), Math.max(5, runMax)); // every run starts refilling to 5, then follows your best vault
 const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + (chHas("pocketless") ? 10 : 0);
 const freeDrop = (l = lvl("free")) => 0.04 * l;
 const luckyZero = (l = lvl("lucky")) => 0.1 * l;
@@ -1716,6 +1719,7 @@ const startCoins = (l = rl("headstart")) => HEADSTART[l];
 const tokenMult = (l = rl("tokens")) => (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
 // rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
 const REBIRTH_AT = 1000;
+const LATE = 1.12;
 const tokenGain = () => runEarned < REBIRTH_AT ? 0 : Math.floor(2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult());
 const flipOdds = (l = rl("weighted")) => 0.5 + 0.02 * l + (msHas("streak5") ? 0.02 : 0);
 const cheaper = (l = rl("cheaper")) => Math.pow(0.9, l);
@@ -1730,7 +1734,7 @@ const UPGRADES = [
   { id: "free", name: "Free Drops", x: -2, y: 0, parent: "cooldown", max: 10, base: 12, grow: 1.6, text: l => `${pct(freeDrop(l))} of drops cost nothing` },
   { id: "double", name: "Double Drop", x: -3, y: 0, parent: "free", max: 10, base: 60, grow: 1.7, text: l => `${pct(doubleDrop(l))} chance of a free extra coin` },
   { id: "cap", name: "Bigger Refill", x: -1, y: 1, parent: "regen", max: 10, base: 8, grow: 1.55, text: l => `Regen refills up to ${regenCap(l)}` + (l > 0 && l === lvl("cap") && regenLimit() < regenCap(l) ? ` (${regenLimit()} for now: your best vault this run)` : "") },
-  { id: "auto", name: "Auto Dropper", x: -2, y: 1, parent: "cap", max: 1, base: 400, grow: 1, text: l => l ? "Drops coins for you" : "You drop every coin by hand" },
+  { id: "auto", name: "Auto Dropper", x: -2, y: 1, parent: "cap", max: 1, base: 3000, grow: 1, req: () => rl("autounlock") > 0 || lvl("auto") > 0, reqText: "Rebirth tree: Automation", text: l => l ? "Drops coins for you" : "You drop every coin by hand" },
   { id: "coinspeed", name: "Coin Speed", x: 1, y: 0, parent: "regen", max: 8, base: 4, grow: 1.6, text: l => `Coins fall ${pct(coinSpeed(l))} speed` },
   { id: "pusher", name: "Pusher Speed", x: 2, y: 0, parent: "coinspeed", max: 8, base: 10, grow: 1.65, text: l => `One push every ${pushPeriod(l).toFixed(2)}s` },
   { id: "rails", name: "Side Rails", x: 3, y: 0, parent: "pusher", max: 1, base: 150, grow: 1, text: l => l ? "No coins lost off the sides" : "Coins can fall off the sides" },
@@ -1757,7 +1761,8 @@ const RUPGRADES = [
   { id: "golden", name: "Golden Touch", x: 0, y: 0, parent: null, max: 20, base: 1, grow: 1.5, text: l => `Every payout ×${payoutMult(l).toFixed(2)}` },
   { id: "headstart", name: "Head Start", x: -1, y: 0, parent: "golden", max: 5, base: 2, grow: 2.2, text: l => `Start each run with ${startCoins(Math.min(l, 5))} coins` },
   { id: "regenkeep", name: "Deep Pockets", x: -2, y: 0, parent: "headstart", max: 5, base: 3, grow: 1.8, text: l => `Regen cap +${5 * l}, forever` },
-  { id: "autostart", name: "Auto From Start", x: -1, y: 1, parent: "headstart", max: 1, base: 5, grow: 1, text: l => l ? "Auto Dropper owned every run" : "Buy Auto Dropper each run" },
+  { id: "autounlock", name: "Automation", x: -1, y: 1, parent: "headstart", max: 1, base: 6, grow: 1, text: l => l ? "The Auto Dropper can be bought in the machine tree" : "The Auto Dropper is locked" },
+  { id: "autostart", name: "Auto From Start", x: -1, y: 2, parent: "autounlock", max: 1, base: 25, grow: 1, text: l => l ? "Auto Dropper owned every run" : "Buy Auto Dropper each run" },
   { id: "tokens", name: "Token Boost", x: 1, y: 0, parent: "golden", max: 10, base: 2, grow: 1.8, text: l => `${pct(tokenMult(l))} tokens per rebirth` },
   { id: "cheaper", name: "Bulk Discount", x: 2, y: 0, parent: "tokens", max: 5, base: 4, grow: 2, text: l => `Machine upgrades cost ${pct(cheaper(l))}` },
   { id: "eventstart", name: "Event Pass", x: 1, y: 1, parent: "tokens", max: 1, base: 6, grow: 1, text: l => l ? "Random events from the start" : "Unlock events each run" },
@@ -1775,7 +1780,8 @@ const AUPGRADES = [
   { id: "gemluck", name: "Gem Luck", x: -1, y: -1, parent: "fever", max: 5, base: 2, grow: 2, text: l => `+${5 * l}% Lucky Bounce` },
 ];
 const TREES = {
-  main: { list: UPGRADES, lv: lvl, set: (id, v) => { ups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, lvl(u.id)) * cheaper()), has: () => bank, pay: c => { bank -= c; }, unit: "coins" },
+  // each level also costs LATE× more than the step before it, so the top levels of a node take several runs to reach
+  main: { list: UPGRADES, lv: lvl, set: (id, v) => { ups[id] = v; }, cost: u => { const l = lvl(u.id); return Math.ceil(u.base * Math.pow(u.grow, l) * Math.pow(LATE, l * (l - 1) / 2) * cheaper()); }, has: () => bank, pay: c => { bank -= c; }, unit: "coins" },
   asc: { list: AUPGRADES, lv: al, set: (id, v) => { aups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, al(u.id))), has: () => gems, pay: c => { gems -= c; }, unit: "gems" },
   reb: { list: RUPGRADES, lv: rl, set: (id, v) => { rups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, rl(u.id))), has: () => tokens, pay: c => { tokens -= c; }, unit: "tokens" },
 };
@@ -1784,7 +1790,11 @@ const COG_TABS = ["set", "stats", "style"];
 const selectedIn = { main: "regen", reb: "golden", asc: "shine" };
 const byId = (T, id) => T.list.find(u => u.id === id);
 // open = can be bought; locked = shown as "?" next to something open; hidden = not shown yet
-const nodeState = (T, u) => !u.parent || T.lv(u.parent) > 0 ? "open" : nodeState(T, byId(T, u.parent)) === "open" ? "locked" : "hidden";
+// gated = its branch is open, but it also needs something from a prestige tree first (shown by name, can't be bought yet)
+const nodeState = (T, u) => {
+  const st = !u.parent || T.lv(u.parent) > 0 ? "open" : nodeState(T, byId(T, u.parent)) === "open" ? "locked" : "hidden";
+  return st === "open" && u.req && !u.req() ? "gated" : st;
+};
 let railsBuilt = false;
 function applyUpgrades() {
   BOARD.slots = BASE_SLOTS.map(m => {
@@ -1852,7 +1862,7 @@ function renderTree() {
     const ln = document.createElementNS(ns, "line");
     ln.setAttribute("x1", x1); ln.setAttribute("y1", y1); ln.setAttribute("x2", x2); ln.setAttribute("y2", y2);
     ln.setAttribute("stroke", T.lv(u.id) > 0 ? (treeId === "reb" ? P.accentB : P.gold) : "#ffffff30"); ln.setAttribute("stroke-width", "4");
-    if (nodeState(T, u) === "locked") ln.setAttribute("stroke-dasharray", "6 6");
+    if (nodeState(T, u) === "locked" || nodeState(T, u) === "gated") ln.setAttribute("stroke-dasharray", "6 6");
     svg.appendChild(ln);
   }
   area.appendChild(svg);
@@ -1865,7 +1875,8 @@ function renderTree() {
     b.className = "node" + (st === "locked" ? " locked" : maxed ? " maxed" : T.has() >= T.cost(u) ? " afford" : "") + (selectedIn[treeId] === u.id ? " sel" : "");
     b.style.left = cx - NODE_W / 2 + "px"; b.style.top = cy - NODE_H / 2 + "px";
     b.innerHTML = '<span class="nm"></span><span class="lv"></span>';
-    if (st === "locked") { b.querySelector(".nm").textContent = "?"; b.disabled = true; b.setAttribute("aria-label", "Locked upgrade"); }
+    if (st === "gated") { b.querySelector(".nm").textContent = u.name; b.querySelector(".lv").textContent = u.reqText; b.disabled = true; b.classList.add("locked", "gated"); }
+    else if (st === "locked") { b.querySelector(".nm").textContent = "?"; b.disabled = true; b.setAttribute("aria-label", "Locked upgrade"); }
     else {
       b.querySelector(".nm").textContent = u.name;
       b.querySelector(".lv").textContent = maxed ? "MAX" : `${l}/${u.max}`;
@@ -2444,10 +2455,11 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) save(
 // while a bigger one falls in; the rest shuffle around it.
 const jar = $("jar"), jg = jar.getContext("2d"); jg.imageSmoothingEnabled = false;
 let JW = jar.width, JH = jar.height, FLOOR = JH - 6;
+const TRAY_K = 2; // each tray pixel is 2 screen pixels, so tray coins show at 32px
 // the tray stretches across the screen: match the canvas to it (1 canvas pixel = 1.5 screen pixels on a computer)
 function sizeJar() {
   const r = jar.getBoundingClientRect(); if (!r.width) return;
-  const k = innerWidth <= 760 ? 1 : 1.5;
+  const k = TRAY_K;
   JW = jar.width = Math.max(40, Math.round(r.width / k)); JH = jar.height = Math.max(30, Math.round(r.height / k)); FLOOR = JH - 4;
   jg.imageSmoothingEnabled = false;
   for (const c of vcoins) c.x = Math.min(c.x, JW - 6 - c.r);
@@ -2526,18 +2538,19 @@ function flyToVault(worldPos, v) {
   if (!r.width || flyers.length > 40 || compactOn || document.hidden) return; // too many at once: they just arrive
   tmpV.copy(worldPos).project(camera);
   const sx = (tmpV.x + 1) / 2 * innerWidth, sy = (1 - tmpV.y) / 2 * innerHeight;
-  const ex = r.left + 16 + Math.random() * Math.max(1, r.width - 32), ey = r.top + r.height * 0.45;
-  flyers.push({ sx, sy, ex, ey, t: 0, dur: 0.45 + Math.random() * 0.15, v, face: flyFace(Math.max(1, Math.round(v))) });
+  // straight down from where it left the shelf, speeding up as it falls
+  const ex = Math.min(r.right - 18, Math.max(r.left + 18, sx)), ey = r.top + r.height * 0.5;
+  flyers.push({ sx, sy, ex, ey, t: 0, dur: 0.18 + Math.sqrt(Math.max(0, ey - sy) / 2500), v, face: flyFace(Math.max(1, Math.round(v))) });
   flyingVal += v;
 }
 function drawFlyers(dt) {
   if (!flyers.length) { if (fly.dataset.dirty) { flyG.clearRect(0, 0, fly.width, fly.height); delete fly.dataset.dirty; } return; }
   flyG.clearRect(0, 0, fly.width, fly.height); fly.dataset.dirty = "1";
-  const r = jar.getBoundingClientRect(), k = innerWidth <= 760 ? 1 : 1.5, size = Math.round(16 * k);
+  const r = jar.getBoundingClientRect(), k = TRAY_K, size = Math.round(16 * k);
   for (let i = flyers.length - 1; i >= 0; i--) {
     const f = flyers[i]; f.t += dt / f.dur;
     if (f.t >= 1) { flyers.splice(i, 1); flyingVal = Math.max(0, flyingVal - f.v); landX.push((f.ex - r.left) / k); if (landX.length > 20) landX.shift(); continue; }
-    const t = f.t, x = f.sx + (f.ex - f.sx) * t, y = f.sy + (f.ey - f.sy) * t - Math.sin(t * Math.PI) * 60;
+    const t = f.t, x = f.sx + (f.ex - f.sx) * t, y = f.sy + (f.ey - f.sy) * t * t;
     flyG.drawImage(f.face, Math.round(x - size / 2), Math.round(y - size / 2), size, size);
   }
 }
