@@ -634,7 +634,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.4.1";
+const VERSION = "1.4.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
@@ -1613,6 +1613,13 @@ const music = (() => {
     skip() { if (!ac) return; pick(true); nextT = ac.currentTime + 0.1; },
   };
 })();
+
+// Go silent when the game is out of sight (app switched away, phone locked, tab in the background) and carry on when it's back.
+// Phones otherwise keep an installed web app's audio running after you leave it.
+function quietWhenHidden(hidden) { const ac = sfx.ctx; if (!ac) return; try { if (hidden) ac.suspend(); else ac.resume(); } catch {} }
+document.addEventListener("visibilitychange", () => quietWhenHidden(document.hidden));
+addEventListener("pagehide", () => quietWhenHidden(true));
+addEventListener("pageshow", () => quietWhenHidden(document.hidden));
 
 // ---------- Popups ----------
 const tmpV = new THREE.Vector3();
