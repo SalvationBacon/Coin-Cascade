@@ -476,6 +476,14 @@ body.compact > *:not(#compact) { display: none !important; }
 }
 
 .heirPick { grid-column: 1; justify-self: start; max-width: 100%; font-family: var(--body); font-size: 16px; color: var(--fg); background: var(--panel); border: 2px solid var(--ink); padding: 3px 6px; }
+
+/* phones turned sideways: the game is built for portrait, so ask for the phone to be turned back */
+.rotate { display: none; position: fixed; inset: 0; z-index: 100; background: var(--bg); color: var(--fg); flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 16px; }
+.rotate p { margin: 0; font-family: var(--display); font-size: 12px; line-height: 1.6; color: var(--gold); }
+.rotIcon { width: 40px; height: 64px; border: 4px solid var(--fg); border-radius: 6px; box-shadow: 4px 4px 0 var(--ink); animation: rotPhone 2s ease-in-out infinite; }
+@keyframes rotPhone { 0%, 30% { transform: rotate(90deg); } 60%, 100% { transform: rotate(0deg); } }
+@media (prefers-reduced-motion: reduce) { .rotIcon { animation: none; } }
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 520px) { .rotate { display: flex; } }
 </style>
 </head>
 <body>
@@ -553,6 +561,7 @@ body.compact > *:not(#compact) { display: none !important; }
 <div class="tut" id="tut" hidden><div class="tutSpot" id="tutSpot"></div>
   <div class="tutCard box" id="tutCard" role="dialog" aria-live="polite"><b id="tutStep"></b><h2 id="tutTitle"></h2><p id="tutText"></p>
     <div class="row"><button id="tutNext" type="button">NEXT</button><button id="tutSkip" class="quit" type="button">SKIP</button></div></div></div>
+<div class="rotate" id="rotate" aria-live="polite"><div class="rotIcon" aria-hidden="true"></div><p>Turn your phone upright to play</p></div>
 <div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
 <div class="toast box" id="toast" hidden><b id="toastTitle"></b><span id="toastText"></span></div>
 <div class="eventBanner box" id="eventBanner" hidden><b id="evName"></b><span id="evDesc"></span></div>
@@ -736,7 +745,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.17.0";
+const VERSION = "1.17.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -3533,6 +3542,10 @@ function endTut() { tutI = -1; $("tut").hidden = true; settings.seenTut = true; 
 $("tutNext").addEventListener("click", () => { sfx.click?.(); showTut(tutI + 1); });
 $("tutSkip").addEventListener("click", endTut);
 addEventListener("resize", () => { if (tutI >= 0) showTut(tutI); });
+
+// ---------- Portrait only on phones ----------
+// Installed apps and full-screen pages can lock the screen; elsewhere the "turn your phone upright" screen covers the game.
+try { if (matchMedia("(pointer: coarse)").matches && screen.orientation && screen.orientation.lock) screen.orientation.lock("portrait").catch(() => {}); } catch {}
 
 // ---------- Install button ----------
 // Chrome and Edge hand us an install prompt; on iPhone and iPad it's Share, then Add to Home Screen.
