@@ -394,6 +394,15 @@ body.compact > *:not(#compact) { display: none !important; }
   .vault canvas { width: 100%; height: 100%; }
   .vault b { font-size: 11px; left: 9px; top: 6px; } .vault span { display: none; }
 }
+
+.bankBtn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: auto; z-index: 2; font-family: var(--display); font-size: 11px; color: var(--ink);
+  background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 12px; cursor: pointer; }
+.bankBtn:disabled { background: #2a3140; color: #6b778a; cursor: default; box-shadow: none; }
+.bankBtn:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.bankBtn.nudge { animation: bankPulse 0.8s steps(2) infinite; }
+@keyframes bankPulse { 50% { background: var(--fg); } }
+@media (prefers-reduced-motion: reduce) { .bankBtn.nudge { animation: none; outline: 3px solid var(--fg); } }
+@media (max-width: 760px) { .bankBtn { font-size: 9px; padding: 8px 9px; right: 7px; } }
 </style>
 </head>
 <body>
@@ -420,7 +429,7 @@ body.compact > *:not(#compact) { display: none !important; }
 </div>
 
 <canvas class="flyLayer" id="flyLayer" aria-hidden="true"></canvas>
-<div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the vault</span></div>
+<div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the tray</span><button class="bankBtn" id="bankBtn" type="button" title="Move the tray into your coins (B)">BANK</button></div>
 
 <button class="cogBtn box" id="cogBtn" hidden type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
 <button class="treeBtn box" id="treeBtn" type="button" hidden>UPGRADES<i id="treeBadge" hidden>!</i></button>
@@ -653,8 +662,10 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.6.0";
-let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false; // title screen state (see "Title screen")
+const VERSION = "1.7.0";
+let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
+const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
+// (above) title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
 const saved = store.get(SAVE_KEY, null);
@@ -1677,7 +1688,7 @@ function stepPhysics(counting) {
         const v = c.value * mult * payoutMult();
         if (c.mystery) { popAt(new THREE.Vector3(t.x, 0.6, FLOOR_FRONT + 0.4), `? = ×${mult}`, mult >= 5 ? "big" : mult === 0 ? "lost" : ""); if (mult === 0) sfx.sad(); else if (mult >= 5) sfx.fanfare(); }
         wheelCharge += v;
-        bank += v; earned += v; runEarned += v; rateEarn += v;
+        earned += v; runEarned += v; rateEarn += v; // counts as earned now; spendable once it's banked from the tray
         popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), "+" + fmtV(v), v > 1 ? "big" : "");
         if (v > 0) flyToVault(new THREE.Vector3(t.x, 0.1, FLOOR_FRONT + 0.3), v);
         sfx.win(v);
@@ -2442,7 +2453,7 @@ function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
-    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax,
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
@@ -2457,14 +2468,16 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) save(
 // while a bigger one falls in; the rest shuffle around it.
 const jar = $("jar"), jg = jar.getContext("2d"); jg.imageSmoothingEnabled = false;
 let JW = jar.width, JH = jar.height, FLOOR = JH - 6;
-const TRAY_K = 2; // each tray pixel is 2 screen pixels, so tray coins show at 32px
+const TRAY_K = 2;
+let TRAY_RIGHT = 9999; // each tray pixel is 2 screen pixels, so tray coins show at 32px
 // the tray stretches across the screen: match the canvas to it (1 canvas pixel = 1.5 screen pixels on a computer)
 function sizeJar() {
   const r = jar.getBoundingClientRect(); if (!r.width) return;
   const k = TRAY_K;
   JW = jar.width = Math.max(40, Math.round(r.width / k)); JH = jar.height = Math.max(30, Math.round(r.height / k)); FLOOR = JH - 4;
   jg.imageSmoothingEnabled = false;
-  for (const c of vcoins) c.x = Math.min(c.x, JW - 6 - c.r);
+  const bb = $("bankBtn"); TRAY_RIGHT = JW - (bb ? Math.ceil((bb.offsetWidth + 18) / k) : 0); // coins stay left of the BANK button
+  for (const c of coinTray) c.x = Math.min(c.x, TRAY_RIGHT - CW / 2 - 3);
 }
 addEventListener("resize", sizeJar);
 if ("ResizeObserver" in window) new ResizeObserver(sizeJar).observe(jar);
@@ -2472,78 +2485,93 @@ if ("ResizeObserver" in window) new ResizeObserver(sizeJar).observe(jar);
 const vaultFaces = new Map();
 const vaultFace = e => { if (!vaultFaces.has(e)) vaultFaces.set(e, valueFace(10 ** e).image); return vaultFaces.get(e); };
 const RADII = [8, 8, 8, 8];
-const vcoins = []; // { exp, r, x, y, vx, vy, out, a }
-let flyingVal = 0; // coins on their way from the pusher to the vault: they join the tray when they land
-function vaultTarget() {
-  const t = new Map(), b = Math.floor(Math.max(0, bank - flyingVal));
-  if (b < 1) return t;
-  const top = Math.floor(Math.log10(b));
-  for (let i = 0; i < 4 && top - i >= 0; i++) {
-    const e = top - i, d = i === 0 ? Math.floor(b / 10 ** e) : Math.floor(b / 10 ** e) % 10;
-    if (d) t.set(e, { n: d, r: RADII[i] });
-  }
-  return t;
+// The tray: every coin pushed off the shelf lands here lying flat and piles up. They're yours to spend once you
+// press BANK; a full tray banks itself so nothing is ever lost. Simple 2D physics: gravity, walls, coins resting on
+// coins, and a coin sitting off the edge of another slides off it, so piles slump like real coins.
+const TRAY_CAP = 30, CW = 14, CH = 4; // coin size in tray pixels (lying down: wide and thin)
+let bankedFx = 0;
+const trayLive = () => coinTray.filter(c => !c.out);
+const trayValue = () => { let n = 0; for (const c of coinTray) if (!c.out) n += c.v; return n; };
+function addTrayCoin(v, x) {
+  const R = Math.min(JW, TRAY_RIGHT);
+  const xx = x == null ? CW / 2 + 4 + Math.random() * (R - CW - 8) : Math.min(R - CW / 2 - 4, Math.max(CW / 2 + 4, x));
+  coinTray.push({ v, x: xx, y: -CH, vx: (Math.random() - 0.5) * 30, vy: 40, face: flyFace(Math.max(1, Math.round(v))), out: false });
+  if (!settings.seenBank) { settings.seenBank = true; saveSettings(); showToast("YOUR COIN TRAY", "Coins land in the tray. Press BANK to spend them."); }
+  if (trayLive().length >= TRAY_CAP) bankTray(true);
+  updateTrayHud();
 }
+// empty the tray into your coins: the floor opens and the coins drop out the bottom
+function bankTray(auto) {
+  const live = trayLive(); if (!live.length) return;
+  let amt = 0;
+  for (const c of live) { amt += c.v; c.out = true; c.vy = 30 + Math.random() * 40; c.vx = 0; }
+  bank += amt; bankedFx = 1.2;
+  $("jarUnit").textContent = `${auto ? "Tray full: banked" : "Banked"} +${fmtV(amt)}`;
+  sfx.bonus(); refreshHud(); save(); updateTrayHud();
+}
+function updateTrayHud() {
+  const n = trayLive().length, v = trayValue();
+  $("jarCount").textContent = "+" + fmtV(v);
+  if (bankedFx <= 0) $("jarUnit").textContent = `in the tray · ${n}/${TRAY_CAP}`;
+  const b = $("bankBtn"); b.disabled = n === 0;
+  b.classList.toggle("nudge", n > 0 && (bank < 1 || n >= TRAY_CAP - 5));
+}
+$("bankBtn").addEventListener("click", () => { sfx.unlock(); bankTray(false); });
+addEventListener("keydown", e => { if (e.code === "KeyB" && !e.target.closest?.("input, textarea")) bankTray(false); });
 function updateJar(dt) {
-  const target = vaultTarget();
-  // remove coins whose place value is gone, or that are over the count for their place
-  const live = vcoins.filter(c => !c.out);
-  for (const c of live) if (!target.has(c.exp)) c.out = true;
-  for (const [e, { n, r }] of target) {
-    const mine = live.filter(c => c.exp === e && !c.out);
-    for (const c of mine) c.r += (r - c.r) * Math.min(1, dt * 6);
-    if (mine.length > n) mine.sort((a, b) => a.y - b.y).slice(0, mine.length - n).forEach(c => { c.out = true; });
-    for (let k = mine.length; k < n; k++) { const lx = landX.length ? landX.shift() : null; vcoins.push({ exp: e, r, x: lx != null ? Math.min(JW - 6 - r, Math.max(6 + r, lx)) : 6 + r + Math.random() * (JW - 12 - 2 * r), y: -r - k * 2 * r, vx: 0, vy: 0, out: false, a: 1 }); }
-  }
-  // physics: gravity, walls, floor, and coins pushing each other apart
+  if (bankedFx > 0 && (bankedFx -= dt) <= 0) updateTrayHud();
   const sub = 3, h = Math.min(dt, 0.05) / sub;
   for (let s = 0; s < sub; s++) {
-    for (const c of vcoins) {
-      c.vy += 900 * h; c.x += c.vx * h; c.y += c.vy * h; c.vx *= 0.995;
-      if (c.out) { c.a -= h * 2.2; continue; }
-      if (c.x < 5 + c.r) { c.x = 5 + c.r; c.vx = Math.abs(c.vx) * 0.3; }
-      if (c.x > JW - 5 - c.r) { c.x = JW - 5 - c.r; c.vx = -Math.abs(c.vx) * 0.3; }
-      if (c.y > FLOOR - c.r) { c.y = FLOOR - c.r; c.vy = -c.vy * 0.2; c.vx *= 0.85; }
+    for (const c of coinTray) {
+      c.vy += 700 * h; c.x += c.vx * h; c.y += c.vy * h;
+      if (c.out) continue; // banked coins fall straight through the floor
+      c.vx *= 0.97;
+      if (c.x < CW / 2 + 3) { c.x = CW / 2 + 3; c.vx = Math.abs(c.vx) * 0.3; }
+      const R = Math.min(JW, TRAY_RIGHT);
+      if (c.x > R - CW / 2 - 3) { c.x = R - CW / 2 - 3; c.vx = -Math.abs(c.vx) * 0.3; }
+      if (c.y > FLOOR - CH / 2) { c.y = FLOOR - CH / 2; c.vy = 0; c.vx *= 0.7; }
     }
-    for (let i = 0; i < vcoins.length; i++) for (let j = i + 1; j < vcoins.length; j++) {
-      const a = vcoins[i], b = vcoins[j];
+    for (let i = 0; i < coinTray.length; i++) for (let j = i + 1; j < coinTray.length; j++) {
+      const a = coinTray[i], b = coinTray[j];
       if (a.out || b.out) continue;
-      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r;
-      if (d >= m || d === 0) continue;
-      const nx = dx / d, ny = dy / d, push = (m - d), wa = b.r * b.r / (a.r * a.r + b.r * b.r);
-      a.x -= nx * push * wa; a.y -= ny * push * wa; b.x += nx * push * (1 - wa); b.y += ny * push * (1 - wa);
-      const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-      if (rv < 0) { const imp = -rv * 0.6; a.vx -= imp * nx * wa; a.vy -= imp * ny * wa; b.vx += imp * nx * (1 - wa); b.vy += imp * ny * (1 - wa); }
+      const dx = b.x - a.x, dy = b.y - a.y;
+      if (Math.abs(dx) >= CW || Math.abs(dy) >= CH) continue;
+      // the higher coin rests on the lower one
+      const top = dy > 0 ? a : b, low = top === a ? b : a, off = top.x - low.x;
+      top.y = low.y - CH; if (top.vy > 0) top.vy = 0;
+      if (Math.abs(off) > CW * 0.3) top.vx += Math.sign(off) * 900 * h; // hanging off the edge: slide off
+      else top.vx *= 0.8;
     }
   }
-  for (let i = vcoins.length - 1; i >= 0; i--) if (vcoins[i].out && (vcoins[i].a <= 0 || vcoins[i].y > JH + 20)) vcoins.splice(i, 1);
-  // draw
+  for (let i = coinTray.length - 1; i >= 0; i--) if (coinTray[i].out && coinTray[i].y > JH + 8) coinTray.splice(i, 1);
+  // draw: each coin is its own face squashed flat, with a darker edge underneath for thickness
   jg.clearRect(0, 0, JW, JH);
   jg.fillStyle = "#ffffff0d"; jg.fillRect(3, 3, JW - 6, FLOOR - 3);
-  jg.fillStyle = P.metalDark; jg.fillRect(1, 1, 2, FLOOR); jg.fillRect(JW - 3, 1, 2, FLOOR); jg.fillRect(1, FLOOR, JW - 2, 3);
-  for (const c of vcoins) {
-    jg.globalAlpha = Math.max(0, c.a);
-    jg.drawImage(vaultFace(c.exp), Math.round(c.x - 8), Math.round(c.y - 8));
+  jg.fillStyle = P.metalDark; jg.fillRect(1, 1, 2, FLOOR); jg.fillRect(JW - 3, 1, 2, FLOOR);
+  if (!coinTray.some(c => c.out)) jg.fillRect(1, FLOOR, JW - 2, 3); // the floor opens while banking
+  jg.save(); jg.beginPath(); jg.rect(3, 0, JW - 6, JH); jg.clip();
+  for (const c of coinTray) {
+    const x = Math.round(c.x - CW / 2), y = Math.round(c.y - CH / 2);
+    jg.fillStyle = "#00000088"; jg.fillRect(x + 1, y + CH - 1, CW - 2, 2);
+    jg.drawImage(c.face, x, y, CW, CH);
   }
-  jg.globalAlpha = 1;
-  $("jarCount").textContent = fmt(bank);
+  jg.restore();
 }
-
 // Coins pushed off the front fly down into the tray. Drawn on one see-through layer over the game.
-const fly = $("flyLayer"), flyG = fly.getContext("2d"), flyers = [], landX = [];
+const fly = $("flyLayer"), flyG = fly.getContext("2d");
 function sizeFly() { fly.width = innerWidth; fly.height = innerHeight; flyG.imageSmoothingEnabled = false; }
 sizeFly(); addEventListener("resize", sizeFly);
 const flyFaces = new Map();
 const flyFace = v => { const k = Math.min(v, 1e6); if (!flyFaces.has(k)) flyFaces.set(k, valueFace(k).image); return flyFaces.get(k); };
 function flyToVault(worldPos, v) {
   const r = jar.getBoundingClientRect();
-  if (!r.width || flyers.length > 40 || compactOn || document.hidden) return; // too many at once: they just arrive
+  // can't animate it (sim, hidden, minimised, or a flood of coins): it just arrives
+  if (location.hash === "#sim" || !r.width || flyers.length > 40 || compactOn || document.hidden) { addTrayCoin(v, null); return; }
   tmpV.copy(worldPos).project(camera);
   const sx = (tmpV.x + 1) / 2 * innerWidth, sy = (1 - tmpV.y) / 2 * innerHeight;
   // straight down from where it left the shelf, speeding up as it falls
   const ex = Math.min(r.right - 18, Math.max(r.left + 18, sx)), ey = r.top + r.height * 0.5;
   flyers.push({ sx, sy, ex, ey, t: 0, dur: 0.18 + Math.sqrt(Math.max(0, ey - sy) / 2500), v, face: flyFace(Math.max(1, Math.round(v))) });
-  flyingVal += v;
 }
 function drawFlyers(dt) {
   if (!flyers.length) { if (fly.dataset.dirty) { flyG.clearRect(0, 0, fly.width, fly.height); delete fly.dataset.dirty; } return; }
@@ -2551,7 +2579,7 @@ function drawFlyers(dt) {
   const r = jar.getBoundingClientRect(), k = TRAY_K, size = Math.round(16 * k);
   for (let i = flyers.length - 1; i >= 0; i--) {
     const f = flyers[i]; f.t += dt / f.dur;
-    if (f.t >= 1) { flyers.splice(i, 1); flyingVal = Math.max(0, flyingVal - f.v); landX.push((f.ex - r.left) / k); if (landX.length > 20) landX.shift(); continue; }
+    if (f.t >= 1) { flyers.splice(i, 1); addTrayCoin(f.v, (f.ex - r.left) / k); continue; }
     const t = f.t, x = f.sx + (f.ex - f.sx) * t, y = f.sy + (f.ey - f.sy) * t * t;
     flyG.drawImage(f.face, Math.round(x - size / 2), Math.round(y - size / 2), size, size);
   }
@@ -2652,6 +2680,7 @@ function updateRegen(dt) {
 }
 
 renderShop();
+sizeJar(); for (const v of (saved && saved.tray) || []) addTrayCoin(v, null); // coins left in the tray last time
 
 // ---------- Start: restore the saved machine, or set up a new one with a starter pile ----------
 trimPegs();
@@ -3058,6 +3087,7 @@ if (location.hash !== "#sim") {
 
 if (location.hash === "#sim") {
   window.__cc = {
+    bankTray, get trayValue() { return trayValue(); },
     tick, UPGRADES, RUPGRADES, TREES, nodeState, buy, stopPlacing, drawSpecialPegs, pegMap, tokenGain, lvl, rl, save, msDone,
     get bank() { return bank; }, get runEarned() { return runEarned; }, get earned() { return earned; }, get dropped() { return dropped; },
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
