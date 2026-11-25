@@ -662,7 +662,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.7.1";
+const VERSION = "1.7.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1455,7 +1455,8 @@ function onSlot(c, mult, slot) {
   const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, value, 0, _eq.clone());
   if (Math.random() < mysteryChance()) coin.mystery = true; // its value stays hidden until it pays out
   coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
-  popAt(at, coin.value !== mult ? `×${mult} = ${fmtV(coin.value * payoutMult())}` : "×" + mult, base === 5 ? "big" : "");
+  // show the coin's own value (what's printed on it); payout bonuses like Golden Touch only apply when it falls off the front
+  popAt(at, coin.value !== mult ? `×${mult} = ${fmtV(coin.value)}` : "×" + mult, base === 5 ? "big" : "");
   if (base === 5) { stats.jackpots++; if (lvl("reels")) reelQueue = Math.min(reelQueue + 1, 5); }
   if (base === 5) sfx.bonus(); else if (base === 3) sfx.win(1); else sfx.click();
 }
