@@ -781,7 +781,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.22.0";
+const VERSION = "1.23.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1587,8 +1587,10 @@ function aimFromPointer(e) {
   if (ray.ray.intersectPlane(aimPlane, hitV)) aimX = THREE.MathUtils.clamp(hitV.x, -BOARD.aimMax, BOARD.aimMax);
 }
 
-// ---------- Placing special pegs ----------
-let placing = null;
+// ---------- Moving and shuffling special pegs ----------
+// Special pegs land on random pegs. Later on you can re-roll them (Peg Shuffle, Ascension tree)
+// or move them one by one wherever you like (Peg Mover, Workshop).
+let placing = null, held = null; // held: the peg picked up, { type, from }
 const pegsPlaced = type => Object.values(pegMap).filter(t => t === type).length;
 function trimPegs() {
   // never more placed than owned (e.g. after a rebirth)
@@ -1597,13 +1599,29 @@ function trimPegs() {
     for (const id of Object.keys(pegMap)) if (extra > 0 && pegMap[id] === type) { delete pegMap[id]; extra--; }
   }
 }
-function startPlacing(type) {
-  placing = type; holding = false; if (innerWidth <= 760 && !$("tree").hidden) setPanel(false);
-  const T = PEG_TYPES[type], left = lvl(T.up) - pegsPlaced(type);
-  $("placeText").textContent = left > 0 ? `Click a peg to place your ${T.name} (${left} to place).` : `Click one of your ${T.name}s to pick it up, then click where it should go.`;
-  $("placeBanner").hidden = false;
+const tapWord = () => matchMedia("(pointer: coarse)").matches ? "Tap" : "Click";
+function moveText() {
+  $("placeText").textContent = held ? `${tapWord()} where your ${PEG_TYPES[held.type].name} should go (or on another special peg to swap them).`
+    : Object.keys(pegMap).length ? `${tapWord()} one of your special pegs to pick it up.` : "You don't have any special pegs to move yet.";
 }
-function stopPlacing() { placing = null; $("placeBanner").hidden = true; }
+function startMoving() {
+  if (!wl("pegmover") || titleOpen) return;
+  placing = "move"; held = null; holding = false; if (innerWidth <= 760 && !$("tree").hidden) setPanel(false);
+  moveText(); $("placeBanner").hidden = false;
+}
+const pegPos = id => { const [k, j] = id.split(":").map(Number); return new THREE.Vector3(pegX(BOARD, k, j), BOARD.pegTop - k * BOARD.rowDy + 0.35, BOARD_Z); };
+function stopPlacing() { placing = null; held = null; $("placeBanner").hidden = true; }
+// Peg Shuffle: every special peg jumps to a new random spot
+const SHUFFLE_CD = 120;
+let shuffleAt = (saved && saved.shuffleAt) || 0; // when the next shuffle is ready (ms)
+const shuffleLeft = () => Math.max(0, Math.ceil((shuffleAt - Date.now()) / 1000));
+function shufflePegs() {
+  if (!al("pegshuffle") || shuffleLeft() > 0 || titleOpen) return;
+  for (const id of Object.keys(pegMap)) delete pegMap[id];
+  fillPegs(); drawSpecialPegs();
+  shuffleAt = Date.now() + SHUFFLE_CD * 1000; stats.shuffles = S("shuffles") + 1;
+  sfx.bonus(); save(); renderTree();
+}
 function nearestPeg(e) {
   ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
@@ -1629,16 +1647,17 @@ function fillPegs() {
   return added;
 }
 const fillGold = () => fillPegs().length > 0;
-function placeAt(e) {
-  const id = nearestPeg(e);
-  if (!id) return;
-  const T = PEG_TYPES[placing];
-  if (pegMap[id] === placing) { delete pegMap[id]; }                       // pick it back up
-  else if (pegsPlaced(placing) < lvl(T.up)) { pegMap[id] = placing; sfx.bonus(); } // place (replaces another type)
-  else return;
-  fillGold(); // a golden peg that got covered jumps to a new random spot
-  drawSpecialPegs(); save();
-  if (pegsPlaced(placing) >= lvl(T.up)) stopPlacing(); else startPlacing(placing);
+function placeAt(e) { const id = nearestPeg(e); if (id) placeAtId(id); }
+function placeAtId(id) {
+  if (!held) { // pick one up
+    const type = pegMap[id]; if (!type) return;
+    held = { type, from: id }; popAt(pegPos(id), "PICKED UP", ""); sfx.peg();
+  } else { // put it down (swapping with whatever special peg is there)
+    if (id !== held.from) { const other = pegMap[id]; pegMap[id] = held.type; if (other) pegMap[held.from] = other; else delete pegMap[held.from]; stats.pegMoves = S("pegMoves") + 1; }
+    popAt(pegPos(id), "PLACED", ""); sfx.bonus(); held = null;
+    drawSpecialPegs(); save();
+  }
+  moveText();
 }
 // what special pegs do when a coin lands on them
 function onSpecialPeg(c, L) {
@@ -2083,6 +2102,7 @@ const AUPGRADES = [
   { id: "wheelpro", name: "Wheel Master", x: -2, y: 0, parent: "startups", max: 5, base: 2, grow: 2, text: l => `Prize wheel prizes ${pct(1 + 0.25 * l)}` },
   { id: "board2", name: "Second Board", x: 1, y: -1, parent: "fever", max: 1, base: 5, grow: 1, text: l => l ? "Choose between two slot layouts" : "Only the classic slot layout" },
   // second wave of gem upgrades
+  { id: "pegshuffle", name: "Peg Shuffle", x: 4, y: 0, parent: "pegplus", max: 1, base: 4, grow: 1, text: l => l ? `Re-roll all your special pegs to new random spots (every ${SHUFFLE_CD / 60} minutes). Use it from here or the Arcade.` : "Special pegs stay where they land" },
   { id: "pegplus", name: "Gilded Pegs", x: 3, y: 0, parent: "keeppegs", max: 3, base: 3, grow: 2.5, text: l => `Golden pegs give +${l} more per touch` },
   { id: "goldtray", name: "Golden Tray", x: 3, y: 1, parent: "bigtray", max: 5, base: 2, grow: 2, text: l => `Everything you bank is worth +${5 * l}%` },
   { id: "autobuy", name: "Auto Buyer", x: 1, y: 2, parent: "autoreb", max: 1, base: 6, grow: 1, text: l => l ? `Buys the cheapest machine upgrade you can afford (${autoBuyOn ? "on" : "off"})` : "You buy every upgrade by hand" },
@@ -2109,6 +2129,7 @@ const WUPGRADES = [
   { id: "gempress", name: "Gem Press", x: -2, y: 0, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% gems per ascension` },
   { id: "tokpress", name: "Token Press", x: -1, y: 1, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${100 * l}% tokens per rebirth` },
   { id: "tokvault", name: "Token Vault", x: -1, y: 2, parent: "tokpress", max: 5, base: 3, grow: 2, text: l => `Keep ${10 * l}% of your tokens when you ascend` },
+  { id: "pegmover", name: "Peg Mover", x: 1, y: 2, parent: "magnetpeg", max: 1, base: 3, grow: 1, text: l => l ? "Move any special peg wherever you like. Use it from here or the Arcade." : "You can't move special pegs" },
   { id: "magnetpeg", name: "Magnet Pegs", x: 1, y: 1, parent: "morepegs", max: 2, base: 4, grow: 3, text: l => l ? `${l} magnet peg${l > 1 ? "s" : ""} on random pegs: coins that touch one get pulled toward the jackpot` : "No magnet pegs" },
   { id: "neigh", name: "Lucky Neighbours", x: 2, y: -1, parent: "zeros", max: 2, base: 5, grow: 2.5, text: l => l ? `The slots beside the jackpot pay at least ×${1 + l}` : "The slots beside the jackpot pay their usual amount" },
   { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? `Ascends for you at ${autoAscAt} gems` : "You ascend by hand" },
@@ -2275,6 +2296,15 @@ function renderInfo() {
       chips.appendChild(c);
     }
     info.appendChild(chips);
+  }
+  if (u.id === "pegshuffle" && l > 0) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog"; t.disabled = shuffleLeft() > 0;
+    t.textContent = shuffleLeft() > 0 ? `SHUFFLE READY IN ${dur(shuffleLeft())}` : "SHUFFLE MY PEGS";
+    t.addEventListener("click", shufflePegs); info.appendChild(t);
+  }
+  if (u.id === "pegmover" && l > 0) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog"; t.textContent = "MOVE MY PEGS";
+    t.addEventListener("click", startMoving); info.appendChild(t);
   }
   if (u.id === "autoreb" && l > 0) {
     const t = document.createElement("button"); t.type = "button"; t.className = "tog";
@@ -2540,6 +2570,15 @@ function renderArcade() {
   tile("Flip Gates", ups.flipgate > 0, "flipgate", `${pct(0.08 * (ups.flipgate || 0))} of coins hit a gate in their slot and flip: heads ×2, tails ×½.`);
   tile("Slot Reels", ups.reels > 0, "reels", "Every ×5 hit spins the reels. Three 7s pay big.");
   tile("Mystery Coins", ups.mystery > 0, "mystery", "Some coins hide their value until they pay out: anything from ×0 to ×25.");
+  const pegTile = (title, unlocked, how, text, btn, fn, off) => {
+    const t = document.createElement("div"); t.className = "tile" + (unlocked ? "" : " lock");
+    t.innerHTML = "<h3></h3><p></p>"; t.querySelector("h3").textContent = title; t.querySelector("p").textContent = unlocked ? text : how;
+    if (unlocked) { const b = document.createElement("button"); b.type = "button"; b.textContent = btn; b.disabled = !!off; b.addEventListener("click", fn); t.appendChild(b); }
+    wrap.appendChild(t);
+  };
+  if (ascensions > 0 || al("pegshuffle")) pegTile("Peg Shuffle", al("pegshuffle") > 0, "Unlock it with Peg Shuffle in the Ascension tree.", "Every special peg jumps to a new random spot.",
+    shuffleLeft() > 0 ? `READY IN ${dur(shuffleLeft())}` : "SHUFFLE", shufflePegs, shuffleLeft() > 0);
+  if (rebuilds > 0 || wl("pegmover")) pegTile("Peg Mover", wl("pegmover") > 0, "Unlock it with Peg Mover in the Workshop.", "Pick up any special peg and put it wherever you like.", "MOVE PEGS", () => { if (innerWidth <= 760) setPanel(false); startMoving(); });
   tile("Random Events", ups.events > 0, "events", "Gold Rush, Frenzy, Coin Shower and Jackpot Magnet turn up every few minutes.");
   area.appendChild(wrap);
 }
@@ -2640,6 +2679,13 @@ function renderHelp() {
       "Scratch Cards: three matching symbols pay up to ×200.",
       "Flip Gates, Slot Reels and Mystery Coins change how coins pay out on the board.",
       "Random Events (Gold Rush, Frenzy, Coin Shower, Jackpot Magnet) turn up every few minutes. A bar shows when the next one is due.",
+    ]],
+    ["Special pegs", [
+      "Golden, splitter, doubler and magnet pegs each land on a random peg when you get them.",
+      "Peg Keeper (Ascension tree) keeps them in place through rebirths.",
+      "Peg Shuffle (Ascension tree) re-rolls them all to new random spots every few minutes.",
+      "Peg Mover (Workshop) lets you pick any of them up and put it exactly where you want, or swap two.",
+      "Both are used from the Arcade, or from the upgrade itself.",
     ]],
     ["Rebirth (prestige 1)", [
       `Earn ${fmt(REBIRTH_AT)} coins in a single run and you can rebirth for tokens. The more you earn in the run, the more tokens you get: 2 × √(coins this run ÷ ${fmt(REBIRTH_AT)}). So ${fmt(REBIRTH_AT)} coins gives 2 tokens, ${fmt(REBIRTH_AT * 4)} gives 4 and ${fmt(REBIRTH_AT * 9)} gives 6, before any bonuses.`,
@@ -3020,7 +3066,7 @@ function save() {
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
@@ -4069,7 +4115,7 @@ if (location.hash === "#sim") {
     tick, UPGRADES, RUPGRADES, TREES, nodeState, buy, stopPlacing, drawSpecialPegs, pegMap, tokenGain, lvl, rl, save, msDone,
     get bank() { return bank; }, get runEarned() { return runEarned; }, get earned() { return earned; }, get dropped() { return dropped; },
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
-    get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
+    get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, get pegMap() { return pegMap; }, shufflePegs, startMoving, placeAtId, get held() { return held; }, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
     WUPGRADES, wl, partGain, rebuild: doRebuild, get parts() { return parts; }, get gemsRb() { return gemsRb; }, get ascensions() { return ascensions; }, get rebirths() { return rebirths; },
     get stats() { return stats; }, achCount, chLevelsTotal, get playTime() { return stats.playTime || 0; },
   };
