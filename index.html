@@ -404,7 +404,7 @@ body.compact > *:not(#compact) { display: none !important; }
   <div class="marquee">Coin Cascade<small>PUSH YOUR LUCK</small></div>
   <div class="counters">
     <div class="counter bank box"><b id="bank">0</b><span>Coins</span></div>
-    <div class="counter won box"><b id="earned">0</b><span>Earned</span></div>
+    <div class="counter won box" title="Coins earned since your last rebirth"><b id="earned">0</b><span>This run</span></div>
     <div class="counter box"><b id="regen">FULL</b><span>Regen</span></div>
     <div class="counter box" id="tokBox" hidden><b id="tokens">0</b><span>Tokens</span></div>
     <div class="counter box" id="gemBox" hidden><b id="gems">0</b><span>Gems</span></div>
@@ -653,7 +653,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
@@ -699,7 +699,7 @@ const fmt = n => {
   return txt + SUFFIX[e];
 };
 function refreshHud() {
-  $("bank").textContent = fmt(bank); $("earned").textContent = fmt(earned);
+  $("bank").textContent = fmt(bank); $("earned").textContent = fmt(runEarned);
   $("tokBox").hidden = !(rebirths > 0 || tokens > 0); $("tokens").textContent = fmt(tokens);
   $("gemBox").hidden = !(ascensions > 0 || gems > 0); $("gems").textContent = fmt(gems);
   $("flipBtn").hidden = !(ups.flip > 0 || inPlay > 0); if ($("flipBtn").hidden) $("flip").hidden = true;
@@ -1719,7 +1719,9 @@ const startCoins = (l = rl("headstart")) => HEADSTART[l];
 const tokenMult = (l = rl("tokens")) => (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
 // rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
 const REBIRTH_AT = 1000;
-const LATE = 1.12;
+const LATE = 1.25;   // each level of a node costs this much more than the last step did
+const SPREAD = 1.03; // after your first 20 machine levels in a run, every level bought makes all machine upgrades this much dearer
+const machineLevels = () => { let n = 0; for (const k in ups) n += ups[k] || 0; return n; };
 const tokenGain = () => runEarned < REBIRTH_AT ? 0 : Math.floor(2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult());
 const flipOdds = (l = rl("weighted")) => 0.5 + 0.02 * l + (msHas("streak5") ? 0.02 : 0);
 const cheaper = (l = rl("cheaper")) => Math.pow(0.9, l);
@@ -1781,7 +1783,7 @@ const AUPGRADES = [
 ];
 const TREES = {
   // each level also costs LATE× more than the step before it, so the top levels of a node take several runs to reach
-  main: { list: UPGRADES, lv: lvl, set: (id, v) => { ups[id] = v; }, cost: u => { const l = lvl(u.id); return Math.ceil(u.base * Math.pow(u.grow, l) * Math.pow(LATE, l * (l - 1) / 2) * cheaper()); }, has: () => bank, pay: c => { bank -= c; }, unit: "coins" },
+  main: { list: UPGRADES, lv: lvl, set: (id, v) => { ups[id] = v; }, cost: u => { const l = lvl(u.id); return Math.ceil(u.base * Math.pow(u.grow, l) * Math.pow(LATE, l * (l - 1) / 2) * Math.pow(SPREAD, Math.max(0, machineLevels() - 20)) * cheaper()); }, has: () => bank, pay: c => { bank -= c; }, unit: "coins" },
   asc: { list: AUPGRADES, lv: al, set: (id, v) => { aups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, al(u.id))), has: () => gems, pay: c => { gems -= c; }, unit: "gems" },
   reb: { list: RUPGRADES, lv: rl, set: (id, v) => { rups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, rl(u.id))), has: () => tokens, pay: c => { tokens -= c; }, unit: "tokens" },
 };
