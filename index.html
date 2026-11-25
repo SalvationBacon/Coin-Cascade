@@ -533,7 +533,6 @@ body.compact > *:not(#compact) { display: none !important; }
     <p class="insert" id="insert">INSERT COIN</p>
     <div class="menu" id="menu" role="menu">
       <button class="mbtn" id="tContinue" type="button" role="menuitem">CONTINUE</button>
-      <button class="mbtn" id="tNew" type="button" role="menuitem">NEW GAME</button>
       <button class="mbtn alt" id="tCloud" type="button" role="menuitem">CLOUD SAVE</button>
       <button class="mbtn alt" id="tLoad" type="button" role="menuitem">IMPORT SAVE</button>
       <button class="mbtn alt" id="tCopy" type="button" role="menuitem">EXPORT SAVE</button>
@@ -735,7 +734,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.16.1";
+const VERSION = "1.16.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2516,13 +2515,9 @@ function renderSettings() {
   tt.addEventListener("click", () => { setPanel(false); setTimeout(startTut, 250); });
   ti.append(tb, tt); w.appendChild(ti);
   // reset
-  const rs = card("", "Reset", [["Wipe everything and start a brand-new game. This can't be undone, so export your save first if you might want it back.", ""]]);
-  const rb = document.createElement("button"); rb.type = "button"; rb.className = "quit";
-  rb.textContent = Date.now() - resetArmed < 3000 ? "CLICK AGAIN TO WIPE EVERYTHING" : "RESET PROGRESS";
-  rb.addEventListener("click", () => {
-    if (Date.now() - resetArmed < 3000) { store.set(SAVE_KEY, null); saveBlocked = true; location.reload(); return; }
-    resetArmed = Date.now(); renderTree(); setTimeout(() => { if (treeId === "set") renderTree(); }, 3100);
-  });
+  const rs = card("", "Delete game", [["Wipe all your progress and start again from nothing. This can't be undone.", ""]]);
+  const rb = document.createElement("button"); rb.type = "button"; rb.className = "quit"; rb.textContent = "DELETE MY GAME";
+  rb.addEventListener("click", askReset);
   rs.appendChild(rb); w.appendChild(rs);
 }
 function renderShop() { refreshShop(); }
@@ -3245,7 +3240,6 @@ function openTitle() {
   $("tCopy").hidden = !has; updateTitleCloud();
   $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
   $("tInfo").textContent = has ? `Save: ${fmt(bank)} coins · ${fmt(earned)} earned · ${rebirths} rebirth${rebirths === 1 ? "" : "s"}${ascensions ? ` · ${ascensions} ascension${ascensions === 1 ? "" : "s"}` : ""}` : "No save yet: press START.";
-  $("tNew").hidden = !has;
   $("menu").hidden = false;
   $("title").hidden = false;
   setTimeout(() => $("tContinue").focus(), 50);
@@ -3260,10 +3254,6 @@ function startGame() {
 }
 const goInGame = () => { try { sessionStorage.setItem("cc_inGame", "1"); } catch {} };
 $("tContinue").addEventListener("click", startGame);
-$("tNew").addEventListener("click", () => {
-  if (Date.now() - newArmed > 3000) { newArmed = Date.now(); $("tNew").textContent = "CLICK AGAIN: WIPES YOUR SAVE"; $("tInfo").textContent = "Starting a new game deletes your current one. Export your save first if you want to keep it."; setTimeout(() => { $("tNew").textContent = "NEW GAME"; }, 3000); return; }
-  store.set(SAVE_KEY, null); saveBlocked = true; goInGame(); location.reload();
-});
 $("tCopy").addEventListener("click", () => {
   if (!HOSTED) { $("tInfo").textContent = "Save files can only be downloaded in the app or on the GitHub page."; return; }
   $("tInfo").textContent = exportSaveFile() ? "Save file downloaded. Keep it somewhere safe." : "Your browser blocked the download.";
@@ -3312,6 +3302,21 @@ async function unpackSave(code) {
     const d = JSON.parse(json); return d && typeof d.bank === "number" ? d : null;
   } catch { return null; }
 }
+// ---------- Deleting the game ----------
+// Only from Menu → Settings, behind a warning. A backup file of the old game is downloaded first, just in case.
+let resetPending = false;
+function askReset() {
+  cloudPending = null; recvData = null; resetPending = true;
+  $("recvTitle").textContent = "Delete your game?";
+  $("recvMsg").textContent = `This wipes everything: ${saveLine({ earned, rebirths, ascensions })}.${HOSTED ? " A backup file is downloaded first, so you can load it back with IMPORT SAVE." : ""}${fbUser ? " Your cloud save will be replaced too." : ""}`;
+  $("recvYes").textContent = "DELETE EVERYTHING"; $("recvNo").textContent = "KEEP MY GAME"; $("recvYes").hidden = false; $("recvBox").hidden = false;
+}
+function doReset() {
+  if (HOSTED) exportSaveFile();
+  try { localStorage.setItem("cc_save_before_reset", localStorage.getItem(SAVE_KEY) || ""); } catch {}
+  setTimeout(() => { store.set(SAVE_KEY, null); saveBlocked = true; location.reload(); }, 400);
+}
+
 // ---------- Save files ----------
 // Export downloads your whole save as a small .json file; import reads one back in (older save codes in a file work too).
 function exportSaveFile() {
@@ -3355,11 +3360,12 @@ async function checkIncoming() {
   $("recvYes").hidden = !recvData; $("recvBox").hidden = false;
 }
 $("recvYes").addEventListener("click", () => {
+  if (resetPending) { resetPending = false; doReset(); return; }
   if (cloudPending) { const { cloud, data } = cloudPending; cloudPending = null; adoptCloud(cloud, data); return; }
   if (!recvData) return; store.set(SAVE_KEY, recvData); saveBlocked = true; goInGame(); location.reload();
 });
 $("recvNo").addEventListener("click", () => {
-  $("recvBox").hidden = true;
+  $("recvBox").hidden = true; resetPending = false;
   if (cloudPending) { // keep this device: it becomes the newest cloud revision
     const { cloud } = cloudPending; cloudPending = null;
     syncMeta.set(Object.assign(syncMeta.get(), { rev: cloud.rev, earned: -1 })); lastUp = ""; cloudSync(true);
@@ -3418,6 +3424,9 @@ async function cloudSync(manual) {
       const data = await unpackSave(cloud.data || "");
       // this device has its own progress to lose: since its last sync, or ever (if it has never synced)
       const movedOn = m.rev ? earned > (m.earned || 0) + 0.5 : earned > 50;
+      // and never silently take a cloud save with far less progress than this device (an accidental wipe elsewhere)
+      const muchLess = data && earned > 100 && (data.earned || 0) < earned * 0.5;
+      if (data && muchLess) { askCloud(cloud, data); return; }
       if (data && !movedOn) { adoptCloud(cloud, data); return; }
       if (data) { askCloud(cloud, data); return; }
     }
