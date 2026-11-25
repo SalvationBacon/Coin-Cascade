@@ -195,6 +195,8 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 .card button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 .card .code { width: 100%; min-height: 64px; resize: vertical; font-family: var(--body); font-size: 14px; line-height: 1.1; color: var(--fg); background: #0008; border: 2px solid var(--ink); padding: 6px; overflow-wrap: anywhere; }
 .card .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.card .bkrow { align-items: center; justify-content: space-between; margin-top: 6px; font-size: 13px; }
+.card .bkrow span { flex: 1 1 180px; opacity: .85; }
 .card .vol { font-size: 17px; color: var(--muted); }
 .card input[type=range] { width: 100%; accent-color: var(--gold); }
 .swatches { display: flex; gap: 4px; }
@@ -432,6 +434,7 @@ body.compact > *:not(#compact) { display: none !important; }
 .pips { display: flex; gap: 4px; } .pips i { width: 14px; height: 8px; background: #ffffff18; border: 2px solid var(--ink); } .pips i.on { background: var(--gold); }
 
 .overlay.xfer { z-index: 40; }
+#elsewhere { z-index: 90; }
 .sendCard { align-items: center; text-align: center; max-width: min(360px, calc(100vw - 32px)); }
 #qr { width: min(260px, 70vw); height: auto; aspect-ratio: 1; image-rendering: pixelated; background: #fff; border: 3px solid var(--ink); }
 .xfer .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -582,6 +585,7 @@ body.compact > *:not(#compact) { display: none !important; }
   </div>
   <span class="ver" id="ver"></span>
 </div>
+<div class="overlay" id="elsewhere" hidden><div class="card box"><h2>Open in another window</h2><p>Coin Cascade was opened in another tab or window, so this copy has paused and stopped saving. That way the two can't overwrite each other's progress.</p><button id="elseReload" type="button">PLAY HERE INSTEAD</button></div></div>
 <div class="overlay" id="away" hidden><div class="card box"><h2>In the mini window</h2><p>Coin Cascade is running in its small window, so this one is paused. Close the mini window, or bring it back here.</p><button id="awayBack" type="button">BRING IT BACK HERE</button></div></div>
 <div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2 id="recvTitle">Load progress from another device?</h2><p id="recvMsg"></p>
   <div class="row"><button id="recvYes" type="button">LOAD IT</button><button id="recvNo" class="quit" type="button">KEEP THIS ONE</button></div></div></div>
@@ -772,7 +776,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.21.0";
+const VERSION = "1.21.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2669,6 +2673,22 @@ function renderSettings() {
   }
   cs.appendChild(crow); w.appendChild(cs);
   w.appendChild(bk);
+  // backups kept on this device
+  const bl = getBackups();
+  const bc = card("", "Backups", [[bl.length ? "Copies of your save kept on this device. Restoring one replaces your current game (which is backed up first)." : "No backups yet. One is kept every 10 minutes and before anything replaces your save.", ""]]);
+  for (const b of bl) {
+    const r = document.createElement("div"); r.className = "row bkrow";
+    const t = document.createElement("span"); t.textContent = `${new Date(b.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} · ${saveLine(b)} (${b.reason})`;
+    const rb = document.createElement("button"); rb.type = "button"; rb.className = "quit"; rb.textContent = "RESTORE";
+    rb.addEventListener("click", () => {
+      cloudPending = null; resetPending = false; recvData = b.save;
+      $("recvTitle").textContent = "Restore this backup?"; $("recvYes").textContent = "RESTORE IT"; $("recvNo").textContent = "KEEP THIS ONE"; $("recvYes").hidden = false;
+      $("recvMsg").textContent = `The backup has: ${saveLine(b)}. This game has: ${saveLine({ earned, rebirths, ascensions })}. Your current game is backed up first.`;
+      $("recvBox").hidden = false;
+    });
+    r.append(t, rb); bc.appendChild(r);
+  }
+  w.appendChild(bc);
   // back to the title screen
   const ti = card("", "Title screen", [[`Coin Cascade v${VERSION}`, ""]]);
   const tb = document.createElement("button"); tb.type = "button"; tb.textContent = "BACK TO TITLE";
@@ -2899,18 +2919,71 @@ function updateEvents(dt) {
 
 // ---------- Save ----------
 let saveBlocked = false;
+const SID = Math.random().toString(36).slice(2), IS_MINI_PAGE = location.hash === "#mini";
 function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
 setInterval(save, 5000);
 addEventListener("pagehide", save);
 document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+
+// ---------- Backups ----------
+// The game keeps its own copies of your save on this device: the newest few, plus the best one ever (most coins
+// earned). One is taken when the game opens, every 10 minutes, and before anything replaces your save (a cloud
+// save, a save file, deleting the game). Restore one from Menu → Settings → Backups.
+const BK_KEY = "cc_backups";
+const slimSave = d => { // the coins on the machine and in the tray come along as coins
+  const o = Object.assign({}, d);
+  o.bank = (o.bank || 0) + (o.tray || []).reduce((a, v) => a + v, 0) + (o.inflight || 0);
+  delete o.coins; delete o.tray; delete o.inflight; delete o.pusherT; return o;
+};
+const getBackups = () => { try { return JSON.parse(localStorage.getItem(BK_KEY)) || []; } catch { return []; } };
+function backupSave(reason, data) {
+  try {
+    const d = data || store.get(SAVE_KEY, null);
+    if (!d || typeof d.bank !== "number" || !((d.earned || 0) > 0)) return;
+    const e = { at: Date.now(), reason, earned: d.earned || 0, rebirths: d.rebirths || 0, ascensions: d.ascensions || 0, save: slimSave(d) };
+    let list = getBackups();
+    if (list[0] && list[0].rebirths === e.rebirths && list[0].ascensions === e.ascensions && e.earned >= list[0].earned && e.earned <= list[0].earned * 1.02) list[0] = e; // nothing new since the last one
+    else list.unshift(e);
+    const best = list.reduce((b, x) => (x.earned > b.earned ? x : b), list[0]);
+    list = list.slice(0, 6); if (!list.includes(best)) list.push(best);
+    try { localStorage.setItem(BK_KEY, JSON.stringify(list)); }
+    catch { localStorage.setItem(BK_KEY, JSON.stringify([list[0], best].filter((x, i, a) => a.indexOf(x) === i))); } // storage nearly full
+  } catch {}
+}
+if (location.hash !== "#sim") {
+  // the copy kept by the old delete button becomes a backup too
+  try { const old = localStorage.getItem("cc_save_before_reset"); if (old) { const d = JSON.parse(old); if (d) { backupSave("before deleting", d); } localStorage.removeItem("cc_save_before_reset"); } } catch {}
+  if (saved) backupSave("opened the game", saved);
+  setInterval(() => { if (!saveBlocked) { save(); backupSave("autosave"); } }, 600000);
+  // ask the browser not to clear this site's storage when space runs low
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
+}
+
+// ---------- One copy at a time ----------
+// Two tabs (or the app and a browser tab) share one save. Without this, each would keep saving its own progress
+// over the other's. The newest copy plays; any older one pauses and stops saving.
+function pauseHere() {
+  if (saveBlocked || awayOn) return;
+  saveBlocked = true; holding = false; awayOn = true; music.stop();
+  $("elsewhere").hidden = false; document.title = "Coin Cascade (open in another window)";
+}
+if (location.hash !== "#sim") {
+  addEventListener("storage", e => {
+    if (IS_MINI_PAGE) return; // the mini window and the big one already take turns
+    if (e.key === "cc_tab" && e.newValue && !e.newValue.startsWith(SID)) pauseHere();
+    if (e.key === SAVE_KEY && e.newValue) { try { const d = JSON.parse(e.newValue); if (d && d.sid && d.sid !== SID) pauseHere(); } catch {} }
+  });
+  if (!IS_MINI_PAGE) try { localStorage.setItem("cc_tab", SID + ":" + Date.now()); } catch {}
+  $("elseReload").addEventListener("click", () => location.reload());
+}
 
 // ---------- Coin vault ----------
 // A jar of little coins that roll and settle. Each place value has its own coin (1s, 10s, 100s,
@@ -3605,7 +3678,7 @@ function askReset() {
 function doReset() {
   if (HOSTED) exportSaveFile();
   settings.seenTut = false; settings.seenBank = false; settings.panel = false; saveSettings(); // the new game starts like a first game, tutorial and all
-  try { localStorage.setItem("cc_save_before_reset", localStorage.getItem(SAVE_KEY) || ""); } catch {}
+  save(); backupSave("before deleting");
   setTimeout(() => { store.set(SAVE_KEY, null); saveBlocked = true; location.reload(); }, 400);
 }
 
@@ -3654,7 +3727,7 @@ async function checkIncoming() {
 $("recvYes").addEventListener("click", () => {
   if (resetPending) { resetPending = false; doReset(); return; }
   if (cloudPending) { const { cloud, data } = cloudPending; cloudPending = null; adoptCloud(cloud, data); return; }
-  if (!recvData) return; store.set(SAVE_KEY, recvData); saveBlocked = true; goInGame(); location.reload();
+  if (!recvData) return; save(); backupSave("before loading another save"); store.set(SAVE_KEY, recvData); saveBlocked = true; goInGame(); location.reload();
 });
 $("recvNo").addEventListener("click", () => {
   $("recvBox").hidden = true; resetPending = false;
@@ -3721,6 +3794,7 @@ async function cloudSync(manual) {
       if (data && muchLess) { askCloud(cloud, data); return; }
       if (data && !movedOn) { adoptCloud(cloud, data); return; }
       if (data) { askCloud(cloud, data); return; }
+      cloudMsg = "Couldn't read the cloud save on this device, so nothing was uploaded over it."; return;
     }
     const d = transferSave(); if (!d) return;
     const code = await packSave(d);
@@ -3736,6 +3810,7 @@ async function cloudSync(manual) {
   finally { cloudBusy = false; refreshCloudCard(); }
 }
 function adoptCloud(cloud, data) {
+  save(); backupSave("before loading the cloud save");
   syncMeta.set({ rev: cloud.rev, earned: data.earned || 0, at: Date.now() });
   store.set(SAVE_KEY, data); saveBlocked = true; goInGame(); location.reload();
 }
