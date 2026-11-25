@@ -301,6 +301,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
     bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 8px 10px 10px; gap: 6px; display: grid; grid-template-columns: 76px 1fr; align-items: center; text-align: left; }
   .flip[hidden] { display: none !important; }
   .flipHead, .stakes, .calls, .cash { grid-column: 1 / -1; }
+  #scratchPanel, #towerPanel { display: flex; flex-direction: column; align-items: center; text-align: center; }
   #flipCoin { width: 64px; height: 84px; grid-row: span 2; }
   .flipMsg { font-size: 15px; min-height: 0; }
   .eventBanner { top: calc(118px + env(safe-area-inset-top, 0px)); }
@@ -493,15 +494,18 @@ body.compact > *:not(#compact) { display: none !important; }
 @media (prefers-reduced-motion: reduce) { .rotIcon { animation: none; } }
 @media (orientation: landscape) and (pointer: coarse) and (max-height: 520px) { .rotate { display: flex; } }
 
-#towerCanvas { width: 140px; height: 210px; image-rendering: pixelated; }
+#towerCanvas { width: 175px; height: 300px; image-rendering: pixelated; touch-action: none; cursor: pointer; }
 .scratchRow { display: flex; gap: 8px; }
 .scell { width: 64px; height: 64px; display: grid; place-items: center; font-family: var(--display); font-size: 16px; color: var(--ink); background: repeating-linear-gradient(45deg, #c8d0dc 0 6px, #aab3c0 6px 12px);
   border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); cursor: pointer; padding: 0; }
 .scell:disabled { cursor: default; }
 .scell.open { background: var(--panel); color: var(--gold); }
 .scell img { width: 40px; height: 40px; image-rendering: pixelated; }
-.scratchTable { margin: 0; font-size: 14px; line-height: 1.2; color: var(--muted); }
-@media (max-width: 760px) { #towerCanvas { width: 100px; height: 150px; } .scell { width: 54px; height: 54px; } }
+.scratchTable { margin: 0; border-collapse: collapse; font-size: 14px; line-height: 1.2; color: var(--muted); }
+.scratchTable th, .scratchTable td { padding: 2px 6px; text-align: center; font-weight: 400; }
+.scratchTable th { color: var(--fg); text-align: left; }
+.scratchTable tr:first-child td { color: var(--gold); font-family: var(--display); font-size: 9px; }
+@media (max-width: 760px) { #towerCanvas { width: 140px; height: 240px; } .scell { width: 54px; height: 54px; } }
 </style>
 </head>
 <body>
@@ -555,20 +559,20 @@ body.compact > *:not(#compact) { display: none !important; }
   <button class="cash" id="cashOut" type="button" disabled>CASH OUT</button>
 </div>
 <div class="flip box" id="towerPanel" hidden>
-  <div class="flipHead"><h2>Coin Tower</h2><button class="treeClose" id="towerClose" type="button">CLOSE</button></div>
-  <canvas id="towerCanvas" width="100" height="150"></canvas>
+  <div class="flipHead"><h2>Coin Stacker</h2><button class="treeClose" id="towerClose" type="button">CLOSE</button></div>
+  <canvas id="towerCanvas" width="70" height="120"></canvas>
   <p class="flipPlay" id="towerPlay"></p>
-  <p class="flipMsg" id="towerMsg">Stack coins for a bigger payout. Every coin makes it wobblier. Cash out before it topples.</p>
+  <p class="flipMsg" id="towerMsg">Stop the sliding blocks on top of each other. Reach MINOR for ×2 your bet, or the top for the MAJOR: ×20.</p>
   <div class="stakes" id="towerStakes"></div>
   <div class="calls"><button class="call" id="towerGo" type="button">START</button></div>
-  <button class="cash" id="towerCash" type="button" disabled>CASH OUT</button>
+  <button class="cash" id="towerCash" type="button" hidden disabled>TAKE MINOR</button>
 </div>
 <div class="flip box" id="scratchPanel" hidden>
   <div class="flipHead"><h2>Scratch Card</h2><button class="treeClose" id="scratchClose" type="button">CLOSE</button></div>
   <div class="scratchRow" id="scratchRow"></div>
   <p class="flipMsg" id="scratchMsg">Buy a card, then scratch all three. Two alike pays a little, three alike pays big.</p>
   <button class="call" id="scratchBuy" type="button">BUY CARD</button>
-  <p class="scratchTable">Pairs: 1 ×0.4 · 2 ×1 · 5 ×2 · 10 ×4 · ★ ×8<br>Three: 1 ×2 · 2 ×6 · 5 ×15 · 10 ×40 · ★ ×200</p>
+  <table class="scratchTable" id="scratchTable"></table>
 </div>
 <div class="placeBanner box" id="placeBanner" hidden><span id="placeText"></span><button class="treeClose" id="placeDone" type="button">DONE</button></div>
 <div class="title" id="title" hidden>
@@ -781,7 +785,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.24.1";
+const VERSION = "1.26.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1756,7 +1760,7 @@ addEventListener("pointercancel", () => { holding = false; });
 const keys = {};
 addEventListener("keydown", e => {
   keys[e.code] = true;
-  if (e.code === "Space") { e.preventDefault(); sfx.unlock(); dropCoin(); }
+  if (e.code === "Space") { e.preventDefault(); sfx.unlock(); if (!$("towerPanel").hidden && stk.phase === "move") { if (!e.repeat) stStop(); return; } dropCoin(); }
 });
 addEventListener("keyup", e => { keys[e.code] = false; });
 
@@ -2011,10 +2015,11 @@ const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1)) / (1 
 const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
 const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
 // rebirth tree effects
-const payoutMult = (l = rl("golden")) => achPayMult() * (1 + 0.5 * wl("plating")) * (1 + 0.25 * l) * (1 + Math.min(tokens * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chHas("leaky")) * (chOn("leaky") ? 0.5 : 1);
+const markMult = () => 1 + 0.1 * rebuilds; // Machine Mark: every rebuild adds +10% payouts, forever
+const payoutMult = (l = rl("golden")) => achPayMult() * markMult() * Math.pow(1.25, wl("overclock")) * (1 + 0.5 * wl("plating")) * (1 + 0.25 * l) * (1 + Math.min(tokens * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chHas("leaky")) * (chOn("leaky") ? 0.5 : 1);
 const HEADSTART = [0, 10, 30, 100, 300, 1000];
 const startCoins = (l = rl("headstart")) => HEADSTART[l] + 100 * al("gemstart");
-const tokenMult = (l = rl("tokens")) => (1 + wl("tokpress")) * (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
+const tokenMult = (l = rl("tokens")) => Math.pow(1.2, wl("tokmint")) * (1 + wl("tokpress")) * (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
 // rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
 const REBIRTH_AT = 1000;
 const LATE = 1.25;   // each level of a node costs this much more than the last step did
@@ -2050,7 +2055,7 @@ const UPGRADES = [
   { id: "mystery", name: "Mystery Coins", x: -2, y: -1, parent: "luck", max: 6, base: 80, grow: 1.9, text: l => `${pct(mysteryChance(l))} of coins become ? coins` },
   { id: "lucky", name: "Lucky Zero", x: -1, y: -3, parent: "jackpot", max: 5, base: 50, grow: 1.8, text: l => `${pct(luckyZero(l))} of ×0 coins saved as ×1` },
   { id: "luck", name: "Lucky Bounce", x: -1, y: -1, parent: "edge", max: 10, base: 35, grow: 1.8, text: l => `${pct(0.04 * l)} of bounces steer toward a bonus slot` },
-  { id: "tower", name: "Coin Tower", x: 2, y: -1, parent: "flip", max: 1, base: 300, grow: 1, text: l => l ? "Coin Tower unlocked in the Arcade" : "Unlocks the Coin Tower gamble" },
+  { id: "tower", name: "Coin Stacker", x: 2, y: -1, parent: "flip", max: 1, base: 300, grow: 1, text: l => l ? "Coin Stacker unlocked in the Arcade" : "Unlocks the Coin Stacker arcade game" },
   { id: "scratch", name: "Scratch Cards", x: 1, y: -2, parent: "flip", max: 1, base: 500, grow: 1, text: l => l ? "Scratch cards unlocked in the Arcade" : "Unlocks scratch cards" },
   { id: "flipgate", name: "Flip Gates", x: -1, y: -2, parent: "luck", max: 3, base: 400, grow: 2.5, text: l => l ? `${pct(0.08 * l)} of coins hit a flip gate in their slot: heads ×2, tails ×½` : "No flip gates" },
   { id: "flip", name: "Double or Nothing", x: 1, y: -1, parent: "edge", max: 1, base: 50, grow: 1, text: l => l ? "Coin flip side game unlocked" : "Unlocks the coin flip side game" },
@@ -2089,7 +2094,7 @@ const RUPGRADES = [
   { id: "chprep", name: "Challenge Prep", x: 2, y: 1, parent: "eventstart", max: 5, base: 3, grow: 2, text: l => `Challenge goals ${pct(Math.pow(0.95, l))}` },
 ];
 const ASC_AT = 25; // tokens earned since the last ascension
-const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(3 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1) * (1 + 0.5 * wl("gempress")));
+const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(3 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1) * (1 + 0.5 * wl("gempress")) * Math.pow(1.2, wl("gemforge")));
 const AUPGRADES = [
   { id: "shine", name: "Gem Shine", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.8, text: l => `All payouts +${50 * l}%` },
   { id: "fountain", name: "Token Fountain", x: 1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% tokens per rebirth` },
@@ -2118,7 +2123,7 @@ const AUPGRADES = [
   { id: "bigtray", name: "Deep Tray", x: 2, y: 1, parent: "keeppegs", max: 4, base: 2, grow: 2, text: l => `The coin tray holds ${40 + (msHas("bank100") ? 10 : 0) + 10 * l} coins` },
 ];
 const RB_AT = 30; // gems earned since the last rebuild
-const partGain = () => gemsRb < RB_AT ? 0 : Math.floor(2 * Math.sqrt(gemsRb / RB_AT));
+const partGain = () => gemsRb < RB_AT ? 0 : Math.floor(2 * Math.sqrt(gemsRb / RB_AT) * Math.pow(1.15, wl("lathe")));
 const WUPGRADES = [
   { id: "plating", name: "Gold Plating", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.7, text: l => `All payouts +${50 * l}%` },
   { id: "jack10", name: "×10 Jackpot", x: 0, y: -1, parent: "plating", max: 1, base: 3, grow: 1, text: l => l ? "The jackpot slot is a ×10" : "The jackpot slot is a ×5" },
@@ -2134,6 +2139,11 @@ const WUPGRADES = [
   { id: "pegmover", name: "Peg Mover", x: 1, y: 2, parent: "magnetpeg", max: 1, base: 3, grow: 1, text: l => l ? "Move any special peg wherever you like. Use it from here or the Arcade." : "You can't move special pegs" },
   { id: "magnetpeg", name: "Magnet Pegs", x: 1, y: 1, parent: "morepegs", get max() { return 2 + wl("morepegs"); }, base: 4, grow: 3, text: l => l ? `${l} magnet peg${l > 1 ? "s" : ""} on random pegs: coins that touch one get pulled toward the jackpot` : "No magnet pegs" },
   { id: "neigh", name: "Lucky Neighbours", x: 2, y: -1, parent: "zeros", max: 2, base: 5, grow: 2.5, text: l => l ? `The slots beside the jackpot pay at least ×${1 + l}` : "The slots beside the jackpot pay their usual amount" },
+  // the Forge: endless upgrades with no top level, so the Workshop always has something to buy
+  { id: "overclock", name: "Overclock", x: 3, y: 0, parent: "motor", max: Infinity, base: 4, grow: 1.5, text: l => `All payouts ×${fmtV(Math.pow(1.25, l))}` },
+  { id: "gemforge", name: "Gem Forge", x: -2, y: 1, parent: "gempress", max: Infinity, base: 5, grow: 1.6, text: l => `Gems per ascension ×${fmtV(Math.pow(1.2, l))}` },
+  { id: "tokmint", name: "Token Mint", x: -2, y: 2, parent: "tokvault", max: Infinity, base: 4, grow: 1.55, text: l => `Tokens per rebirth ×${fmtV(Math.pow(1.2, l))}` },
+  { id: "lathe", name: "Parts Lathe", x: 0, y: 2, parent: "morepegs", max: Infinity, base: 6, grow: 1.8, text: l => `Parts per rebuild ×${fmtV(Math.pow(1.15, l))}` },
   { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? `Ascends for you at ${autoAscAt} gems` : "You ascend by hand" },
 ];
 const TREES = {
@@ -2246,7 +2256,7 @@ function renderTree() {
     else if (st === "locked") { b.querySelector(".nm").textContent = "?"; b.disabled = true; b.setAttribute("aria-label", "Locked upgrade"); }
     else {
       b.querySelector(".nm").textContent = u.name;
-      b.querySelector(".lv").textContent = maxed ? "MAX" : `${l}/${u.max}`;
+      b.querySelector(".lv").textContent = maxed ? "MAX" : u.max === Infinity ? `Lv ${l}` : `${l}/${u.max}`;
       b.addEventListener("click", () => { selectedIn[treeId] = u.id; renderTree(); });
     }
     area.appendChild(b);
@@ -2257,7 +2267,7 @@ const treeKey = () => treeId === "mainlist" ? "main" : treeId;
 function renderInfo() {
   const T = TREES[treeKey()], u = byId(T, selectedIn[treeKey()]), l = T.lv(u.id), maxed = l >= u.max, info = $("treeInfo");
   info.innerHTML = '<h3></h3><p class="d"></p><p class="c"></p><button class="buy" type="button"></button>';
-  info.querySelector("h3").textContent = `${u.name}  ·  Lv ${l}/${u.max}`;
+  info.querySelector("h3").textContent = u.max === Infinity ? `${u.name}  ·  Lv ${l} (no limit)` : `${u.name}  ·  Lv ${l}/${u.max}`;
   info.querySelector(".d").textContent = maxed ? u.text(l) : `${u.text(l)}  →  ${u.text(l + 1)}`;
   info.querySelector(".c").textContent = maxed ? "Fully upgraded" : `Costs ${fmt(T.cost(u))} ${T.unit} · you have ${fmt(T.has())}`;
   const buyBtn = info.querySelector(".buy");
@@ -2334,8 +2344,9 @@ function renderRebirthBar() {
   if (treeId === "work") {
     const n = partGain();
     $("rebText").textContent = n >= 1
-      ? `Rebuild: reset your machine, tokens, gems and both prestige trees for ${n} part${n > 1 ? "s" : ""} (${fmt(gemsRb)} gems earned since your last rebuild). You keep parts, the Workshop, milestones, achievements and challenges.`
+      ? `Rebuild: reset your machine, tokens, gems and both prestige trees for ${n} part${n > 1 ? "s" : ""} (${fmt(gemsRb)} gems earned since your last rebuild), and your machine goes up to Mark ${rebuilds + 2} (+${10 * (rebuilds + 1)}% payouts). You keep parts, the Workshop, milestones, achievements and challenges.`
       : `Earn ${RB_AT} gems since your last rebuild to rebuild for parts. So far: ${fmt(gemsRb)}.`;
+    if (rebuilds > 0) $("rebText").textContent = `Machine Mark ${rebuilds + 1}: +${10 * rebuilds}% payouts. ` + $("rebText").textContent;
     const wb = $("rebBtn"); wb.disabled = n < 1;
     wb.textContent = Date.now() - rebArmed < 3000 ? "CLICK TO CONFIRM" : `REBUILD +${n}`;
     return;
@@ -2567,8 +2578,8 @@ function renderArcade() {
   const ready = $("wheelBtn").classList.contains("ready");
   tile("Prize Wheel", ups.wheel > 0, "wheel", ready ? "The wheel is charged. Spin it!" : "Charges up as you earn. Spin for a pile of coins or a free event.", ready ? "SPIN" : "OPEN", wheelOpen, meter);
   const openPanel = id => { if (innerWidth <= 760) setPanel(false); for (const pid of ["flip", "wheel", "towerPanel", "scratchPanel"]) $(pid).hidden = pid !== id; if (id === "towerPanel") renderTower(); if (id === "scratchPanel") renderScratch(); };
-  tile("Coin Tower", ups.tower > 0, "tower", "Stack coins for a bigger payout. Every coin makes it wobblier: cash out before it topples.", "PLAY", () => openPanel("towerPanel"));
-  tile("Scratch Cards", ups.scratch > 0, "scratch", `Buy a card for ${fmt(scratchCost())} and scratch three symbols. Three alike pays up to ×200.`, "PLAY", () => openPanel("scratchPanel"));
+  tile("Coin Stacker", ups.tower > 0, "tower", `Stop the sliding blocks on top of each other. MINOR prize ×${ST_PAY.minor}, MAJOR prize ×${ST_PAY.major} at the top.`, "PLAY", () => openPanel("towerPanel"));
+  tile("Scratch Cards", ups.scratch > 0, "scratch", `Buy a card for ${fmt(scratchCost())} and scratch three symbols. Three alike pays up to ×200. One card every ${SCRATCH_CD} seconds.`, "PLAY", () => openPanel("scratchPanel"));
   tile("Flip Gates", ups.flipgate > 0, "flipgate", `${pct(0.08 * (ups.flipgate || 0))} of coins hit a gate in their slot and flip: heads ×2, tails ×½.`);
   tile("Slot Reels", ups.reels > 0, "reels", "Every ×5 hit spins the reels. Three 7s pay big.");
   tile("Mystery Coins", ups.mystery > 0, "mystery", "Some coins hide their value until they pay out: anything from ×0 to ×25.");
@@ -2646,7 +2657,7 @@ function renderStats() {
     ["Time", [["Played: ", dur(stats.playTime || 0)], ["This run: ", dur(runTime)]]],
     ["Coins", [["Earned in total: ", fmt(earned)], ["Earned this run: ", fmt(runEarned)], ["In the vault: ", fmt(bank)], ["Biggest vault: ", fmt(stats.maxBank)], ["Income lately: ", `${fmtV(incomeRate * 60)} a minute`]]],
     ["Machine", [["Coins dropped: ", fmt(dropped)], ["×5 hits: ", fmt(stats.jackpots)], ["Best flip streak: ", String(stats.bestStreak)]]],
-    ["Progress", [["Rebirths: ", fmt(rebirths)], ["Tokens earned: ", fmt(stats.tokensTotal || 0)], ["Ascensions: ", fmt(ascensions)], ["Gems earned: ", fmt(gemsTotal)],
+    ["Progress", [["Rebirths: ", fmt(rebirths)], ["Tokens earned: ", fmt(stats.tokensTotal || 0)], ["Ascensions: ", fmt(ascensions)], ["Gems earned: ", fmt(gemsTotal)], ...(rebuilds ? [["Rebuilds: ", fmt(rebuilds)], ["Machine Mark: ", `${rebuilds + 1} (+${10 * rebuilds}% payouts)`], ["Parts earned: ", fmt(partsTotal)]] : []),
       ["Milestones: ", `${Object.keys(msDone).length} / ${MILESTONES.length}`], ["Challenge levels: ", `${chLevelsTotal()} / ${CHALLENGES.length * 5}`]]],
   ];
   for (const [title, lines] of groups) w.appendChild(card("", title, lines));
@@ -2677,8 +2688,8 @@ function renderHelp() {
       "The Arcade holds the extras. Each one is unlocked by an upgrade in the Upgrades tree:",
       "Double or Nothing: bet coins on a flip and keep doubling, then cash out before you miss.",
       "Prize Wheel: charges up as you earn. Spin it for a pile of coins or a free event.",
-      "Coin Tower: stack coins for a bigger payout. Each coin makes it wobblier, so cash out before it topples.",
-      "Scratch Cards: three matching symbols pay up to ×200.",
+      "Coin Stacker: a row of blocks slides side to side; stop it on top of the row below. Overhang falls off, and the row shrinks from 3 to 2 to 1 and speeds up as you climb. Reach the MINOR line (row 8) to take ×2 your bet, or risk it for the MAJOR (×20) at row 12.",
+      "Scratch Cards: three matching symbols pay up to ×200. You can buy one card every 20 seconds.",
       "Flip Gates, Slot Reels and Mystery Coins change how coins pay out on the board.",
       "Random Events (Gold Rush, Frenzy, Coin Shower, Jackpot Magnet) turn up every few minutes. A bar shows when the next one is due.",
     ]],
@@ -2709,6 +2720,11 @@ function renderHelp() {
       "Rebuilding resets everything below it: coins, machine upgrades, tokens, gems, and the Rebirth and Ascension trees.",
       "You keep your parts and the Workshop, plus achievements, milestones and challenges.",
       "Parts buy the strongest upgrades in the game in the Workshop (Prestige → Workshop), such as Magnet Pegs and more gems per ascension.",
+    ]],
+    ["The endless game", [
+      "Coin Cascade never runs out. Once you reach the Workshop, two things keep growing forever:",
+      "Machine Mark: every rebuild raises your machine's Mark by one and adds +10% to all payouts, with no limit.",
+      "The Forge: four Workshop upgrades have no top level. Overclock (payouts ×1.25 a level), Gem Forge (gems ×1.2), Token Mint (tokens ×1.2) and Parts Lathe (parts ×1.15). Each level costs more parts, but every level makes the next rebuild come faster.",
     ]],
     ["Milestones", [
       "Milestones (Goals → Milestones) are big targets, such as lifetime coins earned or rebirths.",
@@ -3069,7 +3085,7 @@ function save() {
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
@@ -3272,64 +3288,123 @@ function drawFlyers(dt) {
   }
 }
 
-// ---------- Coin Tower ----------
-// Bet, then stack coins one at a time: each coin raises the payout but makes the tower more likely to topple.
-const towerMult = h => 1 + 0.18 * h, towerRisk = h => 0.1 + 0.07 * h;
-let towerStake = 0, towerH = 0, towerIx = 0, towerFall = -1, towerSway = [];
+// ---------- Coin Stacker ----------
+// The arcade classic: a row of blocks slides side to side; stop it on top of the row below. Anything hanging over
+// the edge falls off, and the row narrows on its own from 3 to 2 to 1 as you climb (and gets faster). Reach the
+// MINOR line to take a small prize or keep going for the MAJOR at the top; miss completely and the bet is gone.
+const ST_COLS = 7, ST_ROWS = 12, ST_MINOR = 8, ST_PAY = { minor: 2, major: 20 };
+const stCap = r => r < 4 ? 3 : r < ST_MINOR ? 2 : 1;           // the widest a row can be
+const stStep = r => Math.max(42, 150 - r * 11);                 // milliseconds per slide step: faster every row
+let towerStake = 0, towerIx = 0;
+const stk = { phase: "idle", rows: [], x: 0, w: 3, dir: 1, acc: 0, bits: [], flash: 0 };
 const towerAmt = () => STAKES[towerIx] === "10%" ? Math.max(1, Math.floor(bank * 0.1)) : STAKES[towerIx];
+const stLive = () => stk.phase === "move" || stk.phase === "choice";
+function stNextRow() {
+  const r = stk.rows.length, below = stk.rows[r - 1];
+  stk.w = Math.min(below ? below[1] : 3, stCap(r));
+  stk.dir = r % 2 ? -1 : 1; stk.x = stk.dir > 0 ? 0 : ST_COLS - stk.w; stk.acc = 0;
+}
 function renderTower() {
-  const live = towerStake > 0;
-  $("towerPlay").textContent = live ? `${towerH} coin${towerH === 1 ? "" : "s"} · cash out for ${fmt(Math.floor(towerStake * towerMult(towerH)))}` : `Bet: ${fmt(towerAmt())}`;
-  const st = $("towerStakes"); st.textContent = ""; st.hidden = live;
+  const live = stLive();
+  $("towerPlay").textContent = stk.phase === "choice" ? `MINOR reached: take ${fmt(towerStake * ST_PAY.minor)}, or go for the MAJOR (${fmt(towerStake * ST_PAY.major)})`
+    : live ? `Row ${stk.rows.length + 1} of ${ST_ROWS} · bet ${fmt(towerStake)}` : `Bet: ${fmt(towerAmt())} · MINOR ×${ST_PAY.minor} · MAJOR ×${ST_PAY.major}`;
+  const s = $("towerStakes"); s.textContent = ""; s.hidden = live;
   STAKES.forEach((v, i) => { const b = document.createElement("button"); b.type = "button"; b.textContent = v === "10%" ? "10%" : fmt(v); b.className = i === towerIx ? "on" : "";
-    b.disabled = (v === "10%" ? bank < 1 : bank < v); b.addEventListener("click", () => { towerIx = i; renderTower(); }); st.appendChild(b); });
-  $("towerGo").textContent = live ? `STACK (${pct(1 - towerRisk(towerH))} safe)` : "START";
-  $("towerGo").disabled = towerFall >= 0 || (!live && bank < towerAmt());
-  $("towerCash").disabled = !live || towerH === 0 || towerFall >= 0;
+    b.disabled = (v === "10%" ? bank < 1 : bank < v); b.addEventListener("click", () => { towerIx = i; renderTower(); }); s.appendChild(b); });
+  const go = $("towerGo");
+  go.textContent = stk.phase === "move" ? "STOP" : stk.phase === "choice" ? "GO FOR MAJOR" : "START";
+  go.disabled = stk.phase === "fall" || (!live && bank < towerAmt());
+  const cash = $("towerCash"); cash.hidden = stk.phase !== "choice"; cash.disabled = stk.phase !== "choice";
+  cash.textContent = `TAKE MINOR (${fmt(towerStake * ST_PAY.minor)})`;
   drawTower(0);
 }
-function drawTower(dt) {
-  const cv = $("towerCanvas"), g = cv.getContext("2d"); g.imageSmoothingEnabled = false;
-  g.clearRect(0, 0, cv.width, cv.height);
-  g.fillStyle = P.metalDark; g.fillRect(10, cv.height - 6, cv.width - 20, 4);
-  const face = flyFace(Math.max(1, coinValue()));
-  if (towerFall >= 0) {
-    towerFall += dt;
-    towerSway.forEach(c => { c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 260 * dt; c.r += c.vr * dt;
-      g.save(); g.translate(c.x, Math.min(c.y, cv.height - 10)); g.rotate(c.r); g.drawImage(face, -14, -4, 28, 9); g.restore(); });
-    if (towerFall > 1) { towerFall = -1; towerSway = []; renderTower(); }
-    return;
-  }
-  const t = performance.now() / 1000;
-  for (let i = 0; i < towerH; i++) {
-    const wob = Math.sin(t * 3 + i) * i * 0.35 * (towerH / 6);
-    g.drawImage(face, Math.round(cv.width / 2 - 14 + (towerSway[i] || 0) + wob), cv.height - 16 - i * 7, 28, 9);
-  }
+function stStart() {
+  const a = towerAmt(); if (bank < a) return;
+  bank -= a; towerStake = a; stk.rows = []; stk.bits = []; stk.phase = "move"; stNextRow();
+  $("towerMsg").textContent = "Stop the blocks right on top of the row below. Tap STOP, the screen, or press Space.";
+  refreshHud(); save(); renderTower();
 }
-$("towerGo").addEventListener("click", () => {
-  sfx.unlock();
-  if (!towerStake) { const a = towerAmt(); if (bank < a) return; bank -= a; towerStake = a; towerH = 0; towerSway = []; refreshHud(); renderTower(); $("towerMsg").textContent = "Stack a coin, then cash out whenever you like."; return; }
-  if (Math.random() < towerRisk(towerH)) {
-    const cv = $("towerCanvas");
-    towerSway = Array.from({ length: towerH + 1 }, (_, i) => ({ x: cv.width / 2, y: cv.height - 16 - i * 7, vx: (Math.random() - 0.5) * 120, vy: -40 - Math.random() * 60, r: 0, vr: (Math.random() - 0.5) * 12 }));
-    towerFall = 0; $("towerMsg").textContent = `It toppled at ${towerH + 1}. Lost ${fmt(towerStake)}.`; towerStake = 0; towerH = 0; sfx.crash(); stats.towerFalls = S("towerFalls") + 1;
-  } else {
-    towerH++; towerSway.push((Math.random() - 0.5) * 3); sfx.stack(); stats.bestTower = Math.max(S("bestTower"), towerH);
-    $("towerMsg").textContent = towerH >= 8 ? "That's a tall one. Brave." : "Steady… stack another, or cash out.";
+function stStop() {
+  if (stk.phase !== "move") return;
+  const r = stk.rows.length, below = stk.rows[r - 1];
+  let lo = stk.x, hi = stk.x + stk.w;
+  if (below) { lo = Math.max(lo, below[0]); hi = Math.min(hi, below[0] + below[1]); }
+  // the overhang drops off
+  for (let c = stk.x; c < stk.x + stk.w; c++) if (c < lo || c >= hi) stk.bits.push({ x: c, y: r, vy: 0, t: 0 });
+  if (hi <= lo) { // missed completely
+    stk.phase = "fall"; stats.towerFalls = S("towerFalls") + 1; sfx.crash();
+    $("towerMsg").textContent = `Missed on row ${r + 1}. Lost ${fmt(towerStake)}.`; towerStake = 0;
+    setTimeout(() => { stk.phase = "idle"; stk.rows = []; renderTower(); }, 1200);
+    save(); renderTower(); return;
   }
-  save(); renderTower();
+  stk.rows.push([lo, hi - lo]); sfx.stack(); stk.flash = 0.15;
+  stats.bestTower = Math.max(S("bestTower"), stk.rows.length);
+  if (stk.rows.length >= ST_ROWS) return stWin("major");
+  if (stk.rows.length === ST_MINOR) { stk.phase = "choice"; $("towerMsg").textContent = "MINOR prize! Take it now, or risk it all on the last rows for the MAJOR."; sfx.bonus(); save(); renderTower(); return; }
+  stNextRow();
+  $("towerMsg").textContent = stk.w < hi - lo ? "The row shrinks… and speeds up." : hi - lo < (below ? below[1] : 3) ? "Lost a block off the edge." : "Perfect. Keep going.";
+  renderTower();
+}
+function stWin(kind) {
+  const win = towerStake * ST_PAY[kind]; bank += win;
+  if (kind === "major") { stats.stackMajor = S("stackMajor") + 1; sfx.kaching(); }
+  sfx.bonus();
+  $("towerMsg").textContent = kind === "major" ? `MAJOR PRIZE! Won ${fmt(win)}.` : `Took the minor prize: ${fmt(win)}.`;
+  towerStake = 0; stk.phase = "idle"; stk.rows = []; refreshHud(); save(); renderTower();
+}
+function drawTower(dt) {
+  const cv = $("towerCanvas"), g = cv.getContext("2d"), C = 10;
+  if (stk.phase === "move") {
+    stk.acc += dt * 1000;
+    const step = stStep(stk.rows.length);
+    while (stk.acc >= step) {
+      stk.acc -= step;
+      if (stk.x + stk.dir < 0 || stk.x + stk.w + stk.dir > ST_COLS) stk.dir = -stk.dir;
+      stk.x += stk.dir;
+    }
+  }
+  stk.flash = Math.max(0, stk.flash - dt);
+  g.fillStyle = "#0b1220"; g.fillRect(0, 0, cv.width, cv.height);
+  const Y = r => cv.height - (r + 1) * C;
+  // grid
+  g.fillStyle = "#16233a"; for (let r = 0; r < ST_ROWS; r++) for (let c = 0; c < ST_COLS; c++) g.fillRect(c * C + 1, Y(r) + 1, C - 2, C - 2);
+  // prize lines
+  const line = (r, col, label) => { g.fillStyle = col; g.fillRect(0, Y(r - 1) - 1, cv.width, 1); g.font = "5px monospace"; g.fillText(label, 1, Y(r - 1) - 2); };
+  line(ST_MINOR, "#46e0ff", "MINOR");
+  // the top row is the MAJOR prize
+  g.fillStyle = "#4a3a10"; for (let c = 0; c < ST_COLS; c++) g.fillRect(c * C + 1, Y(ST_ROWS - 1) + 1, C - 2, C - 2);
+  g.fillStyle = "#ffd24a"; g.font = "5px monospace"; g.fillText("MAJOR", 1, Y(ST_ROWS - 1) + 7);
+  // stacked rows
+  stk.rows.forEach(([x, w], r) => { g.fillStyle = r === stk.rows.length - 1 && stk.flash > 0 ? "#fff6c8" : "#f0b43c"; for (let c = x; c < x + w; c++) g.fillRect(c * C + 1, Y(r) + 1, C - 2, C - 2); });
+  // the moving row
+  if (stk.phase === "move") { g.fillStyle = "#ffe27a"; for (let c = stk.x; c < stk.x + stk.w; c++) g.fillRect(c * C + 1, Y(stk.rows.length) + 1, C - 2, C - 2); }
+  // falling overhang
+  stk.bits = stk.bits.filter(b => { b.t += dt; b.vy += 300 * dt; b.y -= b.vy * dt / C; g.globalAlpha = Math.max(0, 1 - b.t); g.fillStyle = "#ff5a5a"; g.fillRect(b.x * C + 1, Y(b.y) + 1, C - 2, C - 2); g.globalAlpha = 1; return b.t < 1; });
+}
+$("towerGo").addEventListener("click", () => { sfx.unlock(); if (stk.phase === "idle") stStart(); else if (stk.phase === "move") stStop(); else if (stk.phase === "choice") { stk.phase = "move"; stNextRow(); $("towerMsg").textContent = "Going for the MAJOR. Single blocks from here."; renderTower(); } });
+$("towerCanvas").addEventListener("pointerdown", e => { e.preventDefault(); if (stk.phase === "move") stStop(); });
+$("towerCash").addEventListener("click", () => { if (stk.phase === "choice") stWin("minor"); });
+$("towerClose").addEventListener("click", () => {
+  if (stk.phase === "choice") stWin("minor");
+  else if (stk.phase === "move" && !stk.rows.length) { bank += towerStake; towerStake = 0; stk.phase = "idle"; refreshHud(); } // nothing stacked yet: bet back
+  else if (stk.phase === "move") { $("towerMsg").textContent = `Walked away on row ${stk.rows.length + 1}. Lost ${fmt(towerStake)}.`; towerStake = 0; stk.phase = "idle"; stk.rows = []; }
+  $("towerPanel").hidden = true; save();
 });
-$("towerCash").addEventListener("click", () => {
-  const win = Math.floor(towerStake * towerMult(towerH)); bank += win;
-  $("towerMsg").textContent = `Cashed out ${fmt(win)} from a ${towerH}-coin tower.`; towerStake = 0; towerH = 0; sfx.bonus(); refreshHud(); save(); renderTower();
-});
-$("towerClose").addEventListener("click", () => { if (towerStake && towerH > 0) $("towerCash").click(); else if (towerStake) { bank += towerStake; towerStake = 0; refreshHud(); } $("towerPanel").hidden = true; });
 
 // ---------- Scratch cards ----------
 // Three hidden symbols; reveal them all. Pairs pay a little, three of a kind pays big (about break-even on average).
 const SCR_SYMS = [1, 2, 5, 10, "★"], SCR_W = [40, 28, 18, 10, 4];
 const SCR_PAIR = [0.4, 1, 2, 4, 8], SCR_THREE = [2, 6, 15, 40, 200];
 let scratchCard = null; // { cells: [symbol index], open: [bool], cost }
+const SCRATCH_CD = 20; // seconds between cards, so they can't be spammed
+let scratchAt = (saved && saved.scratchAt) || 0; // when the next card can be bought (ms)
+const scratchLeft = () => Math.max(0, Math.ceil((scratchAt - Date.now()) / 1000));
+function scratchTable() {
+  const t = $("scratchTable"); if (t.childElementCount) return;
+  const row = (head, cells) => { const tr = document.createElement("tr"); const th = document.createElement("th"); th.textContent = head; tr.appendChild(th);
+    for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); } t.appendChild(tr); };
+  row("", SCR_SYMS.map(String)); row("Pair", SCR_PAIR.map(m => "×" + m)); row("Three", SCR_THREE.map(m => "×" + m));
+}
 const scratchCost = () => 10 * coinValue();
 function scrPick() { let r = Math.random() * 100; for (let i = 0; i < SCR_W.length; i++) if ((r -= SCR_W[i]) <= 0) return i; return 0; }
 function renderScratch() {
@@ -3343,8 +3418,17 @@ function renderScratch() {
     } else { b.textContent = scratchCard ? "?" : ""; b.disabled = !scratchCard; b.setAttribute("aria-label", "Scratch"); b.addEventListener("click", () => scratchCell(i)); }
     row.appendChild(b);
   }
-  $("scratchBuy").textContent = `BUY CARD · ${fmt(scratchCost())}`;
-  $("scratchBuy").disabled = !!scratchCard || bank < scratchCost();
+  scratchTable();
+  const wait = scratchCard ? 0 : scratchLeft();
+  $("scratchBuy").textContent = wait ? `NEXT CARD IN ${wait}s` : `BUY CARD · ${fmt(scratchCost())}`;
+  $("scratchBuy").disabled = !!scratchCard || wait > 0 || bank < scratchCost();
+}
+let lastScrSec = -1;
+function renderScratchButton() {
+  if (scratchCard) return;
+  const wait = scratchLeft();
+  $("scratchBuy").textContent = wait ? `NEXT CARD IN ${wait}s` : `BUY CARD · ${fmt(scratchCost())}`;
+  $("scratchBuy").disabled = wait > 0 || bank < scratchCost();
 }
 function scratchCell(i) {
   if (!scratchCard || scratchCard.open[i]) return;
@@ -3364,7 +3448,8 @@ function scratchCell(i) {
   renderScratch();
 }
 $("scratchBuy").addEventListener("click", () => {
-  sfx.unlock(); const cost = scratchCost(); if (scratchCard || bank < cost) return;
+  sfx.unlock(); const cost = scratchCost(); if (scratchCard || bank < cost || scratchLeft() > 0) return;
+  scratchAt = Date.now() + SCRATCH_CD * 1000;
   bank -= cost; scratchCard = { cells: [scrPick(), scrPick(), scrPick()], open: [false, false, false], cost };
   $("scratchMsg").textContent = "Scratch all three."; refreshHud(); renderScratch();
 });
@@ -3700,6 +3785,7 @@ function frame() {
   { const r = jar.getBoundingClientRect(); trayTopPx = compactOn || document.hidden || !r.height ? Infinity : r.top + 2; }
   if (!titleOpen) tick(dt);
   updateJar(dt); drawFlyers(dt); drawFlipCoin(dt); if (!$("towerPanel").hidden) drawTower(dt);
+  if (!$("scratchPanel").hidden && !scratchCard && scratchLeft() !== lastScrSec) { lastScrSec = scratchLeft(); renderScratchButton(); }
   const coolFrac = Math.min(1, (performance.now() - lastDrop) / (dropCooldown() * 1000));
   $("coolBar").style.width = Math.round(coolFrac * 100) + "%";
   ghost.position.x += (aimX - ghost.position.x) * 0.4;
@@ -4120,6 +4206,7 @@ if (location.hash === "#sim") {
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
     get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, get pegMap() { return pegMap; }, shufflePegs, startMoving, placeAtId, get held() { return held; }, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
     WUPGRADES, wl, partGain, rebuild: doRebuild, get parts() { return parts; }, get gemsRb() { return gemsRb; }, get ascensions() { return ascensions; }, get rebirths() { return rebirths; },
+    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, stk, stStop, drawTower, renderTower,
     get stats() { return stats; }, achCount, chLevelsTotal, get playTime() { return stats.playTime || 0; },
   };
 } else frame();
