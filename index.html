@@ -772,7 +772,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.20.0";
+const VERSION = "1.21.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2060,7 +2060,7 @@ const RUPGRADES = [
   { id: "chprep", name: "Challenge Prep", x: 2, y: 1, parent: "eventstart", max: 5, base: 3, grow: 2, text: l => `Challenge goals ${pct(Math.pow(0.95, l))}` },
 ];
 const ASC_AT = 25; // tokens earned since the last ascension
-const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(2 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1) * (1 + 0.5 * wl("gempress")));
+const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(3 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1) * (1 + 0.5 * wl("gempress")));
 const AUPGRADES = [
   { id: "shine", name: "Gem Shine", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.8, text: l => `All payouts +${50 * l}%` },
   { id: "fountain", name: "Token Fountain", x: 1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% tokens per rebirth` },
