@@ -781,7 +781,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.24.0";
+const VERSION = "1.24.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2148,10 +2148,10 @@ const COG_TABS = ["set", "stats", "style", "help"];
 const selectedIn = { main: "regen", reb: "golden", asc: "shine", work: "plating" };
 const byId = (T, id) => T.list.find(u => u.id === id);
 // open = can be bought; locked = shown as "?" next to something open; hidden = not shown yet
-// gated = its branch is open, but it also needs something from a prestige tree first (shown by name, can't be bought yet)
+// an upgrade that needs something from a prestige tree first (the Auto Dropper) stays hidden until you have it
 const nodeState = (T, u) => {
   const st = !u.parent || T.lv(u.parent) > 0 ? "open" : nodeState(T, byId(T, u.parent)) === "open" ? "locked" : "hidden";
-  return st === "open" && u.req && !u.req() ? "gated" : st;
+  return u.req && !u.req() ? "hidden" : st;
 };
 let railsBuilt = false;
 function applyUpgrades() {
@@ -2670,7 +2670,7 @@ function renderHelp() {
     ["Upgrades", [
       "The Upgrades tree makes the machine better: faster regen, faster drops, more valuable coins, better slots, more pegs and more.",
       "Buying an upgrade reveals the ones next to it, so the tree grows as you go. Each level costs more than the last.",
-      "Some branches are locked until you buy something in a prestige tree; they show which one they need.",
+      "A few upgrades only appear once you've bought something in a prestige tree, such as the Auto Dropper (Automation, in the Rebirth tree).",
       "Machine upgrades reset when you rebirth. Use the LIST tab to see everything at once.",
     ]],
     ["Arcade", [
