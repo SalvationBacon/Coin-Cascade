@@ -345,10 +345,13 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 .miniMin { position: fixed; z-index: 4; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: 40px; height: 40px; padding: 7px; color: var(--fg); cursor: pointer; }
 .miniMin svg { width: 100%; height: 100%; shape-rendering: crispEdges; }
 body.compact > *:not(#compact) { display: none !important; }
-.compact { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: var(--bg); text-align: center; }
-.compact .cRow b { display: block; font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
-.compact .cRow span, .compact p { font-size: 16px; color: var(--muted); margin: 0; }
-.compact .mbtn { font-size: 10px; padding: 8px 10px; }
+/* minimised: one row, coins on the left and the way back on the right; clicking anywhere also brings it back */
+.compact { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 10px; background: var(--bg); cursor: pointer; overflow: hidden; }
+.compact .cRow { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.compact .cRow b { font-family: var(--display); font-weight: 400; font-size: 16px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+.compact .cRow span { font-size: 15px; color: var(--muted); }
+.compact p { grid-column: 1; margin: 0; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact .mbtn { grid-column: 2; grid-row: 1 / span 2; font-size: 9px; padding: 10px 8px; }
 @media (max-width: 760px) {
   .rail { top: auto; left: 0; width: auto; flex-direction: row; gap: 4px; padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
     border-left: 0; border-top: 3px solid var(--ink); box-shadow: inset 0 2px 0 var(--panel-edge); }
@@ -406,7 +409,7 @@ body.compact > *:not(#compact) { display: none !important; }
 <button class="cogBtn box" id="cogBtn" hidden type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
 <button class="treeBtn box" id="treeBtn" type="button" hidden>UPGRADES<i id="treeBadge" hidden>!</i></button>
 <button class="miniMin box" id="miniMin" type="button" hidden title="Shrink to a small coin counter" aria-label="Minimise"><svg viewBox="0 0 8 8" aria-hidden="true"><path fill="currentColor" d="M1 5h6v2H1z"/></svg></button>
-<div class="compact" id="compact" hidden><div class="cRow"><b id="cBank">0</b><span>coins</span></div><p id="cRate"></p><button class="mbtn" id="cRestore" type="button">RESTORE</button></div>
+<div class="compact" id="compact" hidden title="Click to bring the mini window back"><div class="cRow"><b id="cBank">0</b><span>coins</span></div><p id="cRate"></p><button class="mbtn" id="cRestore" type="button">EXPAND</button></div>
 <button class="flipBtn box" id="flipBtn" type="button" hidden>FLIP</button>
 <button class="flipBtn wheelBtn box" id="wheelBtn" type="button" hidden>WHEEL</button>
 <div class="reels box" id="reels" hidden><canvas id="reelCanvas" width="84" height="30"></canvas><p id="reelMsg">Hit ×5 to spin</p></div>
@@ -634,7 +637,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.4.2";
+const VERSION = "1.4.3";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
@@ -2963,11 +2966,11 @@ function setCompact(on) {
 function updateCompact() {
   if (!compactOn) return;
   $("cBank").textContent = fmt(bank);
-  $("cRate").textContent = (autoOn && autoOwned() ? "Auto Dropper on · " : "Auto Dropper off · ") + `about ${fmt(incomeRate * 60)} a minute`;
+  $("cRate").textContent = (autoOn && autoOwned() ? "Auto on · " : "Auto off · ") + `${fmt(incomeRate * 60)}/min`;
 }
 $("miniMin").hidden = !IS_MINI;
 $("miniMin").addEventListener("click", () => setCompact(true));
-$("cRestore").addEventListener("click", () => setCompact(false));
+$("compact").addEventListener("click", () => setCompact(false));
 setInterval(updateCompact, 500);
 
 let inGame = IS_MINI;
