@@ -439,6 +439,19 @@ body.compact > *:not(#compact) { display: none !important; }
 /* the tray belongs to the cabinet: its trim on three sides, open at the top where the shelf drops coins in */
 .vault { box-sizing: border-box; background: var(--cab2, #1c2028); border: 4px solid var(--trimC, #f5b83d); border-top: 0; box-shadow: 0 6px 0 var(--ink); }
 .vault canvas { background: #00000040; }
+
+/* tutorial: a spotlight on one part of the screen, with a short card beside it */
+.tut { position: fixed; inset: 0; z-index: 35; }
+.tutSpot { position: fixed; border: 3px solid var(--gold); border-radius: 6px; box-shadow: 0 0 0 9999px rgba(6, 9, 15, 0.72); transition: all 0.25s ease; pointer-events: none; }
+.tutSpot.none { width: 0 !important; height: 0 !important; border: 0; }
+.tutCard { position: fixed; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 24px)); box-sizing: border-box; padding: 12px 14px; display: grid; gap: 8px; }
+.tutCard b { font-family: var(--display); font-weight: 400; font-size: 8px; color: var(--muted); }
+.tutCard h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 12px; line-height: 1.5; color: var(--gold); }
+.tutCard p { margin: 0; font-size: 18px; line-height: 1.15; color: var(--fg); }
+.tutCard .row { display: flex; gap: 8px; }
+.tutCard button { font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 9px 12px; cursor: pointer; }
+.tutCard button.quit { background: var(--panel); color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .tutSpot { transition: none; } }
 </style>
 </head>
 <body>
@@ -513,6 +526,9 @@ body.compact > *:not(#compact) { display: none !important; }
 <div class="overlay" id="away" hidden><div class="card box"><h2>In the mini window</h2><p>Coin Cascade is running in its small window, so this one is paused. Close the mini window, or bring it back here.</p><button id="awayBack" type="button">BRING IT BACK HERE</button></div></div>
 <div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2 id="recvTitle">Load progress from another device?</h2><p id="recvMsg"></p>
   <div class="row"><button id="recvYes" type="button">LOAD IT</button><button id="recvNo" class="quit" type="button">KEEP THIS ONE</button></div></div></div>
+<div class="tut" id="tut" hidden><div class="tutSpot" id="tutSpot"></div>
+  <div class="tutCard box" id="tutCard" role="dialog" aria-live="polite"><b id="tutStep"></b><h2 id="tutTitle"></h2><p id="tutText"></p>
+    <div class="row"><button id="tutNext" type="button">NEXT</button><button id="tutSkip" class="quit" type="button">SKIP</button></div></div></div>
 <div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
 <div class="toast box" id="toast" hidden><b id="toastTitle"></b><span id="toastText"></span></div>
 <div class="eventBanner box" id="eventBanner" hidden><b id="evName"></b><span id="evDesc"></span></div>
@@ -696,7 +712,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.13.2";
+const VERSION = "1.14.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2468,9 +2484,11 @@ function renderSettings() {
   const ti = card("", "Title screen", [[`Coin Cascade v${VERSION}`, ""]]);
   const tb = document.createElement("button"); tb.type = "button"; tb.textContent = "BACK TO TITLE";
   tb.addEventListener("click", () => { $("tree").hidden = true; save(); openTitle(); });
-  ti.appendChild(tb); w.appendChild(ti);
+  const tt = document.createElement("button"); tt.type = "button"; tt.textContent = "SHOW TUTORIAL";
+  tt.addEventListener("click", () => { setPanel(false); setTimeout(startTut, 250); });
+  ti.append(tb, tt); w.appendChild(ti);
   // reset
-  const rs = card("", "Reset", [["Wipe everything and start a brand-new game. This can't be undone, so copy your save code first if you might want it back.", ""]]);
+  const rs = card("", "Reset", [["Wipe everything and start a brand-new game. This can't be undone, so export your save first if you might want it back.", ""]]);
   const rb = document.createElement("button"); rb.type = "button"; rb.className = "quit";
   rb.textContent = Date.now() - resetArmed < 3000 ? "CLICK AGAIN TO WIPE EVERYTHING" : "RESET PROGRESS";
   rb.addEventListener("click", () => {
@@ -3196,6 +3214,7 @@ function startGame() {
   sfx.unlock(); sfx.bonus();
   clock.getDelta(); // don't count the time spent on the title
   if (welcomeReady) { welcomeReady = false; $("welcome").hidden = false; }
+  if (!settings.seenTut && location.hash !== "#sim") setTimeout(() => { if ($("welcome").hidden) startTut(); else settings.seenTut || $("welcomeOk").addEventListener("click", () => setTimeout(startTut, 300), { once: true }); }, 600);
 }
 const goInGame = () => { try { sessionStorage.setItem("cc_inGame", "1"); } catch {} };
 $("tContinue").addEventListener("click", startGame);
@@ -3388,6 +3407,49 @@ function askCloud(cloud, data) {
 setInterval(() => { if (!document.hidden) cloudSync(false); }, 60000);
 document.addEventListener("visibilitychange", () => { if (document.hidden) cloudSync(false); else if (fbUser) cloudSync(false); });
 if (syncReady() && settings.cloud) loadFirebase().catch(() => {});
+
+// ---------- Tutorial ----------
+// Six short steps, shown once on your first game; replay it from Menu → Settings.
+const TUT = [
+  { title: "Welcome to Coin Cascade", text: "Drop coins onto the pegs. They bounce into a slot that multiplies them, then ride the pusher off the front and into your tray. Earn coins, upgrade the machine, and keep it growing." },
+  { title: "Drop coins", text: () => matchMedia("(pointer: coarse)").matches ? "Tap the board to drop a coin, or hold to keep dropping. The gold coin at the top fills up when your next drop is ready." : "Click the board or press Space to drop a coin; hold to keep dropping. The gold coin at the top fills up when your next drop is ready.", spot: "drop" },
+  { title: "Your coins", text: "Each drop costs coins, and regen slowly tops you up. THIS RUN counts what you've earned since your last rebirth.", spot: ".top .counters" },
+  { title: "The coin tray", text: "Coins that fall off the pusher land in the tray. Press BANK to turn them into coins you can spend. A full tray banks itself.", spot: "#vault" },
+  { title: "The menus", text: "Upgrades makes the machine better, Arcade has the gambles, Goals has achievements and challenges, Prestige is for rebirths, and Menu has settings and cloud save.", spot: "#rail" },
+  { title: "The aim of the game", text: "Earn 1,000 coins in a run, then rebirth for tokens. Tokens buy permanent upgrades, so every run goes further than the last. Later you'll ascend for gems. Have fun!" },
+];
+let tutI = -1;
+function tutSpotRect(spot) {
+  if (spot === "drop") { // around the coin waiting at the top of the board
+    tmpV.set(ghost.position.x, ghost.position.y, ghost.position.z).project(camera);
+    const x = (tmpV.x + 1) / 2 * innerWidth, y = (1 - tmpV.y) / 2 * innerHeight, r = Math.max(36, Math.min(innerWidth, innerHeight) * 0.08);
+    return { left: x - r * 2.2, top: y - r, width: r * 4.4, height: r * 3.2 };
+  }
+  const el = spot && document.querySelector(spot); return el ? el.getBoundingClientRect() : null;
+}
+function showTut(i) {
+  tutI = i; const st = TUT[i]; if (!st) return endTut();
+  $("tut").hidden = false;
+  $("tutStep").textContent = `${i + 1} / ${TUT.length}`; $("tutTitle").textContent = st.title;
+  $("tutText").textContent = typeof st.text === "function" ? st.text() : st.text;
+  $("tutNext").textContent = i === TUT.length - 1 ? "LET'S GO" : "NEXT"; $("tutSkip").hidden = i === TUT.length - 1;
+  const r = tutSpotRect(st.spot), spot = $("tutSpot"), card = $("tutCard");
+  spot.classList.toggle("none", !r);
+  if (r) Object.assign(spot.style, { left: r.left - 6 + "px", top: r.top - 6 + "px", width: r.width + 12 + "px", height: r.height + 12 + "px" });
+  else Object.assign(spot.style, { left: innerWidth / 2 + "px", top: innerHeight / 2 + "px" });
+  // the card goes on whichever side of the highlight has more room
+  const mid = r ? r.top + r.height / 2 : innerHeight / 2;
+  card.style.top = card.style.bottom = "";
+  if (!r) card.style.top = "30%";
+  else if (mid > innerHeight / 2) card.style.top = Math.max(12, r.top - 18 - card.offsetHeight) + "px";
+  else card.style.top = Math.min(innerHeight - card.offsetHeight - 12, r.top + r.height + 18) + "px";
+  $("tutNext").focus();
+}
+function startTut() { if (titleOpen) return; $("tree").hidden || setPanel(false); settings.seenBank = true; $("toast").hidden = true; showTut(0); } // the tutorial covers the tray, so its one-time tip is skipped
+function endTut() { tutI = -1; $("tut").hidden = true; settings.seenTut = true; saveSettings(); }
+$("tutNext").addEventListener("click", () => { sfx.click?.(); showTut(tutI + 1); });
+$("tutSkip").addEventListener("click", endTut);
+addEventListener("resize", () => { if (tutI >= 0) showTut(tutI); });
 
 // ---------- Install button ----------
 // Chrome and Edge hand us an install prompt; on iPhone and iPad it's Share, then Add to Home Screen.
