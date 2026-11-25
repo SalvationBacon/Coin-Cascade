@@ -728,7 +728,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.15.0";
+const VERSION = "1.15.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1934,7 +1934,7 @@ const UPGRADES = [
   { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 2.0, text: l => l ? `An event about every ${Math.round(eventGap(Math.max(l, rl("eventstart"))))}s` : "No random events" },
   { id: "wheel", name: "Prize Wheel", x: 3, y: 1, parent: "eventlen", max: 1, base: 200, grow: 1, text: l => l ? "Earning charges the prize wheel" : "Unlocks the prize wheel" },
   { id: "wheelfast", name: "Fast Charge", x: 3, y: 2, parent: "wheel", max: 5, base: 150, grow: 2, text: l => `The wheel charges ${pct(1 + 0.2 * l)} as fast` },
-  { id: "eventlen", name: "Longer Events", x: 2, y: 1, parent: "events", max: 5, base: 80, grow: 1.9, text: l => `Events last ${pct(eventLen(l))} as long` },
+  { id: "eventlen", name: "Longer Events", x: 2, y: 1, parent: "events", max: 5, base: 250, grow: 2.4, text: l => `Events last ${pct(eventLen(l))} as long` },
   { id: "edge", name: "Edge Payout", x: 0, y: -1, parent: "regen", max: 7, base: 25, grow: 1.7, text: l => `Edge slots pay ×${3 + l}` },
   { id: "jackpot", name: "Jackpot Value", x: 0, y: -3, parent: "value", max: 10, base: 40, grow: 1.75, text: l => `Middle slot pays ×${5 + l}` },
   { id: "wide", name: "Wide Jackpot", x: 1, y: -3, parent: "jackpot", max: 5, base: 30, grow: 1.9, text: l => `${pct(0.45 + 0.08 * l)} of coins stay in the middle` },
@@ -2668,10 +2668,11 @@ function renderChallenges() {
 
 // ---------- Random events ----------
 const EVENTS = [
-  { id: "gold", name: "GOLD RUSH", desc: "Coins are worth double", dur: 20 },
-  { id: "frenzy", name: "FRENZY", desc: "Fast drops, and they're free", dur: 15 },
-  { id: "shower", name: "COIN SHOWER", desc: "Free coins rain onto the board", dur: 6 },
-  { id: "magnet", name: "JACKPOT MAGNET", desc: "Every coin reaching the middle stays in it", dur: 20 },
+  // base lengths in seconds (Longer Events adds 20% per level)
+  { id: "gold", name: "GOLD RUSH", desc: "Coins are worth double", dur: 10 },
+  { id: "frenzy", name: "FRENZY", desc: "Fast drops, and they're free", dur: 8 },
+  { id: "shower", name: "COIN SHOWER", desc: "Free coins rain onto the board", dur: 4 },
+  { id: "magnet", name: "JACKPOT MAGNET", desc: "Every coin reaching the middle stays in it", dur: 10 },
 ];
 let ev = null, evEnd = 0, nextEv = 0, evFrom = 0, showerT = 0;
 const eventOn = id => ev && ev.id === id;
