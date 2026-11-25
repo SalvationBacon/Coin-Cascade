@@ -59,7 +59,16 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 }
 .hint kbd { font-family: var(--body); font-size: 18px; color: var(--ink); background: var(--muted); padding: 0 5px; }
 .bonusbar { margin-left: 8px; color: var(--gold); white-space: nowrap; }
-.touch-only { display: none; }
+.touch-only, .desk-short { display: none; }
+@media (max-width: 360px) { .hint .desk-short, .hint .touch-only, .hint .bonusbar { display: none !important; } } /* very narrow: just the cooldown bar */
+@media (max-width: 760px) and (pointer: fine) { .hint .desk { display: none; } .hint .desk-short { display: inline; } }
+.cogBtn { position: fixed; z-index: 4; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  width: 44px; height: 44px; padding: 8px; color: var(--fg); cursor: pointer; display: grid; place-items: center; }
+.cogBtn svg { width: 24px; height: 24px; shape-rendering: crispEdges; }
+.cogBtn:hover, .cogBtn:focus-visible { color: var(--gold); outline: none; }
+.top { right: calc(max(16px, env(safe-area-inset-right, 0px)) + 56px); }
+#tree[data-group="cog"] #tabMain, #tree[data-group="cog"] #tabReb, #tree[data-group="cog"] #tabAsc, #tree[data-group="cog"] #tabCh, #tree[data-group="cog"] #tabGoals,
+#tree[data-group="up"] #tabStats, #tree[data-group="up"] #tabStyle, #tree[data-group="up"] #tabSet { display: none; }
 @media (pointer: coarse) { .hint .desk { display: none; } .touch-only { display: inline; } }
 @media (max-width: 560px) { .counter { min-width: 54px; padding: 5px 6px 3px; } .counter b { font-size: 12px; } .counter span { font-size: 14px; } }
 
@@ -305,6 +314,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 
 <div class="hint box" id="hint">
   <span class="desk">Move the mouse to aim · <kbd>Click</kbd> or <kbd>Space</kbd> to drop · hold to keep dropping</span>
+  <span class="desk-short">Aim with the mouse · <kbd>Click</kbd> or <kbd>Space</kbd> drops</span>
   <span class="touch-only">Tap or hold where you want to drop</span>
   <span class="bonusbar" id="bonusbar">×5 in the middle · ×3 on the edges</span>
   <div class="cool" aria-hidden="true"><i id="coolBar"></i></div>
@@ -312,6 +322,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 
 <div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the vault</span></div>
 
+<button class="cogBtn box" id="cogBtn" type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
 <button class="treeBtn box" id="treeBtn" type="button">UPGRADES<i id="treeBadge" hidden>!</i></button>
 <button class="flipBtn box" id="flipBtn" type="button" hidden>FLIP</button>
 <button class="flipBtn wheelBtn box" id="wheelBtn" type="button" hidden>WHEEL</button>
@@ -532,8 +543,8 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.2.0";
-let titleOpen = false, welcomeReady = false; // title screen state (see "Title screen")
+const VERSION = "1.3.0";
+let titleOpen = false, welcomeReady = false, awayOn = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
 const saved = store.get(SAVE_KEY, null);
@@ -630,6 +641,7 @@ scene.background = new THREE.Color(hex(P.bg));
 const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 60);
 const camBase = new THREE.Vector3(0, 8.6, 15.6);
 const camLook = new THREE.Vector3(0, 3.5, -1.0);
+const tmpFit = new THREE.Vector3();
 
 const post = new THREE.ShaderMaterial({
   uniforms: { tColor: { value: null }, res: { value: new THREE.Vector2() } },
@@ -666,10 +678,36 @@ function resize() {
   makeTarget();
   post.uniforms.res.value.set(lowW, lowH);
   camera.aspect = innerWidth / innerHeight;
-  // Pull back on narrow screens so the whole playfield stays in view
-  const k = camera.aspect < 1 ? 1 + (1 - camera.aspect) * 0.75 : 1;
-  camera.position.copy(camBase).sub(camLook).multiplyScalar(k).add(camLook);
-  camera.lookAt(camLook);
+  camera.clearViewOffset();
+  if (innerWidth > 760) {
+    // wide screens: the HUD sits at the sides, so the default framing is fine
+    camera.position.copy(camBase); camera.lookAt(camLook); camera.updateProjectionMatrix();
+    return;
+  }
+  fitNarrow();
+}
+// Narrow screens (phones, the mini window): fit the whole machine, from the dropper at the top to the
+// prize shelf at the bottom, into the gap between the counters and the buttons, whatever the window's shape.
+const FIT_PTS = [[0, 10.1, -2.4], [-3.9, 10.1, -2.4], [3.9, 10.1, -2.4], [0, -0.3, 3.6], [-4.4, 4, 1.2], [4.4, 4, 1.2], [-4.4, 0, 3.4], [4.4, 0, 3.4]].map(a => new THREE.Vector3(...a));
+function fitNarrow() {
+  const W = innerWidth, H = innerHeight;
+  const topR = document.querySelector(".top")?.getBoundingClientRect(), vR = $("vault")?.getBoundingClientRect();
+  const safeTop = Math.min(H * 0.4, (topR ? topR.bottom : 100) + 4);
+  const safeBot = Math.max(safeTop + H * 0.3, (vR && vR.height ? vR.top : H - 140) - 4);
+  const span = k => {
+    camera.position.copy(camBase).sub(camLook).multiplyScalar(k).add(camLook);
+    camera.lookAt(camLook); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+    let y0 = Infinity, y1 = -Infinity, x0 = Infinity, x1 = -Infinity;
+    for (const p of FIT_PTS) { const v = tmpFit.copy(p).project(camera); const x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H; y0 = Math.min(y0, y); y1 = Math.max(y1, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+    return { y0, y1, x0, x1 };
+  };
+  // pull the camera back until the machine fits both ways (closest that fits = biggest on screen)
+  let lo = 0.6, hi = 4;
+  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2, s = span(m); if (s.y1 - s.y0 <= safeBot - safeTop && s.x1 - s.x0 <= W - 8) hi = m; else lo = m; }
+  const s = span(hi);
+  // then slide the picture so the machine sits in the middle of the free gap
+  const dy = (s.y0 + s.y1) / 2 - (safeTop + safeBot) / 2;
+  camera.setViewOffset(W, H, 0, dy, W, H);
   camera.updateProjectionMatrix();
 }
 resize();
@@ -1605,6 +1643,7 @@ const TREES = {
   reb: { list: RUPGRADES, lv: rl, set: (id, v) => { rups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, rl(u.id))), has: () => tokens, pay: c => { tokens -= c; }, unit: "tokens" },
 };
 let treeId = "main";
+const COG_TABS = ["set", "stats", "style"];
 const selectedIn = { main: "regen", reb: "golden", asc: "shine" };
 const byId = (T, id) => T.list.find(u => u.id === id);
 // open = can be bought; locked = shown as "?" next to something open; hidden = not shown yet
@@ -1649,6 +1688,7 @@ function extents(T) {
 }
 const nodeCenter = (T, u) => { const e = extents(T); return [24 + (u.x - e.minX) * CELL_W + CELL_W / 2, 24 + (u.y - e.minY) * CELL_H + CELL_H / 2]; };
 function renderTree() {
+  $("tree").dataset.group = COG_TABS.includes(treeId) ? "cog" : "up";
   if ($("tree").hidden) return;
   $("tabMain").classList.toggle("on", treeId === "main"); $("tabReb").classList.toggle("on", treeId === "reb");
   $("tabCh").classList.toggle("on", treeId === "ch"); $("tabAsc").classList.toggle("on", treeId === "asc");
@@ -1771,7 +1811,9 @@ function centerTree() {
   const T = TREES[treeId], root = T.list[0], [cx, cy] = nodeCenter(T, root), sc = $("treeScroll");
   sc.scrollLeft = cx - sc.clientWidth / 2; sc.scrollTop = cy - sc.clientHeight / 2;
 }
-$("treeBtn").addEventListener("click", () => { $("tree").hidden = false; renderTree(); centerTree(); });
+// UPGRADES opens the trees, challenges and goals; the cog opens settings, stats and style
+$("treeBtn").addEventListener("click", () => { if (COG_TABS.includes(treeId)) treeId = "main"; $("tree").hidden = false; renderTree(); if (TREES[treeId]) centerTree(); else $("treeScroll").scrollTo(0, 0); });
+$("cogBtn").addEventListener("click", () => { if (!COG_TABS.includes(treeId)) treeId = "set"; $("tree").hidden = false; renderTree(); $("treeScroll").scrollTo(0, 0); });
 $("tabMain").addEventListener("click", () => { treeId = "main"; renderTree(); centerTree(); });
 $("tabReb").addEventListener("click", () => { treeId = "reb"; renderTree(); centerTree(); });
 $("tabAsc").addEventListener("click", () => { treeId = "asc"; renderTree(); centerTree(); });
@@ -2491,6 +2533,7 @@ function tick(dt) {
   if ((rateT += dt) >= 10) { incomeRate = incomeRate * 0.8 + (rateEarn / rateT) * 0.2; rateEarn = 0; rateT = 0; }
 }
 function frame() {
+  if (awayOn) return; // the mini window is playing; this copy sleeps
   const dt = Math.min(clock.getDelta(), 0.1);
   if (!titleOpen) tick(dt);
   updateJar(dt); drawFlipCoin(dt);
@@ -2603,12 +2646,15 @@ updateInstall();
 const IS_MINI = location.hash === "#mini";
 const MINI_W = 380, MINI_H = 700;
 const chan = "BroadcastChannel" in window ? new BroadcastChannel("cc_mini") : null;
-let miniWin = null, awayOn = false;
+let miniWin = null;
 function canMini() { return !IS_MINI && innerWidth >= 700 && !matchMedia("(pointer: coarse)").matches; }
 function updateMini() { $("tMini").hidden = !canMini(); }
 function goAway(win) {
   miniWin = win; awayOn = true; saveBlocked = true; titleOpen = true; holding = false;
   music.stop(); $("title").hidden = true; $("away").hidden = false;
+  // only one copy of the game runs: this one stops drawing and frees the graphics card until the mini window closes
+  document.title = "Coin Cascade (in the mini window)";
+  setTimeout(() => { try { renderer.forceContextLoss(); } catch {} }, 100);
   const watch = setInterval(() => { if (!miniWin || miniWin.closed) { clearInterval(watch); comeBack(); } }, 500);
 }
 function comeBack() {
@@ -2661,6 +2707,9 @@ if (location.hash === "#sim") {
 } else frame();
 
 addEventListener("resize", resize);
+// the counters and vault change size as the pixel font loads and numbers grow, so re-fit the narrow framing then too
+if ("ResizeObserver" in window) { const ro = new ResizeObserver(() => { if (innerWidth <= 760) fitNarrow(); }); ro.observe(document.querySelector(".top")); ro.observe($("vault")); }
+document.fonts?.ready.then(() => { if (innerWidth <= 760) fitNarrow(); });
 </script>
 
 </body>
