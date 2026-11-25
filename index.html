@@ -662,7 +662,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.7.0";
+const VERSION = "1.7.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2477,7 +2477,9 @@ function sizeJar() {
   JW = jar.width = Math.max(40, Math.round(r.width / k)); JH = jar.height = Math.max(30, Math.round(r.height / k)); FLOOR = JH - 4;
   jg.imageSmoothingEnabled = false;
   const bb = $("bankBtn"); TRAY_RIGHT = JW - (bb ? Math.ceil((bb.offsetWidth + 18) / k) : 0); // coins stay left of the BANK button
-  for (const c of coinTray) c.x = Math.min(c.x, TRAY_RIGHT - CW / 2 - 3);
+  const usable = Math.max(1, (TRAY_RIGHT - 8) * (FLOOR - 6));
+  RC = Math.max(5, Math.min(10, Math.sqrt(usable * 1.5 / (TRAY_CAP * Math.PI))));
+  for (const c of coinTray) c.x = Math.min(c.x, TRAY_RIGHT - RC - 3);
 }
 addEventListener("resize", sizeJar);
 if ("ResizeObserver" in window) new ResizeObserver(sizeJar).observe(jar);
@@ -2488,14 +2490,17 @@ const RADII = [8, 8, 8, 8];
 // The tray: every coin pushed off the shelf lands here lying flat and piles up. They're yours to spend once you
 // press BANK; a full tray banks itself so nothing is ever lost. Simple 2D physics: gravity, walls, coins resting on
 // coins, and a coin sitting off the edge of another slides off it, so piles slump like real coins.
-const TRAY_CAP = 30, CW = 14, CH = 4; // coin size in tray pixels (lying down: wide and thin)
+const TRAY_CAP = 40;
+let RC = 6; // coin radius in tray pixels: sized so a full tray looks packed, like a jar of pennies
 let bankedFx = 0;
 const trayLive = () => coinTray.filter(c => !c.out);
 const trayValue = () => { let n = 0; for (const c of coinTray) if (!c.out) n += c.v; return n; };
 function addTrayCoin(v, x) {
   const R = Math.min(JW, TRAY_RIGHT);
-  const xx = x == null ? CW / 2 + 4 + Math.random() * (R - CW - 8) : Math.min(R - CW / 2 - 4, Math.max(CW / 2 + 4, x));
-  coinTray.push({ v, x: xx, y: -CH, vx: (Math.random() - 0.5) * 30, vy: 40, face: flyFace(Math.max(1, Math.round(v))), out: false });
+  const xx = x == null ? RC + 4 + Math.random() * (R - 2 * RC - 8) : Math.min(R - RC - 4, Math.max(RC + 4, x));
+  // each coin settles at its own tilt and angle, some nearer the glass than others (depth: 0 = back, 1 = front)
+  coinTray.push({ v, x: xx, y: -RC, vx: (Math.random() - 0.5) * 30, vy: 40, face: flyFace(Math.max(1, Math.round(v))), out: false,
+    tilt: 0.25 + Math.random() * 0.7, ang: (Math.random() - 0.5) * 0.9, depth: Math.random() });
   if (!settings.seenBank) { settings.seenBank = true; saveSettings(); showToast("YOUR COIN TRAY", "Coins land in the tray. Press BANK to spend them."); }
   if (trayLive().length >= TRAY_CAP) bankTray(true);
   updateTrayHud();
@@ -2520,42 +2525,50 @@ $("bankBtn").addEventListener("click", () => { sfx.unlock(); bankTray(false); })
 addEventListener("keydown", e => { if (e.code === "KeyB" && !e.target.closest?.("input, textarea")) bankTray(false); });
 function updateJar(dt) {
   if (bankedFx > 0 && (bankedFx -= dt) <= 0) updateTrayHud();
+  const R = Math.min(JW, TRAY_RIGHT), D = RC * 1.45; // coins may overlap a little (they're at different depths), so piles pack tight
   const sub = 3, h = Math.min(dt, 0.05) / sub;
   for (let s = 0; s < sub; s++) {
     for (const c of coinTray) {
       c.vy += 700 * h; c.x += c.vx * h; c.y += c.vy * h;
       if (c.out) continue; // banked coins fall straight through the floor
       c.vx *= 0.97;
-      if (c.x < CW / 2 + 3) { c.x = CW / 2 + 3; c.vx = Math.abs(c.vx) * 0.3; }
-      const R = Math.min(JW, TRAY_RIGHT);
-      if (c.x > R - CW / 2 - 3) { c.x = R - CW / 2 - 3; c.vx = -Math.abs(c.vx) * 0.3; }
-      if (c.y > FLOOR - CH / 2) { c.y = FLOOR - CH / 2; c.vy = 0; c.vx *= 0.7; }
+      if (c.x < RC + 3) { c.x = RC + 3; c.vx = Math.abs(c.vx) * 0.3; }
+      if (c.x > R - RC - 3) { c.x = R - RC - 3; c.vx = -Math.abs(c.vx) * 0.3; }
+      const fl = FLOOR - RC * c.tilt * 0.8;
+      if (c.y > fl) { c.y = fl; c.vy = -c.vy * 0.15; c.vx *= 0.7; }
     }
     for (let i = 0; i < coinTray.length; i++) for (let j = i + 1; j < coinTray.length; j++) {
       const a = coinTray[i], b = coinTray[j];
       if (a.out || b.out) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      if (Math.abs(dx) >= CW || Math.abs(dy) >= CH) continue;
-      // the higher coin rests on the lower one
-      const top = dy > 0 ? a : b, low = top === a ? b : a, off = top.x - low.x;
-      top.y = low.y - CH; if (top.vy > 0) top.vy = 0;
-      if (Math.abs(off) > CW * 0.3) top.vx += Math.sign(off) * 900 * h; // hanging off the edge: slide off
-      else top.vx *= 0.8;
+      const dx = b.x - a.x, dy = (b.y - a.y) * 1.6, d = Math.hypot(dx, dy); // squashed: coins stack lower than they are wide
+      if (d >= D || d === 0) continue;
+      const nx = dx / d, ny = dy / d, push = (D - d) / 2;
+      a.x -= nx * push; a.y -= ny * push / 1.6; b.x += nx * push; b.y += ny * push / 1.6;
+      const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rv < 0) { const imp = -rv * 0.5; a.vx -= imp * nx; a.vy -= imp * ny; b.vx += imp * nx; b.vy += imp * ny; }
     }
   }
-  for (let i = coinTray.length - 1; i >= 0; i--) if (coinTray[i].out && coinTray[i].y > JH + 8) coinTray.splice(i, 1);
-  // draw: each coin is its own face squashed flat, with a darker edge underneath for thickness
+  for (let i = coinTray.length - 1; i >= 0; i--) if (coinTray[i].out && coinTray[i].y > JH + RC * 2) coinTray.splice(i, 1);
+  // draw: back coins first and darker, each one its own face tilted at its own angle, with a thin rim
   jg.clearRect(0, 0, JW, JH);
   jg.fillStyle = "#ffffff0d"; jg.fillRect(3, 3, JW - 6, FLOOR - 3);
   jg.fillStyle = P.metalDark; jg.fillRect(1, 1, 2, FLOOR); jg.fillRect(JW - 3, 1, 2, FLOOR);
   if (!coinTray.some(c => c.out)) jg.fillRect(1, FLOOR, JW - 2, 3); // the floor opens while banking
   jg.save(); jg.beginPath(); jg.rect(3, 0, JW - 6, JH); jg.clip();
-  for (const c of coinTray) {
-    const x = Math.round(c.x - CW / 2), y = Math.round(c.y - CH / 2);
-    jg.fillStyle = "#00000088"; jg.fillRect(x + 1, y + CH - 1, CW - 2, 2);
-    jg.drawImage(c.face, x, y, CW, CH);
+  const order = coinTray.slice().sort((a, b) => a.depth - b.depth);
+  const w = RC * 2.3;
+  for (const c of order) {
+    jg.save(); jg.translate(Math.round(c.x), Math.round(c.y)); jg.rotate(c.ang);
+    const hh = Math.max(3, w * c.tilt);
+    jg.fillStyle = "#000000aa"; jg.beginPath(); jg.ellipse(0, 1.5, w / 2, hh / 2, 0, 0, Math.PI * 2); jg.fill(); // rim / shadow
+    jg.drawImage(c.face, -w / 2, -hh / 2, w, hh);
+    const dark = (1 - c.depth) * 0.45; // coins at the back sit in shadow
+    if (dark > 0.02) { jg.fillStyle = `rgba(6,9,15,${dark.toFixed(2)})`; jg.beginPath(); jg.ellipse(0, 0, w / 2, hh / 2, 0, 0, Math.PI * 2); jg.fill(); }
+    jg.restore();
   }
   jg.restore();
+  // a soft glass highlight down the front
+  jg.fillStyle = "#ffffff12"; jg.fillRect(Math.round(JW * 0.1), 4, Math.max(2, Math.round(JW * 0.02)), FLOOR - 6);
 }
 // Coins pushed off the front fly down into the tray. Drawn on one see-through layer over the game.
 const fly = $("flyLayer"), flyG = fly.getContext("2d");
