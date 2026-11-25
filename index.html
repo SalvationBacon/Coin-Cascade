@@ -379,6 +379,20 @@ body.compact > *:not(#compact) { display: none !important; }
   .insert { margin: 0; }
   .mbtn { padding: 10px; font-size: 11px; }
 }
+
+/* ---- the vault: a wide coin tray along the bottom of the play area ---- */
+#hint { display: none !important; }
+.vault { top: auto; left: max(16px, env(safe-area-inset-left, 0px)); right: calc(var(--panelW, 84px) + 16px); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 6px; height: 84px; display: block; }
+.vault canvas { width: 100%; height: 100%; }
+.vault b { position: absolute; left: 12px; top: 8px; margin: 0; font-size: 14px; z-index: 1; }
+.vault span { position: absolute; left: 12px; top: 28px; font-size: 14px; }
+.flyLayer { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+@media (max-width: 760px) {
+  .vault { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(var(--dockH, 64px) + 8px); height: 66px; padding: 3px 4px; }
+  .vault canvas { width: 100%; height: 100%; }
+  .vault b { font-size: 11px; left: 9px; top: 6px; } .vault span { display: none; }
+}
 </style>
 </head>
 <body>
@@ -404,6 +418,7 @@ body.compact > *:not(#compact) { display: none !important; }
   <div class="cool" aria-hidden="true"><i id="coolBar"></i></div>
 </div>
 
+<canvas class="flyLayer" id="flyLayer" aria-hidden="true"></canvas>
 <div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the vault</span></div>
 
 <button class="cogBtn box" id="cogBtn" hidden type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
@@ -637,7 +652,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.4.3";
+const VERSION = "1.5.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
@@ -698,6 +713,7 @@ function refreshHud() {
 // ordered dithering and dark outlines. The canvas is scaled up with hard pixel edges.
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setPixelRatio(1);
+renderer.localClippingEnabled = true; // lets the drop coin fill up from the bottom
 // Graphics setting. Max draws at your screen's full sharpness with smooth shadows and edges;
 // Retro is the chunky ~500-pixel-tall look; Low also turns shadows off for slow computers.
 const GFX = {
@@ -795,7 +811,7 @@ function fitCamera() {
   }
   const topR = document.querySelector(".top")?.getBoundingClientRect(), vR = $("vault")?.getBoundingClientRect(), hR = $("hint")?.getBoundingClientRect();
   const safeTop = Math.min(H * 0.4, (topR ? topR.bottom : 100) + 4);
-  const lowest = narrow ? (vR && vR.height ? vR.top : H - 140) : (hR && hR.height ? hR.top : H - 90);
+  const lowest = vR && vR.height ? vR.top : H - 120; // stop above the coin tray
   fitInto(right, safeTop, Math.max(safeTop + H * 0.3, lowest - 4));
 }
 // pull the camera back until the machine fits (closest that fits = biggest on screen), then slide it into the gap
@@ -1301,10 +1317,14 @@ function settleCoins() {
 
 // ---------- Dropping onto the peg board ----------
 let aimX = 0;
+// The coin waiting at the top: gold fills it from the bottom up while the next drop gets ready.
 const ghost = new THREE.Group();
+const ghostFill = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
 {
-  const m = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.gold), transparent: true, opacity: 0.55 }));
+  const m = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.gold), transparent: true, opacity: 0.95, clippingPlanes: [ghostFill] }));
   m.rotation.x = Math.PI / 2; ghost.add(m);
+  const back = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.metalDark), transparent: true, opacity: 0.55, depthWrite: false }));
+  back.rotation.x = Math.PI / 2; back.position.z = -0.02; back.scale.set(1.08, 1, 1.08); ghost.add(back);
 }
 ghost.position.set(0, BOARD.dropY, BOARD_Z); scene.add(ghost);
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -1656,6 +1676,7 @@ function stepPhysics(counting) {
         wheelCharge += v;
         bank += v; earned += v; runEarned += v; rateEarn += v;
         popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), "+" + fmtV(v), v > 1 ? "big" : "");
+        if (v > 0) flyToVault(new THREE.Vector3(t.x, 0.1, FLOOR_FRONT + 0.3), v);
         sfx.win(v);
       } else {
         popAt(new THREE.Vector3(t.x, 0, t.z), "LOST", "lost");
@@ -2422,14 +2443,25 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) save(
 // 1000s, ...), so 347 coins = 3 big, 4 medium, 7 small. Earn a tenth coin and the ten drop out
 // while a bigger one falls in; the rest shuffle around it.
 const jar = $("jar"), jg = jar.getContext("2d"); jg.imageSmoothingEnabled = false;
-const JW = jar.width, JH = jar.height, FLOOR = JH - 6;
+let JW = jar.width, JH = jar.height, FLOOR = JH - 6;
+// the tray stretches across the screen: match the canvas to it (1 canvas pixel = 1.5 screen pixels on a computer)
+function sizeJar() {
+  const r = jar.getBoundingClientRect(); if (!r.width) return;
+  const k = innerWidth <= 760 ? 1 : 1.5;
+  JW = jar.width = Math.max(40, Math.round(r.width / k)); JH = jar.height = Math.max(30, Math.round(r.height / k)); FLOOR = JH - 4;
+  jg.imageSmoothingEnabled = false;
+  for (const c of vcoins) c.x = Math.min(c.x, JW - 6 - c.r);
+}
+addEventListener("resize", sizeJar);
+if ("ResizeObserver" in window) new ResizeObserver(sizeJar).observe(jar);
 // each place value is drawn as the real coin for that value: 1, 10, 100, 1K, ...
 const vaultFaces = new Map();
 const vaultFace = e => { if (!vaultFaces.has(e)) vaultFaces.set(e, valueFace(10 ** e).image); return vaultFaces.get(e); };
 const RADII = [8, 8, 8, 8];
 const vcoins = []; // { exp, r, x, y, vx, vy, out, a }
+let flyingVal = 0; // coins on their way from the pusher to the vault: they join the tray when they land
 function vaultTarget() {
-  const t = new Map(), b = Math.floor(bank);
+  const t = new Map(), b = Math.floor(Math.max(0, bank - flyingVal));
   if (b < 1) return t;
   const top = Math.floor(Math.log10(b));
   for (let i = 0; i < 4 && top - i >= 0; i++) {
@@ -2447,7 +2479,7 @@ function updateJar(dt) {
     const mine = live.filter(c => c.exp === e && !c.out);
     for (const c of mine) c.r += (r - c.r) * Math.min(1, dt * 6);
     if (mine.length > n) mine.sort((a, b) => a.y - b.y).slice(0, mine.length - n).forEach(c => { c.out = true; });
-    for (let k = mine.length; k < n; k++) vcoins.push({ exp: e, r, x: 6 + r + Math.random() * (JW - 12 - 2 * r), y: -r - k * 2 * r, vx: 0, vy: 0, out: false, a: 1 });
+    for (let k = mine.length; k < n; k++) { const lx = landX.length ? landX.shift() : null; vcoins.push({ exp: e, r, x: lx != null ? Math.min(JW - 6 - r, Math.max(6 + r, lx)) : 6 + r + Math.random() * (JW - 12 - 2 * r), y: -r - k * 2 * r, vx: 0, vy: 0, out: false, a: 1 }); }
   }
   // physics: gravity, walls, floor, and coins pushing each other apart
   const sub = 3, h = Math.min(dt, 0.05) / sub;
@@ -2473,14 +2505,41 @@ function updateJar(dt) {
   for (let i = vcoins.length - 1; i >= 0; i--) if (vcoins[i].out && (vcoins[i].a <= 0 || vcoins[i].y > JH + 20)) vcoins.splice(i, 1);
   // draw
   jg.clearRect(0, 0, JW, JH);
-  jg.fillStyle = "#ffffff0d"; jg.fillRect(4, 4, JW - 8, FLOOR - 4);
-  jg.fillStyle = P.metalDark; jg.fillRect(2, 2, 2, FLOOR); jg.fillRect(JW - 4, 2, 2, FLOOR); jg.fillRect(2, FLOOR, JW - 4, 3);
+  jg.fillStyle = "#ffffff0d"; jg.fillRect(3, 3, JW - 6, FLOOR - 3);
+  jg.fillStyle = P.metalDark; jg.fillRect(1, 1, 2, FLOOR); jg.fillRect(JW - 3, 1, 2, FLOOR); jg.fillRect(1, FLOOR, JW - 2, 3);
   for (const c of vcoins) {
     jg.globalAlpha = Math.max(0, c.a);
     jg.drawImage(vaultFace(c.exp), Math.round(c.x - 8), Math.round(c.y - 8));
   }
   jg.globalAlpha = 1;
   $("jarCount").textContent = fmt(bank);
+}
+
+// Coins pushed off the front fly down into the tray. Drawn on one see-through layer over the game.
+const fly = $("flyLayer"), flyG = fly.getContext("2d"), flyers = [], landX = [];
+function sizeFly() { fly.width = innerWidth; fly.height = innerHeight; flyG.imageSmoothingEnabled = false; }
+sizeFly(); addEventListener("resize", sizeFly);
+const flyFaces = new Map();
+const flyFace = v => { const k = Math.min(v, 1e6); if (!flyFaces.has(k)) flyFaces.set(k, valueFace(k).image); return flyFaces.get(k); };
+function flyToVault(worldPos, v) {
+  const r = jar.getBoundingClientRect();
+  if (!r.width || flyers.length > 40 || compactOn || document.hidden) return; // too many at once: they just arrive
+  tmpV.copy(worldPos).project(camera);
+  const sx = (tmpV.x + 1) / 2 * innerWidth, sy = (1 - tmpV.y) / 2 * innerHeight;
+  const ex = r.left + 16 + Math.random() * Math.max(1, r.width - 32), ey = r.top + r.height * 0.45;
+  flyers.push({ sx, sy, ex, ey, t: 0, dur: 0.45 + Math.random() * 0.15, v, face: flyFace(Math.max(1, Math.round(v))) });
+  flyingVal += v;
+}
+function drawFlyers(dt) {
+  if (!flyers.length) { if (fly.dataset.dirty) { flyG.clearRect(0, 0, fly.width, fly.height); delete fly.dataset.dirty; } return; }
+  flyG.clearRect(0, 0, fly.width, fly.height); fly.dataset.dirty = "1";
+  const r = jar.getBoundingClientRect(), k = innerWidth <= 760 ? 1 : 1.5, size = Math.round(16 * k);
+  for (let i = flyers.length - 1; i >= 0; i--) {
+    const f = flyers[i]; f.t += dt / f.dur;
+    if (f.t >= 1) { flyers.splice(i, 1); flyingVal = Math.max(0, flyingVal - f.v); landX.push((f.ex - r.left) / k); if (landX.length > 20) landX.shift(); continue; }
+    const t = f.t, x = f.sx + (f.ex - f.sx) * t, y = f.sy + (f.ey - f.sy) * t - Math.sin(t * Math.PI) * 60;
+    flyG.drawImage(f.face, Math.round(x - size / 2), Math.round(y - size / 2), size, size);
+  }
 }
 
 // ---------- Double or Nothing (coin flip side game) ----------
@@ -2798,12 +2857,14 @@ function frame() {
   if (awayOn) return; // the mini window is playing; this copy sleeps
   const dt = Math.min(clock.getDelta(), 0.1);
   if (!titleOpen) tick(dt);
-  updateJar(dt); drawFlipCoin(dt);
+  updateJar(dt); drawFlyers(dt); drawFlipCoin(dt);
   const coolFrac = Math.min(1, (performance.now() - lastDrop) / (dropCooldown() * 1000));
   $("coolBar").style.width = Math.round(coolFrac * 100) + "%";
   ghost.position.x += (aimX - ghost.position.x) * 0.4;
   ghost.visible = bank >= 1;
-  ghost.children[0].material.opacity = coolFrac >= 1 ? 0.6 : 0.15;
+  // gold rises from the bottom of the coin to the top as the cooldown runs; full = ready to drop
+  ghostFill.constant = BOARD.dropY - COIN_R + coolFrac * 2 * COIN_R + (coolFrac >= 1 ? 1 : 0);
+  ghost.children[0].material.opacity = coolFrac >= 1 ? 0.95 : 0.8;
 
   const pz = pusherBody.translation();
   pusherMesh.position.set(pz.x, pz.y, pz.z);
