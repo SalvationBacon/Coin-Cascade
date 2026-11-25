@@ -776,7 +776,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.21.1";
+const VERSION = "1.21.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2920,18 +2920,24 @@ function updateEvents(dt) {
 // ---------- Save ----------
 let saveBlocked = false;
 const SID = Math.random().toString(36).slice(2), IS_MINI_PAGE = location.hash === "#mini";
+// someone else saved since this copy last did (the app and a browser tab, or a copy waking up from the background)
+let lastSaveT = (saved && saved.t) || 0;
+const savedElsewhere = () => { if (IS_MINI_PAGE || location.hash === "#sim") return false; const cur = store.get(SAVE_KEY, null); return !!(cur && (cur.t || 0) > lastSaveT + 1 && cur.sid !== SID); };
 function save() {
   if (saveBlocked) return;
+  if (savedElsewhere()) { pauseHere(); return; }
+  lastSaveT = Date.now();
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), sid: SID, pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
 setInterval(save, 5000);
 addEventListener("pagehide", save);
-document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); else if (!saveBlocked && savedElsewhere()) pauseHere(); });
+addEventListener("pageshow", () => { if (!saveBlocked && savedElsewhere()) pauseHere(); });
 
 // ---------- Backups ----------
 // The game keeps its own copies of your save on this device: the newest few, plus the best one ever (most coins
