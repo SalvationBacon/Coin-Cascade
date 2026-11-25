@@ -687,7 +687,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.8.0";
+const VERSION = "1.8.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1443,7 +1443,7 @@ const ghostFill = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
 {
   const m = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.gold), transparent: true, opacity: 0.95, clippingPlanes: [ghostFill] }));
   m.rotation.x = Math.PI / 2; ghost.add(m);
-  const back = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.metalDark), transparent: true, opacity: 0.55, depthWrite: false }));
+  const back = new THREE.Mesh(coinGeo, new THREE.MeshBasicMaterial({ color: hex(P.muted || "#a9b6c8"), transparent: true, opacity: 0.4, depthWrite: false })); // the empty circle, always visible
   back.rotation.x = Math.PI / 2; back.position.z = -0.02; back.scale.set(1.08, 1, 1.08); ghost.add(back);
 }
 ghost.position.set(0, BOARD.dropY, BOARD_Z); scene.add(ghost);
@@ -3068,9 +3068,10 @@ function frame() {
   const coolFrac = Math.min(1, (performance.now() - lastDrop) / (dropCooldown() * 1000));
   $("coolBar").style.width = Math.round(coolFrac * 100) + "%";
   ghost.position.x += (aimX - ghost.position.x) * 0.4;
-  ghost.visible = bank >= 1;
+  ghost.visible = !titleOpen; // always there; with nothing to spend it stays an empty circle until you bank
+  const fillFrac = bank >= 1 ? coolFrac : 0;
   // gold rises from the bottom of the coin to the top as the cooldown runs; full = ready to drop
-  ghostFill.constant = BOARD.dropY - COIN_R + coolFrac * 2 * COIN_R + (coolFrac >= 1 ? 1 : 0);
+  ghostFill.constant = BOARD.dropY - COIN_R + fillFrac * 2 * COIN_R + (fillFrac >= 1 ? 1 : 0);
   ghost.children[0].material.opacity = coolFrac >= 1 ? 0.95 : 0.8;
 
   const pz = pusherBody.translation();
