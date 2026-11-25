@@ -297,6 +297,85 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
   .flipMsg { font-size: 15px; min-height: 0; }
   .eventBanner { top: calc(118px + env(safe-area-inset-top, 0px)); }
 }
+
+/* ---- shop panel: a rail of labelled icons, and a panel that slides out of it ---- */
+#flipBtn, #wheelBtn, #treeBtn, #cogBtn { display: none !important; }
+.rail { position: fixed; z-index: 11; top: 0; right: 0; bottom: 0; width: 84px; display: flex; flex-direction: column; gap: 8px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) 8px;
+  background: var(--bg); border-left: 3px solid var(--ink); box-shadow: inset 2px 0 0 var(--panel-edge); }
+.rb { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 0 8px; font-family: var(--display); font-size: 7px; color: var(--muted);
+  background: var(--panel); border: 3px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge); cursor: pointer; }
+.rb b svg { width: 24px; height: 24px; display: block; shape-rendering: crispEdges; }
+.rb:hover, .rb:focus-visible { color: var(--fg); outline: none; }
+.rb.on { color: var(--ink); background: var(--gold); box-shadow: none; }
+.rbMenu { margin-top: auto; }
+.rbadge { position: absolute; top: -7px; right: -7px; min-width: 12px; height: 12px; background: var(--neon); border: 2px solid var(--ink); }
+.tree { inset: 0 84px 0 auto; width: 380px; background: var(--bg); border-left: 3px solid var(--ink); gap: 8px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.treeHead { touch-action: none; gap: 8px; padding: 8px 10px; }
+.treeHead h2 { font-size: 11px; }
+.grab { display: none; }
+.tab { font-size: 8px; padding: 7px 8px; }
+.treeCoins { font-size: 9px; margin-left: auto; margin-right: 0; }
+.treeClose { font-size: 8px; padding: 7px 8px; }
+.treeInfo { grid-template-columns: 1fr auto; }
+.treeInfo h3 { font-size: 9px; line-height: 1.5; }
+.rebirthBar p { min-width: 0; font-size: 16px; }
+.cards { grid-template-columns: 1fr; }
+.top { right: calc(var(--panelW, 84px) + 16px); }
+.hint { left: calc((100vw - var(--panelW, 84px)) / 2); max-width: max(240px, calc(100vw - var(--panelW, 84px) - 380px)); }
+.eventBanner, .placeBanner, .toast { left: calc((100vw - var(--panelW, 84px)) / 2); }
+.flip, .wheelPanel { right: calc(var(--panelW, 84px) + 16px); top: calc(90px + env(safe-area-inset-top, 0px)); }
+.ulist { display: grid; gap: 8px; padding: 2px 2px 8px; }
+.urow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left; color: var(--fg); background: var(--panel); border: 3px solid var(--ink);
+  box-shadow: inset 0 0 0 2px var(--panel-edge); cursor: pointer; font-family: var(--body); }
+.urow.sel { outline: 3px solid var(--fg); outline-offset: 1px; }
+.urow .t { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.urow .t b { font-family: var(--display); font-weight: 400; font-size: 8px; line-height: 1.5; }
+.urow .t span { font-size: 16px; line-height: 1.05; color: var(--muted); }
+.urow .bb { font-family: var(--display); font-size: 9px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); padding: 8px 8px; cursor: pointer; white-space: nowrap; }
+.urow .bb:disabled { background: #2a3140; color: #6b778a; cursor: default; }
+.listNote2 { margin: 2px 4px; font-size: 16px; color: var(--muted); }
+.tile { display: grid; gap: 6px; padding: 10px 12px; background: var(--panel); border: 3px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge); }
+.tile h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 9px; line-height: 1.5; color: var(--gold); }
+.tile p { margin: 0; font-size: 17px; line-height: 1.1; color: var(--muted); }
+.tile.lock { opacity: 0.55; } .tile.lock h3 { color: var(--muted); }
+.tile button { justify-self: start; font-family: var(--display); font-size: 9px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); padding: 8px 10px; cursor: pointer; }
+.tile .meter { height: 8px; background: #0008; border: 2px solid var(--ink); } .tile .meter i { display: block; height: 100%; background: var(--gold); }
+.miniMin { position: fixed; z-index: 4; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: 40px; height: 40px; padding: 7px; color: var(--fg); cursor: pointer; }
+.miniMin svg { width: 100%; height: 100%; shape-rendering: crispEdges; }
+body.compact > *:not(#compact) { display: none !important; }
+.compact { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: var(--bg); text-align: center; }
+.compact .cRow b { display: block; font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+.compact .cRow span, .compact p { font-size: 16px; color: var(--muted); margin: 0; }
+.compact .mbtn { font-size: 10px; padding: 8px 10px; }
+@media (max-width: 760px) {
+  .rail { top: auto; left: 0; width: auto; flex-direction: row; gap: 4px; padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+    border-left: 0; border-top: 3px solid var(--ink); box-shadow: inset 0 2px 0 var(--panel-edge); }
+  .rb { flex: 1; min-width: 0; padding: 7px 0 6px; gap: 5px; font-size: 6px; }
+  .rb b svg { width: 20px; height: 20px; }
+  .rbMenu { margin-top: 0; }
+  .tree { inset: auto 0 var(--dockH, 64px) 0; width: auto; height: min(60vh, 560px); border-left: 0; border-top: 3px solid var(--ink); padding: 6px 8px 8px; }
+  .grab { display: block; width: 100%; height: 10px; margin: -4px 0 -2px; background: linear-gradient(var(--panel-edge), var(--panel-edge)) center / 48px 5px no-repeat; }
+  .treeHead { padding: 6px 8px; }
+  .top { right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hint { left: 122px; right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(var(--dockH, 64px) + 10px); }
+  .vault { bottom: calc(var(--dockH, 64px) + 10px); }
+  .flip, .wheelPanel { right: max(10px, env(safe-area-inset-right, 0px)); top: auto; bottom: calc(var(--dockH, 64px) + 10px); }
+  .eventBanner, .placeBanner, .toast { left: 50%; }
+}
+/* the title screen fits short windows (an installed app window, the mini window) */
+.title { display: flex; overflow-y: auto; }
+.titleInner { margin: auto; }
+.menu { display: grid; grid-template-columns: 1fr 1fr; }
+.menu .mbtn:not(.alt) { grid-column: 1 / -1; }
+.menu .mbtn.alt { font-size: 9px; padding: 10px 6px; }
+@media (max-height: 760px) {
+  .titleInner { gap: 10px; }
+  .logo { font-size: clamp(24px, 7vh, 48px); gap: 6px; }
+  .insert { margin: 0; }
+  .mbtn { padding: 10px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
@@ -324,8 +403,10 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 
 <div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the vault</span></div>
 
-<button class="cogBtn box" id="cogBtn" type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
-<button class="treeBtn box" id="treeBtn" type="button">UPGRADES<i id="treeBadge" hidden>!</i></button>
+<button class="cogBtn box" id="cogBtn" hidden type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
+<button class="treeBtn box" id="treeBtn" type="button" hidden>UPGRADES<i id="treeBadge" hidden>!</i></button>
+<button class="miniMin box" id="miniMin" type="button" hidden title="Shrink to a small coin counter" aria-label="Minimise"><svg viewBox="0 0 8 8" aria-hidden="true"><path fill="currentColor" d="M1 5h6v2H1z"/></svg></button>
+<div class="compact" id="compact" hidden><div class="cRow"><b id="cBank">0</b><span>coins</span></div><p id="cRate"></p><button class="mbtn" id="cRestore" type="button">RESTORE</button></div>
 <button class="flipBtn box" id="flipBtn" type="button" hidden>FLIP</button>
 <button class="flipBtn wheelBtn box" id="wheelBtn" type="button" hidden>WHEEL</button>
 <div class="reels box" id="reels" hidden><canvas id="reelCanvas" width="84" height="30"></canvas><p id="reelMsg">Hit ×5 to spin</p></div>
@@ -373,10 +454,18 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 <div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
 <div class="toast box" id="toast" hidden><b id="toastTitle"></b><span id="toastText"></span></div>
 <div class="eventBanner box" id="eventBanner" hidden><b id="evName"></b><span id="evDesc"></span></div>
+<nav class="rail" id="rail" aria-label="Menus">
+  <button class="rb" data-sec="up" type="button"><b data-ico="up"></b><span>UPGRADES</span><i class="rbadge" hidden></i></button>
+  <button class="rb" data-sec="arcade" type="button"><b data-ico="die"></b><span>ARCADE</span><i class="rbadge" hidden></i></button>
+  <button class="rb" data-sec="goals" type="button"><b data-ico="trophy"></b><span>GOALS</span><i class="rbadge" hidden></i></button>
+  <button class="rb" data-sec="prestige" type="button" hidden><b data-ico="star"></b><span>PRESTIGE</span><i class="rbadge" hidden></i></button>
+  <button class="rb rbMenu" data-sec="menu" type="button"><b data-ico="cog"></b><span>MENU</span><i class="rbadge" hidden></i></button>
+</nav>
 <div class="tree" id="tree" hidden>
-  <div class="treeHead box">
-    <div class="tabs" role="tablist"><button class="tab on" id="tabMain" type="button" role="tab">MACHINE</button><button class="tab" id="tabReb" type="button" role="tab" hidden>REBIRTH</button><button class="tab" id="tabAsc" type="button" role="tab" hidden>ASCEND</button><button class="tab" id="tabCh" type="button" role="tab" hidden>CHALLENGES</button><button class="tab" id="tabGoals" type="button" role="tab">GOALS</button><button class="tab" id="tabStats" type="button" role="tab">STATS</button><button class="tab" id="tabStyle" type="button" role="tab">STYLE</button><button class="tab" id="tabSet" type="button" role="tab">SETTINGS</button></div><span class="treeCoins" id="treeCoins"></span>
-    <button class="treeClose" id="treeClose" type="button">CLOSE</button>
+  <div class="treeHead box" id="treeHead">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="tabs" id="subtabs" role="tablist"></div><span class="treeCoins" id="treeCoins"></span>
+    <button class="treeClose" id="treeClose" type="button" title="Hide the shop (Esc)">HIDE</button>
   </div>
   <div class="rebirthBar box" id="rebirthBar" hidden><p id="rebText"></p><button class="rebBtn" id="rebBtn" type="button">REBIRTH</button></div>
   <div class="treeScroll" id="treeScroll"><div class="treeArea" id="treeArea"></div></div>
@@ -545,8 +634,8 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.3.1";
-let titleOpen = false, welcomeReady = false, awayOn = false; // title screen state (see "Title screen")
+const VERSION = "1.4.1";
+let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
 const saved = store.get(SAVE_KEY, null);
@@ -569,6 +658,8 @@ const rups = (saved && saved.rup) || {};
 let inPlay = (saved && saved.inPlay) || 0;
 // milestones + challenges (permanent; survive rebirths)
 const stats = Object.assign({ jackpots: 0, bestStreak: 0, maxBank: 0 }, (saved && saved.stats) || {});
+// the most coins held at once this run: Bigger Refill can only refill up to this (so buying it doesn't skip the climb)
+let runMax = saved && saved.runMax != null ? saved.runMax : saved ? Math.floor(saved.bank || 0) : 0;
 const msDone = (saved && saved.msDone) || {}, chDone = (saved && saved.chDone) || {};
 let chActive = (saved && saved.chActive) || null;
 const msHas = id => !!msDone[id], chHas = id => !!chDone[id], chOn = id => chActive === id;
@@ -679,23 +770,34 @@ function resize() {
   renderer.domElement.style.imageRendering = k0 < 1 ? "pixelated" : "auto";
   makeTarget();
   post.uniforms.res.value.set(lowW, lowH);
-  camera.aspect = innerWidth / innerHeight;
-  camera.clearViewOffset();
-  if (innerWidth > 760) {
-    // wide screens: the HUD sits at the sides, so the default framing is fine
-    camera.position.copy(camBase); camera.lookAt(camLook); camera.updateProjectionMatrix();
-    return;
-  }
-  fitNarrow();
+  fitCamera();
 }
 // Narrow screens (phones, the mini window): fit the whole machine, from the dropper at the top to the
 // prize shelf at the bottom, into the gap between the counters and the buttons, whatever the window's shape.
 const FIT_PTS = [[0, 10.1, -2.4], [-3.9, 10.1, -2.4], [3.9, 10.1, -2.4], [0, -0.3, 3.6], [-4.4, 4, 1.2], [4.4, 4, 1.2], [-4.4, 0, 3.4], [4.4, 0, 3.4]].map(a => new THREE.Vector3(...a));
-function fitNarrow() {
-  const W = innerWidth, H = innerHeight;
-  const topR = document.querySelector(".top")?.getBoundingClientRect(), vR = $("vault")?.getBoundingClientRect();
+// Frame the machine in the part of the screen the HUD and shop panel leave free.
+function fitCamera() {
+  const W = innerWidth, H = innerHeight, narrow = W <= 760, root = document.documentElement.style;
+  camera.aspect = W / H; camera.clearViewOffset();
+  const rail = $("rail"), tree = $("tree");
+  const railR = rail ? rail.getBoundingClientRect() : { width: 0, height: 0 };
+  const right = narrow ? W : W - railR.width - (tree && !tree.hidden ? tree.getBoundingClientRect().width : 0);
+  root.setProperty("--panelW", (W - right) + "px");
+  root.setProperty("--dockH", (narrow ? railR.height : 0) + "px");
+  if (!narrow && right >= 860) {
+    // plenty of room: the usual view, slid left to sit in the middle of the free space
+    camera.position.copy(camBase); camera.lookAt(camLook); camera.updateProjectionMatrix();
+    camera.setViewOffset(W, H, (W - right) / 2, 0, W, H); camera.updateProjectionMatrix();
+    return;
+  }
+  const topR = document.querySelector(".top")?.getBoundingClientRect(), vR = $("vault")?.getBoundingClientRect(), hR = $("hint")?.getBoundingClientRect();
   const safeTop = Math.min(H * 0.4, (topR ? topR.bottom : 100) + 4);
-  const safeBot = Math.max(safeTop + H * 0.3, (vR && vR.height ? vR.top : H - 140) - 4);
+  const lowest = narrow ? (vR && vR.height ? vR.top : H - 140) : (hR && hR.height ? hR.top : H - 90);
+  fitInto(right, safeTop, Math.max(safeTop + H * 0.3, lowest - 4));
+}
+// pull the camera back until the machine fits (closest that fits = biggest on screen), then slide it into the gap
+function fitInto(right, safeTop, safeBot) {
+  const W = innerWidth, H = innerHeight;
   const span = k => {
     camera.position.copy(camBase).sub(camLook).multiplyScalar(k).add(camLook);
     camera.lookAt(camLook); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
@@ -703,13 +805,10 @@ function fitNarrow() {
     for (const p of FIT_PTS) { const v = tmpFit.copy(p).project(camera); const x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H; y0 = Math.min(y0, y); y1 = Math.max(y1, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
     return { y0, y1, x0, x1 };
   };
-  // pull the camera back until the machine fits both ways (closest that fits = biggest on screen)
   let lo = 0.6, hi = 4;
-  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2, s = span(m); if (s.y1 - s.y0 <= safeBot - safeTop && s.x1 - s.x0 <= W - 8) hi = m; else lo = m; }
+  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2, s = span(m); if (s.y1 - s.y0 <= safeBot - safeTop && s.x1 - s.x0 <= right - 8) hi = m; else lo = m; }
   const s = span(hi);
-  // then slide the picture so the machine sits in the middle of the free gap
-  const dy = (s.y0 + s.y1) / 2 - (safeTop + safeBot) / 2;
-  camera.setViewOffset(W, H, 0, dy, W, H);
+  camera.setViewOffset(W, H, (s.x0 + s.x1) / 2 - right / 2, (s.y0 + s.y1) / 2 - (safeTop + safeBot) / 2, W, H);
   camera.updateProjectionMatrix();
 }
 resize();
@@ -1225,7 +1324,7 @@ function trimPegs() {
   }
 }
 function startPlacing(type) {
-  placing = type; $("tree").hidden = true; holding = false;
+  placing = type; holding = false; if (innerWidth <= 760 && !$("tree").hidden) setPanel(false);
   const T = PEG_TYPES[type], left = lvl(T.up) - pegsPlaced(type);
   $("placeText").textContent = left > 0 ? `Click a peg to place your ${T.name} (${left} to place).` : `Click one of your ${T.name}s to pick it up, then click where it should go.`;
   $("placeBanner").hidden = false;
@@ -1242,17 +1341,20 @@ function nearestPeg(e) {
   }
   return best;
 }
-// golden pegs aren't placed by hand: each one lands on a random free peg and stays there until the next rebirth
-function fillGold() {
-  let added = false;
-  while (pegsPlaced("gold") < lvl("goldpeg")) {
-    const free = [];
-    for (let k = 0; k < BOARD.rows; k++) for (let j = 0; j <= k; j++) if (!pegMap[`${k}:${j}`]) free.push(`${k}:${j}`);
-    if (!free.length) break;
-    pegMap[free[Math.floor(Math.random() * free.length)]] = "gold"; added = true;
+// special pegs aren't placed by hand: each one lands on a random free peg and stays there until the next rebirth
+function fillPegs() {
+  const added = [];
+  for (const type in PEG_TYPES) {
+    while (pegsPlaced(type) < lvl(PEG_TYPES[type].up)) {
+      const free = [];
+      for (let k = 0; k < BOARD.rows; k++) for (let j = 0; j <= k; j++) if (!pegMap[`${k}:${j}`]) free.push(`${k}:${j}`);
+      if (!free.length) break;
+      pegMap[free[Math.floor(Math.random() * free.length)]] = type; added.push(type);
+    }
   }
   return added;
 }
+const fillGold = () => fillPegs().length > 0;
 function placeAt(e) {
   const id = nearestPeg(e);
   if (!id) return;
@@ -1564,6 +1666,8 @@ const fmtV = v => v < 10 && v % 1 ? v.toFixed(1) : fmt(v);
 const coinValue = (l = lvl("value")) => 1 + l;
 const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (msHas("drop5k") ? 0.9 : 1) * (chHas("slow") ? 0.85 : 1)) * (chOn("slow") ? 3 : 1);
 const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (msHas("drop500") ? 0.9 : 1) * (chHas("dry") ? 0.75 : 1);
+// regenCap = what Bigger Refill allows; regenLimit = what regen actually fills to right now
+const regenLimit = () => Math.min(regenCap(), Math.max(regenCap(0), runMax));
 const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + (chHas("pocketless") ? 10 : 0);
 const freeDrop = (l = lvl("free")) => 0.04 * l;
 const luckyZero = (l = lvl("lucky")) => 0.1 * l;
@@ -1594,7 +1698,7 @@ const UPGRADES = [
   { id: "cooldown", name: "Quick Drop", x: -1, y: 0, parent: "regen", max: 12, base: 10, grow: 1.6, text: l => `Drop every ${dropCooldown(l).toFixed(2)}s` },
   { id: "free", name: "Free Drops", x: -2, y: 0, parent: "cooldown", max: 10, base: 12, grow: 1.6, text: l => `${pct(freeDrop(l))} of drops cost nothing` },
   { id: "double", name: "Double Drop", x: -3, y: 0, parent: "free", max: 10, base: 60, grow: 1.7, text: l => `${pct(doubleDrop(l))} chance of a free extra coin` },
-  { id: "cap", name: "Bigger Refill", x: -1, y: 1, parent: "regen", max: 10, base: 8, grow: 1.55, text: l => `Regen refills up to ${regenCap(l)}` },
+  { id: "cap", name: "Bigger Refill", x: -1, y: 1, parent: "regen", max: 10, base: 8, grow: 1.55, text: l => `Regen refills up to ${regenCap(l)}` + (l > 0 && l === lvl("cap") && regenLimit() < regenCap(l) ? ` (${regenLimit()} for now: your best vault this run)` : "") },
   { id: "auto", name: "Auto Dropper", x: -2, y: 1, parent: "cap", max: 1, base: 400, grow: 1, text: l => l ? "Drops coins for you" : "You drop every coin by hand" },
   { id: "coinspeed", name: "Coin Speed", x: 1, y: 0, parent: "regen", max: 8, base: 4, grow: 1.6, text: l => `Coins fall ${pct(coinSpeed(l))} speed` },
   { id: "pusher", name: "Pusher Speed", x: 2, y: 0, parent: "coinspeed", max: 8, base: 10, grow: 1.65, text: l => `One push every ${pushPeriod(l).toFixed(2)}s` },
@@ -1678,8 +1782,11 @@ function buy(T, u) {
   if (nodeState(T, u) !== "open" || T.lv(u.id) >= u.max || T.has() < c) return;
   T.pay(c); T.set(u.id, T.lv(u.id) + 1);
   applyUpgrades(); sfx.bonus(); save(); refreshHud(); renderTree();
-  if (u.peg === "gold") { if (fillGold()) { drawSpecialPegs(); save(); popAt(new THREE.Vector3(0, BOARD.pegTop + 0.6, BOARD_Z), "GOLDEN PEG!", "big"); sfx.golden(); } }
-  else if (u.peg) startPlacing(u.peg);
+  if (u.peg && fillPegs().length) {
+    drawSpecialPegs(); save();
+    popAt(new THREE.Vector3(0, BOARD.pegTop + 0.6, BOARD_Z), PEG_TYPES[u.peg].name.toUpperCase() + "!", "big");
+    if (u.peg === "gold") sfx.golden(); else if (u.peg === "split") sfx.split(); else sfx.doubler();
+  }
 }
 
 // ---------- The tree view (machine tree + rebirth tree) ----------
@@ -1690,18 +1797,16 @@ function extents(T) {
 }
 const nodeCenter = (T, u) => { const e = extents(T); return [24 + (u.x - e.minX) * CELL_W + CELL_W / 2, 24 + (u.y - e.minY) * CELL_H + CELL_H / 2]; };
 function renderTree() {
-  $("tree").dataset.group = COG_TABS.includes(treeId) ? "cog" : "up";
+  updateRail();
   if ($("tree").hidden) return;
-  $("tabMain").classList.toggle("on", treeId === "main"); $("tabReb").classList.toggle("on", treeId === "reb");
-  $("tabCh").classList.toggle("on", treeId === "ch"); $("tabAsc").classList.toggle("on", treeId === "asc");
-  $("tabAsc").hidden = !(rebirths >= 3 || ascensions > 0); $("tabGoals").classList.toggle("on", treeId === "goals");
-  $("tabReb").hidden = !(rebirths > 0 || runEarned >= 250);
-  $("tabCh").hidden = !(rebirths > 0);
-  const listTab = ["ch", "goals", "stats", "set", "style"].includes(treeId);
-  $("tabStyle").classList.toggle("on", treeId === "style");
-  $("tabStats").classList.toggle("on", treeId === "stats"); $("tabSet").classList.toggle("on", treeId === "set");
-  $("treeInfo").hidden = listTab;
-  if (listTab) { $("rebirthBar").hidden = true; $("treeCoins").textContent = `${fmt(bank)} coins`; return treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : renderSettings(); }
+  renderSubtabs();
+  const listTab = !TREES[treeId];
+  $("treeInfo").hidden = listTab && treeId !== "mainlist";
+  if (listTab) {
+    $("rebirthBar").hidden = true; $("treeCoins").textContent = `${fmt(bank)} coins`;
+    const a = $("treeArea"); a.style.width = ""; a.style.height = "";
+    return treeId === "mainlist" ? renderList() : treeId === "arcade" ? renderArcade() : treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : renderSettings();
+  }
   const T = TREES[treeId], e = extents(T), area = $("treeArea");
   $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`;
   renderRebirthBar();
@@ -1739,8 +1844,9 @@ function renderTree() {
   }
   renderInfo();
 }
+const treeKey = () => treeId === "mainlist" ? "main" : treeId;
 function renderInfo() {
-  const T = TREES[treeId], u = byId(T, selectedIn[treeId]), l = T.lv(u.id), maxed = l >= u.max, info = $("treeInfo");
+  const T = TREES[treeKey()], u = byId(T, selectedIn[treeKey()]), l = T.lv(u.id), maxed = l >= u.max, info = $("treeInfo");
   info.innerHTML = '<h3></h3><p class="d"></p><p class="c"></p><button class="buy" type="button"></button>';
   info.querySelector("h3").textContent = `${u.name}  ·  Lv ${l}/${u.max}`;
   info.querySelector(".d").textContent = maxed ? u.text(l) : `${u.text(l)}  →  ${u.text(l + 1)}`;
@@ -1748,13 +1854,8 @@ function renderInfo() {
   const buyBtn = info.querySelector(".buy");
   buyBtn.textContent = maxed ? "MAX" : "BUY"; buyBtn.disabled = maxed || T.has() < T.cost(u);
   buyBtn.addEventListener("click", () => buy(T, u));
-  if (u.peg === "gold" && l > 0) {
-    const p = document.createElement("p"); p.className = "c"; p.textContent = "Golden pegs land on random pegs and stay put until your next rebirth."; info.appendChild(p);
-  } else if (u.peg && l > 0) {
-    const placed = pegsPlaced(u.peg), t = document.createElement("button"); t.type = "button"; t.className = "tog";
-    t.textContent = placed < l ? `Place on the board (${placed}/${l} placed)` : `Move a peg (${placed}/${l} placed)`;
-    t.addEventListener("click", () => startPlacing(u.peg));
-    info.appendChild(t);
+  if (u.peg) {
+    const p = document.createElement("p"); p.className = "c"; p.textContent = "Each one lands on a random peg and stays put until your next rebirth."; info.appendChild(p);
   }
   if (u.id === "autoreb" && l > 0) {
     const t = document.createElement("button"); t.type = "button"; t.className = "tog";
@@ -1801,13 +1902,31 @@ $("rebBtn").addEventListener("click", () => {
   if (Date.now() - rebArmed > 3000) { rebArmed = Date.now(); renderRebirthBar(); setTimeout(renderRebirthBar, 3100); return; }
   if (treeId === "asc") doAscend(); else doRebirth();
 });
+let shopSig = "";
 function refreshShop() {
   const any = UPGRADES.some(u => nodeState(TREES.main, u) === "open" && lvl(u.id) < u.max && bank >= TREES.main.cost(u))
     || RUPGRADES.some(u => nodeState(TREES.reb, u) === "open" && rl(u.id) < u.max && tokens >= TREES.reb.cost(u))
     || AUPGRADES.some(u => nodeState(TREES.asc, u) === "open" && al(u.id) < u.max && gems >= TREES.asc.cost(u));
   $("treeBadge").hidden = !any;
-  if (!$("tree").hidden && !["set", "stats", "style"].includes(treeId)) renderTree();
+  updateRail();
+  if ($("tree").hidden) return;
+  // only rebuild the panel when something visible changed (rebuilding on every payout would eat clicks)
+  const T = TREES[treeKey()];
+  if (!T && treeId !== "arcade") return;
+  const sig = treeId + "|" + (T ? T.list.map(u => nodeState(T, u)[0] + T.lv(u.id) + (T.has() >= T.cost(u) ? "y" : "n")).join("")
+    : [ups.flip, ups.wheel, ups.reels, ups.mystery, ups.events, inPlay > 0, $("wheelBtn").classList.contains("ready")].join());
+  if (sig !== shopSig) { shopSig = sig; renderTree(); return; }
+  if (T) { $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`; renderRebirthBar(); updateInfoCost(); }
+  else { $("treeCoins").textContent = `${fmt(bank)} coins`; const m = $("arcWheel"); if (m) m.style.width = wheelPct() + "%"; }
 }
+function updateInfoCost() {
+  const info = $("treeInfo"); if (info.hidden) return;
+  const T = TREES[treeKey()], u = byId(T, selectedIn[treeKey()]); if (!u) return;
+  const l = T.lv(u.id), maxed = l >= u.max, c = info.querySelector(".c"), b = info.querySelector(".buy");
+  if (c) c.textContent = maxed ? "Fully upgraded" : `Costs ${fmt(T.cost(u))} ${T.unit} · you have ${fmt(T.has())}`;
+  if (b) b.disabled = maxed || T.has() < T.cost(u);
+}
+const wheelPct = () => { const m = /(\d+)%/.exec($("wheelBtn").textContent); return $("wheelBtn").classList.contains("ready") ? 100 : m ? +m[1] : 0; };
 function centerTree() {
   if (!TREES[treeId]) return;
   const T = TREES[treeId], root = T.list[0], [cx, cy] = nodeCenter(T, root), sc = $("treeScroll");
@@ -1831,20 +1950,132 @@ function centerTree() {
   addEventListener("pointerup", () => { if (drag) { drag = null; sc.classList.remove("dragging"); } });
   sc.addEventListener("click", e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
 }
-// UPGRADES opens the trees, challenges and goals; the cog opens settings, stats and style
-$("treeBtn").addEventListener("click", () => { if (COG_TABS.includes(treeId)) treeId = "main"; $("tree").hidden = false; renderTree(); if (TREES[treeId]) centerTree(); else $("treeScroll").scrollTo(0, 0); });
-$("cogBtn").addEventListener("click", () => { if (!COG_TABS.includes(treeId)) treeId = "set"; $("tree").hidden = false; renderTree(); $("treeScroll").scrollTo(0, 0); });
-$("tabMain").addEventListener("click", () => { treeId = "main"; renderTree(); centerTree(); });
-$("tabReb").addEventListener("click", () => { treeId = "reb"; renderTree(); centerTree(); });
-$("tabAsc").addEventListener("click", () => { treeId = "asc"; renderTree(); centerTree(); });
-$("tabCh").addEventListener("click", () => { treeId = "ch"; renderTree(); $("treeScroll").scrollTo(0, 0); });
-$("tabGoals").addEventListener("click", () => { treeId = "goals"; renderTree(); $("treeScroll").scrollTo(0, 0); });
-$("tabStats").addEventListener("click", () => { treeId = "stats"; renderTree(); $("treeScroll").scrollTo(0, 0); });
-$("tabStyle").addEventListener("click", () => { treeId = "style"; renderTree(); $("treeScroll").scrollTo(0, 0); });
-$("tabSet").addEventListener("click", () => { treeId = "set"; renderTree(); $("treeScroll").scrollTo(0, 0); });
-$("treeClose").addEventListener("click", () => { $("tree").hidden = true; });
+// ---------- Shop panel ----------
+// The rail of labelled icons opens one section at a time; each section has its own tabs.
+const SECTIONS = {
+  up: { name: "UPGRADES", tabs: [["main", "TREE"], ["mainlist", "LIST"]] },
+  arcade: { name: "ARCADE", tabs: [["arcade", "ARCADE"]] },
+  goals: { name: "GOALS", tabs: [["goals", "MILESTONES"], ["ch", "CHALLENGES", () => rebirths > 0]] },
+  prestige: { name: "PRESTIGE", tabs: [["reb", "REBIRTH"], ["asc", "ASCEND", () => rebirths >= 3 || ascensions > 0]] },
+  menu: { name: "MENU", tabs: [["set", "SETTINGS"], ["stats", "STATS"], ["style", "STYLE"]] },
+};
+const sectionOf = id => Object.keys(SECTIONS).find(k => SECTIONS[k].tabs.some(t => t[0] === id)) || "up";
+const lastTab = {};
+const prestigeOpen = () => rebirths > 0 || ascensions > 0 || runEarned >= 250;
+function renderSubtabs() {
+  const sec = SECTIONS[sectionOf(treeId)], st = $("subtabs"); st.textContent = "";
+  const tabs = sec.tabs.filter(t => !t[2] || t[2]());
+  if (tabs.length < 2) { const h = document.createElement("h2"); h.textContent = sec.name; st.appendChild(h); return; }
+  for (const [id, label] of tabs) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "tab" + (id === treeId ? " on" : ""); b.setAttribute("role", "tab"); b.textContent = label;
+    b.addEventListener("click", () => openTab(id)); st.appendChild(b);
+  }
+}
+function openTab(id) { treeId = id; lastTab[sectionOf(id)] = id; shopSig = ""; renderTree(); if (TREES[id]) centerTree(); else $("treeScroll").scrollTo(0, 0); }
+function setPanel(open) {
+  $("tree").hidden = !open; $("tree").style.transform = "";
+  settings.panel = open; saveSettings();
+  if (open) { shopSig = ""; renderTree(); if (TREES[treeId]) centerTree(); else $("treeScroll").scrollTo(0, 0); }
+  updateRail(); fitCamera();
+}
+function openSection(sec) {
+  if (!$("tree").hidden && sectionOf(treeId) === sec) { setPanel(false); return; }
+  treeId = lastTab[sec] || SECTIONS[sec].tabs[0][0]; setPanel(true);
+}
+function updateRail() {
+  let badge = {};
+  try {
+    const can = k => { const T = TREES[k]; return T.list.some(u => nodeState(T, u) === "open" && T.lv(u.id) < u.max && T.has() >= T.cost(u)); };
+    badge = { up: can("main"), arcade: !$("wheelBtn").hidden && $("wheelBtn").classList.contains("ready"), prestige: tokenGain() >= 1 || gemGain() >= 1 || can("reb") || can("asc") };
+  } catch {}
+  const open = !$("tree").hidden, cur = sectionOf(treeId);
+  for (const b of $("rail").querySelectorAll(".rb")) {
+    const sec = b.dataset.sec;
+    if (sec === "prestige") { try { b.hidden = !prestigeOpen(); } catch {} }
+    b.classList.toggle("on", open && sec === cur);
+    b.setAttribute("aria-pressed", open && sec === cur ? "true" : "false");
+    b.querySelector(".rbadge").hidden = !badge[sec];
+  }
+}
+// little 8×8 pixel icons for the rail
+const RAIL_ICONS = {
+  up: ["...XX...", "..XXXX..", ".XXXXXX.", "XXXXXXXX", "..XXXX..", "..XXXX..", "..XXXX..", "..XXXX.."],
+  die: ["XXXXXXXX", "X......X", "X.X..X.X", "X......X", "X......X", "X.X..X.X", "X......X", "XXXXXXXX"],
+  trophy: ["XXXXXXXX", "XXXXXXXX", ".XXXXXX.", "..XXXX..", "...XX...", "...XX...", "..XXXX..", ".XXXXXX."],
+  star: ["...XX...", "...XX...", "XXXXXXXX", ".XXXXXX.", "..XXXX..", ".XXXXXX.", ".XX..XX.", "X......X"],
+  cog: ["...XX...", ".XXXXXX.", ".XX..XX.", "XX....XX", "XX....XX", ".XX..XX.", ".XXXXXX.", "...XX..."],
+};
+for (const el of $("rail").querySelectorAll("[data-ico]")) {
+  const d = RAIL_ICONS[el.dataset.ico].map((r, y) => [...r].map((c, x) => c === "X" ? `M${x} ${y}h1v1h-1z` : "").join("")).join("");
+  el.innerHTML = `<svg viewBox="0 0 8 8" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>`;
+}
+for (const b of $("rail").querySelectorAll(".rb")) b.addEventListener("click", () => { sfx.unlock(); openSection(b.dataset.sec); });
+$("treeBtn").addEventListener("click", () => openSection("up"));
+$("cogBtn").addEventListener("click", () => openSection("menu"));
+$("treeClose").addEventListener("click", () => setPanel(false));
+// swipe the panel away: down on phones, right on a computer
+{
+  const head = $("treeHead"); let sw = null;
+  head.addEventListener("pointerdown", e => { if (e.target.closest("button")) return; sw = { x: e.clientX, y: e.clientY, id: e.pointerId }; head.setPointerCapture(e.pointerId); });
+  head.addEventListener("pointermove", e => {
+    if (!sw) return;
+    const narrow = innerWidth <= 760, d = Math.max(0, narrow ? e.clientY - sw.y : e.clientX - sw.x);
+    $("tree").style.transform = narrow ? `translateY(${d}px)` : `translateX(${d}px)`; sw.d = d;
+  });
+  const end = () => { if (!sw) return; const far = (sw.d || 0) > 70; sw = null; if (far) setPanel(false); else $("tree").style.transform = ""; };
+  head.addEventListener("pointerup", end); head.addEventListener("pointercancel", end);
+}
 $("placeDone").addEventListener("click", stopPlacing);
-addEventListener("keydown", e => { if (e.code === "Escape") { $("tree").hidden = true; $("flip").hidden = true; stopPlacing(); } });
+addEventListener("keydown", e => { if (e.code === "Escape") { if (!$("tree").hidden) setPanel(false); $("flip").hidden = true; stopPlacing(); } });
+
+// The upgrade tree as a list: what you can buy now, cheapest first
+function renderList() {
+  const T = TREES.main, area = $("treeArea"); area.textContent = "";
+  const wrap = document.createElement("div"); wrap.className = "ulist";
+  const open = T.list.filter(u => nodeState(T, u) === "open");
+  const live = open.filter(u => T.lv(u.id) < u.max).sort((a, b) => T.cost(a) - T.cost(b));
+  for (const u of live) {
+    const l = T.lv(u.id), c = T.cost(u);
+    const row = document.createElement("div"); row.className = "urow" + (selectedIn.main === u.id ? " sel" : ""); row.tabIndex = 0;
+    row.innerHTML = '<div class="t"><b></b><span></span></div><button class="bb" type="button"></button>';
+    row.querySelector("b").textContent = `${u.name} · ${l}/${u.max}`;
+    row.querySelector("span").textContent = `${u.text(l)} → ${u.text(l + 1)}`;
+    const bb = row.querySelector(".bb"); bb.textContent = fmt(c); bb.disabled = T.has() < c;
+    bb.addEventListener("click", e => { e.stopPropagation(); buy(T, u); });
+    row.addEventListener("click", () => { selectedIn.main = u.id; renderTree(); });
+    wrap.appendChild(row);
+  }
+  const hiddenN = T.list.filter(u => nodeState(T, u) === "locked").length, maxed = open.filter(u => T.lv(u.id) >= u.max);
+  const note = document.createElement("p"); note.className = "listNote2";
+  note.textContent = (hiddenN ? `${hiddenN} more upgrade${hiddenN > 1 ? "s" : ""} to discover: they show as "?" in the TREE.` : "Every upgrade is discovered.") + (maxed.length ? ` Maxed: ${maxed.map(u => u.name).join(", ")}.` : "");
+  wrap.appendChild(note); area.appendChild(wrap);
+  if (!byId(T, selectedIn.main) || !live.includes(byId(T, selectedIn.main))) { if (live[0]) selectedIn.main = live[0].id; }
+  renderInfo();
+}
+// All the gambles in one place
+function renderArcade() {
+  const area = $("treeArea"); area.textContent = "";
+  const wrap = document.createElement("div"); wrap.className = "ulist";
+  const name = id => (byId(TREES.main, id) || {}).name || id;
+  const tile = (title, unlocked, unlockId, text, btn, fn, extra) => {
+    const t = document.createElement("div"); t.className = "tile" + (unlocked ? "" : " lock");
+    t.innerHTML = "<h3></h3><p></p>"; t.querySelector("h3").textContent = title;
+    t.querySelector("p").textContent = unlocked ? text : `Unlock it with ${name(unlockId)} in the Upgrades tree.`;
+    if (unlocked && extra) t.appendChild(extra);
+    if (unlocked && btn) { const b = document.createElement("button"); b.type = "button"; b.textContent = btn; b.addEventListener("click", fn); t.appendChild(b); }
+    wrap.appendChild(t);
+  };
+  const flipOpen = () => { if (innerWidth <= 760) setPanel(false); $("flipBtn").click(); };
+  const wheelOpen = () => { if (innerWidth <= 760) setPanel(false); $("wheelBtn").click(); };
+  tile("Double or Nothing", ups.flip > 0 || inPlay > 0, "flip", inPlay > 0 ? `You have ${fmt(inPlay)} riding on the coin.` : "Bet coins on heads or tails and keep doubling. Cash out before you miss.", inPlay > 0 ? "CARRY ON" : "PLAY", flipOpen);
+  const meter = document.createElement("div"); meter.className = "meter"; meter.innerHTML = '<i id="arcWheel"></i>'; meter.firstChild.style.width = wheelPct() + "%";
+  const ready = $("wheelBtn").classList.contains("ready");
+  tile("Prize Wheel", ups.wheel > 0, "wheel", ready ? "The wheel is charged. Spin it!" : "Charges up as you earn. Spin for a pile of coins or a free event.", ready ? "SPIN" : "OPEN", wheelOpen, meter);
+  tile("Slot Reels", ups.reels > 0, "reels", "Every ×5 hit spins the reels. Three 7s pay big.");
+  tile("Mystery Coins", ups.mystery > 0, "mystery", "Some coins hide their value until they pay out: anything from ×0 to ×25.");
+  tile("Random Events", ups.events > 0, "events", "Gold Rush, Frenzy, Coin Shower and Jackpot Magnet turn up every few minutes.");
+  area.appendChild(wrap);
+}
 // ---------- Cosmetics: unlocked by playing ----------
 const THEMES = [
   { id: "midnight", req: () => true, how: "Unlocked from the start" },
@@ -2058,7 +2289,7 @@ function startUps() {
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
     stats, msDone, chDone, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
-    goldRandom: true, t: Date.now(), coins: null }, extra);
+    goldRandom: true, pegsRandom: true, runMax: 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
 function showToast(title, text) {
@@ -2069,7 +2300,7 @@ function showToast(title, text) {
 function checkGoals() {
   checkCosmetics();
   if (al("autoreb") && autoRebOn && !chActive && !saveBlocked && tokenGain() >= autoRebAt) { doRebirth(); return; }
-  stats.maxBank = Math.max(stats.maxBank, Math.floor(bank));
+  stats.maxBank = Math.max(stats.maxBank, Math.floor(bank)); runMax = Math.max(runMax, Math.floor(bank));
   for (const m of MILESTONES) {
     if (!msDone[m.id] && m.val() >= m.goal) { msDone[m.id] = true; applyUpgrades(); showToast("MILESTONE: " + m.name.toUpperCase(), m.reward); save(); }
   }
@@ -2167,7 +2398,7 @@ function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
-    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true,
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax,
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
@@ -2329,7 +2560,7 @@ $("cashOut").addEventListener("click", () => {
 let regenT = 0;
 function updateRegen(dt) {
   if (chOn("dry")) { regenT = 0; $("regen").textContent = "OFF"; return; }
-  if (bank >= regenCap()) { regenT = 0; $("regen").textContent = "FULL"; return; }
+  if (bank >= regenLimit()) { regenT = 0; $("regen").textContent = "FULL"; return; }
   regenT += dt;
   const iv = regenInterval();
   if (regenT >= iv) { regenT -= iv; bank++; refreshHud(); }
@@ -2341,6 +2572,7 @@ renderShop();
 // ---------- Start: restore the saved machine, or set up a new one with a starter pile ----------
 trimPegs();
 if (!(saved && saved.goldRandom)) for (const id of Object.keys(pegMap)) if (pegMap[id] === "gold") delete pegMap[id]; // old hand-placed ones get re-rolled once
+if (!(saved && saved.pegsRandom)) for (const id of Object.keys(pegMap)) delete pegMap[id]; // same for hand-placed splitter and doubler pegs
 fillGold(); drawSpecialPegs();
 function fillMachine() {
   for (let i = 0; i < 100; i++) {
@@ -2365,7 +2597,7 @@ if (saved && saved.coins) {
   // regen that happened while the game was closed
   const away = Math.max(0, (Date.now() - (saved.t || Date.now())) / 1000);
   const before = bank;
-  if (bank < regenCap()) bank = Math.min(regenCap(), bank + Math.floor(away / regenInterval()));
+  if (bank < regenLimit()) bank = Math.min(regenLimit(), bank + Math.floor(away / regenInterval()));
   const regenGot = bank - before;
   // offline earnings: with the Auto Dropper on, 50% of your recent income, for up to 8 hours away
   let offline = 0;
@@ -2581,11 +2813,13 @@ function frame() {
   const blink = Math.floor(lightT * 2) % 2;
   pinkL.intensity = settings.calm ? 22 : blink ? 26 : 18; cyanL.intensity = settings.calm ? 22 : blink ? 18 : 26;
 
-  renderer.setRenderTarget(rt);
-  renderer.render(scene, camera);
-  renderer.setRenderTarget(null);
-  post.uniforms.tColor.value = rt.texture;
-  renderer.render(postScene, postCam);
+  if (!compactOn) { // minimised mini window: the game keeps running, but there's nothing to draw
+    renderer.setRenderTarget(rt);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    post.uniforms.tColor.value = rt.texture;
+    renderer.render(postScene, postCam);
+  }
   requestAnimationFrame(frame);
 }
 // "#sim" runs the game logic without drawing, for automated balance testing; players never see it
@@ -2712,10 +2946,29 @@ if (chan) chan.onmessage = e => {
 if (IS_MINI) addEventListener("pagehide", () => { if (saveBlocked) return; save(); saveBlocked = true; chan?.postMessage("back"); });
 addEventListener("resize", updateMini);
 updateMini();
+// Minimise: the mini window shrinks to a small coin counter; the machine keeps playing (with the Auto Dropper)
+function setCompact(on) {
+  compactOn = on; document.body.classList.toggle("compact", on); $("compact").hidden = !on;
+  const tw = window.parent !== window ? window.parent : window, [w, h] = on ? [300, 120] : [MINI_W, MINI_H];
+  try { tw.resizeTo(w + (tw.outerWidth - tw.innerWidth), h + (tw.outerHeight - tw.innerHeight)); } catch {}
+  updateCompact();
+}
+function updateCompact() {
+  if (!compactOn) return;
+  $("cBank").textContent = fmt(bank);
+  $("cRate").textContent = (autoOn && autoOwned() ? "Auto Dropper on · " : "Auto Dropper off · ") + `about ${fmt(incomeRate * 60)} a minute`;
+}
+$("miniMin").hidden = !IS_MINI;
+$("miniMin").addEventListener("click", () => setCompact(true));
+$("cRestore").addEventListener("click", () => setCompact(false));
+setInterval(updateCompact, 500);
 
 let inGame = IS_MINI;
 try { inGame = inGame || sessionStorage.getItem("cc_inGame") === "1"; } catch {}
-if (location.hash !== "#sim") { if (inGame) startGame(); else openTitle(); }
+if (location.hash !== "#sim") {
+  setPanel(settings.panel ?? innerWidth > 760); // a computer starts with the shop open, a phone with just the dock
+  if (inGame) startGame(); else openTitle();
+}
 
 if (location.hash === "#sim") {
   window.__cc = {
@@ -2728,8 +2981,8 @@ if (location.hash === "#sim") {
 
 addEventListener("resize", resize);
 // the counters and vault change size as the pixel font loads and numbers grow, so re-fit the narrow framing then too
-if ("ResizeObserver" in window) { const ro = new ResizeObserver(() => { if (innerWidth <= 760) fitNarrow(); }); ro.observe(document.querySelector(".top")); ro.observe($("vault")); }
-document.fonts?.ready.then(() => { if (innerWidth <= 760) fitNarrow(); });
+if ("ResizeObserver" in window) { const ro = new ResizeObserver(() => fitCamera()); for (const el of [document.querySelector(".top"), $("vault"), $("hint"), $("rail"), $("tree")]) ro.observe(el); }
+document.fonts?.ready.then(() => fitCamera());
 </script>
 
 </body>
