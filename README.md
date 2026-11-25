@@ -17,12 +17,16 @@ Press **MINI WINDOW** on the title screen to play in a small phone-shaped window
 In Chrome and Edge it stays on top of your other windows; other browsers open a normal popup.
 The big window pauses until you close the mini one or press **BRING IT BACK HERE**.
 
+## Moving your progress
+
+Menu → Settings → **Send to another device** (or SEND TO DEVICE on the title screen) shows a QR code and a link with your progress inside. Scan it or open the link on your other phone or computer, and the game there asks before loading it. Nothing is stored online.
+
 ## Files
 
 | File | What it is |
 | --- | --- |
 | `index.html` | The whole game |
-| `lib/` | Three.js 0.160.0 and Rapier 3D (compat) 0.12.0, so the game works offline |
+| `lib/` | Three.js 0.160.0, Rapier 3D (compat) 0.12.0 and qrcode-generator 1.4.4 (MIT), so the game works offline |
 | `manifest.json`, `sw.js` | Installable app and offline cache |
 | `icon-*.png`, `apple-touch-icon.png`, `favicon.png` | Icons, made by `node tools/make-icons.js` |
 

@@ -430,6 +430,11 @@ body.compact > *:not(#compact) { display: none !important; }
 }
 
 .pips { display: flex; gap: 4px; } .pips i { width: 14px; height: 8px; background: #ffffff18; border: 2px solid var(--ink); } .pips i.on { background: var(--gold); }
+
+.overlay.xfer { z-index: 40; }
+.sendCard { align-items: center; text-align: center; max-width: min(360px, calc(100vw - 32px)); }
+#qr { width: min(260px, 70vw); height: auto; aspect-ratio: 1; image-rendering: pixelated; background: #fff; border: 3px solid var(--ink); }
+.xfer .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 </style>
 </head>
 <body>
@@ -491,6 +496,7 @@ body.compact > *:not(#compact) { display: none !important; }
       <button class="mbtn" id="tNew" type="button" role="menuitem">NEW GAME</button>
       <button class="mbtn" id="tLoad" type="button" role="menuitem">LOAD SAVE</button>
       <button class="mbtn alt" id="tCopy" type="button" role="menuitem">COPY SAVE CODE</button>
+      <button class="mbtn alt" id="tSend" type="button" role="menuitem">SEND TO DEVICE</button>
       <button class="mbtn alt" id="tMusic" type="button" role="menuitem">MUSIC: ON</button>
       <button class="mbtn alt" id="tMini" type="button" role="menuitem" hidden>MINI WINDOW</button>
       <button class="mbtn alt" id="tInstall" type="button" role="menuitem" hidden>INSTALL APP</button>
@@ -506,6 +512,12 @@ body.compact > *:not(#compact) { display: none !important; }
   <span class="ver" id="ver"></span>
 </div>
 <div class="overlay" id="away" hidden><div class="card box"><h2>In the mini window</h2><p>Coin Cascade is running in its small window, so this one is paused. Close the mini window, or bring it back here.</p><button id="awayBack" type="button">BRING IT BACK HERE</button></div></div>
+<div class="overlay xfer" id="sendBox" hidden><div class="card box sendCard"><h2>Send to another device</h2>
+  <canvas id="qr" width="10" height="10" aria-label="QR code with your progress"></canvas>
+  <p id="sendMsg">Scan this with your other device's camera, or open the link there. It asks before replacing anything.</p>
+  <div class="row"><button id="sendCopy" type="button">COPY LINK</button><button id="sendClose" class="quit" type="button">CLOSE</button></div></div></div>
+<div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2>Load progress from another device?</h2><p id="recvMsg"></p>
+  <div class="row"><button id="recvYes" type="button">LOAD IT</button><button id="recvNo" class="quit" type="button">KEEP THIS ONE</button></div></div></div>
 <div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
 <div class="toast box" id="toast" hidden><b id="toastTitle"></b><span id="toastText"></span></div>
 <div class="eventBanner box" id="eventBanner" hidden><b id="evName"></b><span id="evDesc"></span></div>
@@ -689,7 +701,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.9.0";
+const VERSION = "1.10.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -722,60 +734,60 @@ const msDone = (saved && saved.msDone) || {}, chDone = (saved && saved.chDone) |
 // ---------- Achievements ----------
 // 48 little goals in rows of 8. Each one is worth +1% payouts; finishing a row gives that row's reward. Secret ones
 // hide what they want until you stumble into them.
-const achDone = (saved && saved.ach) || {};
+const achDone = (saved && saved.achV === 2 && saved.ach) || {}; // version 2: harder goals, so the old easy ones are earned again from scratch
 const S = k => stats[k] || 0;
 const ACH = [
-  // row 1: first steps
-  { id: "a_drop", name: "First Drop", how: "Drop a coin", ok: () => dropped >= 1 },
-  { id: "a_bank", name: "Clink", how: "Bank the tray for the first time", ok: () => S("banks") >= 1 },
-  { id: "a_hold25", name: "Pocket Money", how: "Hold 25 coins at once", ok: () => stats.maxBank >= 25 },
-  { id: "a_buy", name: "Shiny New Part", how: "Buy an upgrade", ok: () => S("buys") >= 1 },
-  { id: "a_jack", name: "Bullseye", how: "Land a coin in the ×5", ok: () => stats.jackpots >= 1 },
-  { id: "a_lost", name: "Butterfingers", how: "Lose a coin off the side", ok: () => S("lost") >= 1 },
-  { id: "a_full", name: "Full Up", how: "Fill the tray until it banks itself", ok: () => S("fullBanks") >= 1 },
-  { id: "a_lv10", name: "Tinkerer", how: "Own 10 machine upgrade levels at once", ok: () => machineLevels() >= 10 },
+  // row 1: warming up (the first hour)
+  { id: "a_drop", name: "Busy Fingers", how: "Drop 250 coins", ok: () => dropped >= 250 },
+  { id: "a_bank", name: "Regular Saver", how: "Bank the tray 15 times", ok: () => S("banks") >= 15 },
+  { id: "a_hold25", name: "Pocket Money", how: "Hold 150 coins at once", ok: () => stats.maxBank >= 150 },
+  { id: "a_buy", name: "Tinkerer", how: "Buy 30 upgrade levels", ok: () => S("buys") >= 30 },
+  { id: "a_jack", name: "Bullseye", how: "Land 15 coins in the ×5", ok: () => stats.jackpots >= 15 },
+  { id: "a_lost", name: "Butterfingers", how: "Lose 25 coins off the sides", ok: () => S("lost") >= 25 },
+  { id: "a_full", name: "Full Up", how: "Let the tray fill and bank itself 10 times", ok: () => S("fullBanks") >= 10 },
+  { id: "a_lv10", name: "Well Equipped", how: "Own 25 machine upgrade levels at once", ok: () => machineLevels() >= 25 },
   // row 2: getting the hang of it
-  { id: "a_run1k", name: "Thousandaire", how: "Earn 1,000 coins in one run", ok: () => runEarned >= 1000 },
-  { id: "a_gold", name: "Golden Touch", how: "Hit a golden peg", ok: () => S("goldHits") >= 1 },
-  { id: "a_split", name: "Split Decision", how: "Have a coin split on a splitter peg", ok: () => S("splits") >= 1 },
-  { id: "a_doubler", name: "Double Trouble", how: "Have a coin doubled by a doubler peg", ok: () => S("doubles") >= 1 },
-  { id: "a_reel", name: "Spin City", how: "Spin the slot reels", ok: () => S("reelSpins") >= 1 },
-  { id: "a_flip", name: "Heads Up", how: "Win a coin flip", ok: () => S("flipWins") >= 1 },
-  { id: "a_coin25", name: "Heavy Coin", how: "Have a single coin pay 25 or more", ok: () => S("bestCoin") >= 25 },
-  { id: "a_jack25", name: "Sharpshooter", how: "Land 25 coins in the ×5", ok: () => stats.jackpots >= 25 },
+  { id: "a_run1k", name: "Good Run", how: "Earn 5,000 coins in one run", ok: () => runEarned >= 5000 },
+  { id: "a_gold", name: "Midas", how: "Hit golden pegs 1,000 times", ok: () => S("goldHits") >= 1000 },
+  { id: "a_split", name: "Split Decision", how: "Have coins split 150 times", ok: () => S("splits") >= 150 },
+  { id: "a_doubler", name: "Double Trouble", how: "Have coins doubled 75 times", ok: () => S("doubles") >= 75 },
+  { id: "a_reel", name: "Spin City", how: "Spin the slot reels 100 times", ok: () => S("reelSpins") >= 100 },
+  { id: "a_flip", name: "Heads Up", how: "Win 30 coin flips", ok: () => S("flipWins") >= 30 },
+  { id: "a_coin25", name: "Heavy Coin", how: "Have a single coin pay 100 or more", ok: () => S("bestCoin") >= 100 },
+  { id: "a_jack25", name: "Sharpshooter", how: "Land 150 coins in the ×5", ok: () => stats.jackpots >= 150 },
   // row 3: pusher pro
-  { id: "a_reb", name: "Fresh Start", how: "Rebirth", ok: () => rebirths >= 1 },
-  { id: "a_event", name: "Eventful", how: "See a random event", ok: () => S("events") >= 1 },
-  { id: "a_wheel", name: "Round and Round", how: "Spin the prize wheel", ok: () => S("wheelSpins") >= 1 },
-  { id: "a_myst10", name: "Mystery Solved", how: "Have a mystery coin pay ×10 or more", ok: () => S("myst10") >= 1 },
-  { id: "a_myst0", name: "Nothing Ventured", how: "Have a mystery coin pay ×0", ok: () => S("myst0") >= 1 },
-  { id: "a_bank30", name: "Big Haul", how: "Bank 30 or more coins by hand at once", ok: () => S("bigBank") >= 30 },
-  { id: "a_earn10k", name: "Ten Grand", how: "Earn 10,000 coins in total", ok: () => earned >= 1e4 },
+  { id: "a_reb", name: "Third Time Lucky", how: "Rebirth 3 times", ok: () => rebirths >= 3 },
+  { id: "a_event", name: "Eventful", how: "See 30 random events", ok: () => S("events") >= 30 },
+  { id: "a_wheel", name: "Round and Round", how: "Spin the prize wheel 25 times", ok: () => S("wheelSpins") >= 25 },
+  { id: "a_myst10", name: "Mystery Solved", how: "Have a mystery coin pay ×25", ok: () => S("myst25") >= 1 },
+  { id: "a_myst0", name: "Nothing Ventured", how: "Have 50 mystery coins pay ×0", ok: () => S("myst0n") >= 50 },
+  { id: "a_bank30", name: "Big Haul", how: "Bank 35 or more coins by hand at once", ok: () => S("bigBank") >= 35 },
+  { id: "a_earn10k", name: "Hundred Grand", how: "Earn 100,000 coins in total", ok: () => earned >= 1e5 },
   { id: "a_half", name: "Halfway There", how: "Own half of all machine upgrade levels at once", ok: () => machineLevels() >= UPGRADES.reduce((a, u) => a + u.max, 0) / 2 },
   // row 4: arcade regular
-  { id: "a_streak5", name: "On a Roll", how: "Win 5 coin flips in a row", ok: () => stats.bestStreak >= 5 },
-  { id: "a_reb5", name: "Again and Again", how: "Rebirth 5 times", ok: () => rebirths >= 5 },
-  { id: "a_chal", name: "Challenger", how: "Beat a challenge", ok: () => Object.keys(chDone).length >= 1 },
-  { id: "a_tok25", name: "Token Collector", how: "Earn 25 tokens in total", ok: () => S("tokensTotal") >= 25 || tokens >= 25 },
-  { id: "a_hold1k", name: "Overflowing", how: "Hold 1,000 coins at once", ok: () => stats.maxBank >= 1000 },
-  { id: "a_777", name: "Lucky Sevens", how: "Hit 7-7-7 on the slot reels", ok: () => S("reel777") >= 1 },
+  { id: "a_streak5", name: "On a Roll", how: "Win 6 coin flips in a row", ok: () => stats.bestStreak >= 6 },
+  { id: "a_reb5", name: "Again and Again", how: "Rebirth 10 times", ok: () => rebirths >= 10 },
+  { id: "a_chal", name: "Challenger", how: "Beat 5 challenge levels", ok: () => chLevelsTotal() >= 5 },
+  { id: "a_tok25", name: "Token Collector", how: "Earn 100 tokens in total", ok: () => S("tokensTotal") >= 100 },
+  { id: "a_hold1k", name: "Overflowing", how: "Hold 10,000 coins at once", ok: () => stats.maxBank >= 1e4 },
+  { id: "a_777", name: "Lucky Sevens", how: "Hit 7-7-7 on the slot reels 3 times", ok: () => S("reel777") >= 3 },
   { id: "a_auto", name: "Hands Free", how: "Own the Auto Dropper", ok: () => lvl("auto") > 0 || rl("autostart") > 0 },
-  { id: "a_speed", name: "Speed Run", how: "Rebirth less than 10 minutes into a run", ok: () => S("fastReb") >= 1 },
+  { id: "a_speed", name: "Speed Run", how: "Rebirth less than 5 minutes into a run", ok: () => S("fastReb5") >= 1 },
   // row 5: high roller
-  { id: "a_asc", name: "Ascended", how: "Ascend", ok: () => ascensions >= 1 },
-  { id: "a_gem10", name: "Gem Collector", how: "Earn 10 gems in total", ok: () => gemsTotal >= 10 },
-  { id: "a_earn100k", name: "Hundred Grand", how: "Earn 100,000 coins in total", ok: () => earned >= 1e5 },
-  { id: "a_max", name: "Maxed Out", how: "Max out any machine upgrade", ok: () => UPGRADES.some(u => u.max > 1 && lvl(u.id) >= u.max) },
-  { id: "a_gold6", name: "Peg Royalty", how: "Own all 6 golden pegs", ok: () => lvl("goldpeg") >= 6 },
-  { id: "a_streak8", name: "Daredevil", how: "Win 8 coin flips in a row", ok: () => stats.bestStreak >= 8 },
-  { id: "a_5h", name: "Marathon", how: "Play for 5 hours in total", ok: () => S("playTime") >= 5 * 3600 },
-  { id: "a_chal6", name: "Champion", how: "Beat 6 challenges", ok: () => Object.keys(chDone).length >= 6 },
+  { id: "a_asc", name: "Twice Ascended", how: "Ascend 2 times", ok: () => ascensions >= 2 },
+  { id: "a_gem10", name: "Gem Collector", how: "Earn 30 gems in total", ok: () => gemsTotal >= 30 },
+  { id: "a_earn100k", name: "Ten Million", how: "Earn 10,000,000 coins in total", ok: () => earned >= 1e7 },
+  { id: "a_max", name: "Maxed Out", how: "Max out 5 machine upgrades in one run", ok: () => UPGRADES.filter(u => u.max > 1 && lvl(u.id) >= u.max).length >= 5 },
+  { id: "a_gold6", name: "Peg Royalty", how: "Own all 6 golden pegs and both doubler pegs", ok: () => lvl("goldpeg") >= 6 && lvl("doublepeg") >= 2 },
+  { id: "a_streak8", name: "Daredevil", how: "Win 10 coin flips in a row", ok: () => stats.bestStreak >= 10 },
+  { id: "a_5h", name: "Marathon", how: "Play for 10 hours in total", ok: () => S("playTime") >= 10 * 3600 },
+  { id: "a_chal6", name: "Champion", how: "Beat 25 challenge levels", ok: () => chLevelsTotal() >= 25 },
   // row 6: oddities (secret until earned)
   { id: "a_idle", name: "Patience", how: "Don't drop a coin for 10 minutes with the game open", secret: true, ok: () => S("playTime") - lastDropPlay >= 600 },
-  { id: "a_unlucky", name: "Unlucky", how: "Lose 3 coin flips in a row", secret: true, ok: () => S("flipLossBest") >= 3 },
-  { id: "a_side100", name: "Sideways", how: "Lose 100 coins off the sides", secret: true, ok: () => S("lost") >= 100 },
+  { id: "a_unlucky", name: "Unlucky", how: "Lose 5 coin flips in a row", secret: true, ok: () => S("flipLossBest") >= 5 },
+  { id: "a_side100", name: "Sideways", how: "Lose 500 coins off the sides", secret: true, ok: () => S("lost") >= 500 },
   { id: "a_penny", name: "Penny Pincher", how: "Bank the tray with just one coin in it", secret: true, ok: () => S("penny") >= 1 },
-  { id: "a_allin", name: "All In", how: "Lose a coin flip with 100 or more at stake", secret: true, ok: () => S("allIn") >= 1 },
+  { id: "a_allin", name: "All In", how: "Lose a coin flip with 1,000 or more at stake", secret: true, ok: () => S("allIn1k") >= 1 },
   { id: "a_owl", name: "Night Owl", how: "Play between midnight and 4 a.m.", secret: true, ok: () => new Date().getHours() < 4 },
   { id: "a_hoard", name: "Brim Full", how: "Bank the tray by hand when it's one coin from full", secret: true, ok: () => S("hoard") >= 1 },
   { id: "a_all", name: "Completionist", how: "Get every other achievement", secret: true, ok: () => ACH.every(a => a.id === "a_all" || achDone[a.id]) },
@@ -792,9 +804,12 @@ let lastDropPlay = stats.playTime || 0; // for Patience
 function achRow(r) { for (let i = r * 8; i < r * 8 + 8; i++) if (!achDone[ACH[i].id]) return false; return true; }
 function achCount() { let n = 0; for (const a of ACH) if (achDone[a.id]) n++; return n; }
 function achPayMult() { return (1 + 0.01 * achCount()) * (achRow(0) ? 1.05 : 1) * (achRow(4) ? 1.1 : 1) * (achRow(5) ? 1.15 : 1); }
+let achQuiet = true; // the first check after loading re-awards what you already qualify for, without a pile of pop-ups
 function checkAch() {
+  const quiet = achQuiet; achQuiet = false;
   for (const a of ACH) if (!achDone[a.id] && a.ok()) {
-    achDone[a.id] = true; showToast("ACHIEVEMENT: " + a.name.toUpperCase(), a.how);
+    achDone[a.id] = true; if (quiet) continue;
+    showToast("ACHIEVEMENT: " + a.name.toUpperCase(), a.how);
     const r = Math.floor(ACH.indexOf(a) / 8);
     if (achRow(r)) setTimeout(() => showToast("ROW COMPLETE: " + ACH_ROWS[r].name.toUpperCase(), ACH_ROWS[r].reward), 3600);
     save();
@@ -1815,7 +1830,7 @@ function stepPhysics(counting) {
         earned += v; runEarned += v; rateEarn += v; // counts as earned now; spendable once it's banked from the tray
         popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), "+" + fmtV(v), v > 1 ? "big" : "");
         if (v > 0) flyToVault(new THREE.Vector3(t.x, t.y, t.z), v, c.value);
-        stats.bestCoin = Math.max(S("bestCoin"), v); if (c.mystery && mult >= 10) stats.myst10 = 1; if (c.mystery && mult === 0) stats.myst0 = 1;
+        stats.bestCoin = Math.max(S("bestCoin"), v); if (c.mystery && mult >= 25) stats.myst25 = S("myst25") + 1; if (c.mystery && mult === 0) stats.myst0n = S("myst0n") + 1;
         sfx.win(v);
       } else {
         popAt(new THREE.Vector3(t.x, 0, t.z), "LOST", "lost"); stats.lost = S("lost") + 1;
@@ -2443,7 +2458,9 @@ function renderSettings() {
     if (Date.now() - importArmed > 3000) { importArmed = Date.now(); ld.textContent = "CLICK TO REPLACE YOUR GAME"; msg.textContent = "This replaces your current game with the pasted one."; setTimeout(() => { ld.textContent = "LOAD PASTED CODE"; }, 3000); return; }
     store.set(SAVE_KEY, data); saveBlocked = true; location.reload();
   });
-  row.append(cp, ld); bk.append(ta, row, msg); w.appendChild(bk);
+  const sd = document.createElement("button"); sd.type = "button"; sd.textContent = "SEND TO ANOTHER DEVICE";
+  sd.addEventListener("click", openSend);
+  row.append(cp, ld); bk.append(ta, row, sd, msg); w.appendChild(bk);
   // back to the title screen
   const ti = card("", "Title screen", [[`Coin Cascade v${VERSION}`, ""]]);
   const tb = document.createElement("button"); tb.type = "button"; tb.textContent = "BACK TO TITLE";
@@ -2512,7 +2529,7 @@ const CHALLENGES = [
 function doRebirth() {
   const n = tokenGain(); if (n < 1) return;
   tokens += n; tokensAsc += n; rebirths++; stats.tokensTotal = (stats.tokensTotal || 0) + n;
-  if (runTime < 600) stats.fastReb = 1;
+  if (runTime < 300) stats.fastReb5 = 1;
   store.set(SAVE_KEY, freshRun({ bank: startCoins(), chActive: null }));
   saveBlocked = true; location.reload();
 }
@@ -2533,7 +2550,7 @@ function startUps() {
 }
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
-    stats, msDone, chDone, ach: achDone, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
+    stats, msDone, chDone, ach: achDone, achV: 2, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
     goldRandom: true, pegsRandom: true, runMax: 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
@@ -2648,7 +2665,7 @@ function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
-    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, layout, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, layout, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
@@ -2830,7 +2847,7 @@ let flipStreak = 0;
 function landFlip() {
   face = flipResult; flipT = -1;
   const name = face === "H" ? "HEADS" : "TAILS";
-  if (flipResult === flipCall) { stats.flipWins = S("flipWins") + 1; stats.flipLossRow = 0; } else { stats.flipLossRow = S("flipLossRow") + 1; stats.flipLossBest = Math.max(S("flipLossBest"), stats.flipLossRow); if (inPlay >= 100) stats.allIn = 1; }
+  if (flipResult === flipCall) { stats.flipWins = S("flipWins") + 1; stats.flipLossRow = 0; } else { stats.flipLossRow = S("flipLossRow") + 1; stats.flipLossBest = Math.max(S("flipLossBest"), stats.flipLossRow); if (inPlay >= 1000) stats.allIn1k = 1; }
   if (flipResult === flipCall) { flipStreak++; stats.bestStreak = Math.max(stats.bestStreak, flipStreak); inPlay *= 2; $("flipMsg").textContent = `${name}! Now worth ${fmt(inPlay)}. Go again or cash out.`; sfx.win(2); }
   else { $("flipMsg").textContent = `${name}. Lost ${fmt(inPlay)}.`; inPlay = 0; flipStreak = 0; sfx.lost(); }
   save(); renderFlip();
@@ -3162,7 +3179,7 @@ function openTitle() {
   $("ver").textContent = `v${VERSION}`;
   const has = !!saved || earned > 0;
   $("tContinue").textContent = has ? "CONTINUE" : "START";
-  $("tCopy").hidden = !has;
+  $("tCopy").hidden = !has; $("tSend").hidden = !has;
   $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
   $("tInfo").textContent = has ? `Save: ${fmt(bank)} coins · ${fmt(earned)} earned · ${rebirths} rebirth${rebirths === 1 ? "" : "s"}${ascensions ? ` · ${ascensions} ascension${ascensions === 1 ? "" : "s"}` : ""}` : "No save yet: press START.";
   $("tNew").hidden = !has;
@@ -3209,6 +3226,84 @@ $("title").addEventListener("keydown", e => {
 // any first click or key on the title also starts the music (browsers need a gesture first)
 $("title").addEventListener("pointerdown", () => sfx.unlock());
 $("title").addEventListener("keydown", () => sfx.unlock());
+// ---------- Send to another device ----------
+// Your progress packed into a link (and a QR code of it). Open it on another phone or computer and the game there
+// offers to load it. No accounts or servers: the save travels inside the link itself.
+const GAME_URL = "https://salvationbacon.github.io/Coin-Cascade/";
+function transferSave() {
+  save(); const d = store.get(SAVE_KEY, null); if (!d) return null;
+  const out = Object.assign({}, d);
+  out.bank = (out.bank || 0) + (out.tray || []).reduce((a, v) => a + v, 0) + (out.inflight || 0); // the tray and coins mid-board come along as coins
+  delete out.coins; delete out.tray; delete out.inflight; delete out.pusherT; // the other device builds a fresh pile
+  out.t = Date.now();
+  return out;
+}
+const b64url = bytes => { let s = ""; for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192)); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+async function packSave(obj) {
+  const json = JSON.stringify(obj);
+  if ("CompressionStream" in window) {
+    const buf = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    return "z" + b64url(buf);
+  }
+  return "j" + b64url(new TextEncoder().encode(json));
+}
+async function unpackSave(code) {
+  try {
+    const b64 = code.slice(1).replace(/-/g, "+").replace(/_/g, "/"), bin = atob(b64 + "===".slice((b64.length + 3) % 4));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    const json = code[0] === "z" ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text() : new TextDecoder().decode(bytes);
+    const d = JSON.parse(json); return d && typeof d.bank === "number" ? d : null;
+  } catch { return null; }
+}
+function loadQrLib() {
+  return new Promise((res, rej) => {
+    if (window.qrcode) return res();
+    const urls = [...(HOSTED ? ["lib/qrcode.js"] : []), "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"];
+    const next = () => { const u = urls.shift(); if (!u) return rej(new Error("no QR library")); const sc = document.createElement("script"); sc.src = u; sc.onload = () => res(); sc.onerror = () => { sc.remove(); next(); }; document.head.appendChild(sc); };
+    next();
+  });
+}
+let sendLink = "";
+async function openSend() {
+  const d = transferSave(); if (!d) return;
+  sendLink = GAME_URL + "#load=" + await packSave(d);
+  $("sendBox").hidden = false; $("sendCopy").textContent = "COPY LINK";
+  $("sendMsg").textContent = "Scan this with your other device's camera, or open the link there. It asks before replacing anything.";
+  const cv = $("qr");
+  try {
+    await loadQrLib();
+    const qr = qrcode(0, "L"); qr.addData(sendLink); qr.make();
+    const n = qr.getModuleCount(), q = 4, sc = Math.max(2, Math.floor(280 / (n + q * 2)));
+    cv.width = cv.height = (n + q * 2) * sc; cv.hidden = false;
+    const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = "#000";
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) g.fillRect((c + q) * sc, (r + q) * sc, sc, sc);
+  } catch {
+    cv.hidden = true;
+    $("sendMsg").textContent = "Copy the link and open it on your other device. It asks before replacing anything.";
+  }
+}
+$("sendCopy").addEventListener("click", () => {
+  const done = () => { $("sendCopy").textContent = "COPIED"; };
+  try { navigator.clipboard.writeText(sendLink).then(done, () => { $("sendMsg").textContent = sendLink; }); } catch { $("sendMsg").textContent = sendLink; }
+});
+$("sendClose").addEventListener("click", () => { $("sendBox").hidden = true; });
+$("tSend").addEventListener("click", openSend);
+// arriving with a #load= link: offer to swap this device's progress for the one in the link
+let recvData = null;
+const saveLine = d => `${fmt(d.earned || 0)} coins earned · ${d.rebirths || 0} rebirth${d.rebirths === 1 ? "" : "s"}${d.ascensions ? ` · ${d.ascensions} ascension${d.ascensions === 1 ? "" : "s"}` : ""}`;
+async function checkIncoming() {
+  if (!location.hash.startsWith("#load=")) return;
+  const code = location.hash.slice(6);
+  history.replaceState(null, "", location.pathname + location.search); // don't offer it again on reload
+  recvData = await unpackSave(code);
+  $("recvMsg").textContent = recvData
+    ? `The link has: ${saveLine(recvData)}. This device has: ${saved ? saveLine({ earned, rebirths, ascensions }) : "no save yet"}. Loading replaces this device's progress.`
+    : "That link didn't contain a Coin Cascade save. Try copying it again.";
+  $("recvYes").hidden = !recvData; $("recvBox").hidden = false;
+}
+$("recvYes").addEventListener("click", () => { if (!recvData) return; store.set(SAVE_KEY, recvData); saveBlocked = true; goInGame(); location.reload(); });
+$("recvNo").addEventListener("click", () => { $("recvBox").hidden = true; });
+
 // ---------- Install button ----------
 // Chrome and Edge hand us an install prompt; on iPhone and iPad it's Share, then Add to Home Screen.
 let installEvt = null;
@@ -3298,6 +3393,7 @@ let inGame = IS_MINI;
 try { inGame = inGame || sessionStorage.getItem("cc_inGame") === "1"; } catch {}
 if (location.hash !== "#sim") {
   setPanel(settings.panel ?? innerWidth > 760); // a computer starts with the shop open, a phone with just the dock
+  checkIncoming();
   if (inGame) startGame(); else openTitle();
 }
 
