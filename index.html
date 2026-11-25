@@ -452,6 +452,21 @@ body.compact > *:not(#compact) { display: none !important; }
 .tutCard button { font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 9px 12px; cursor: pointer; }
 .tutCard button.quit { background: var(--panel); color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { .tutSpot { transition: none; } }
+
+/* next random event: counts down with a filling bar; during an event the bar drains */
+.evBox { position: relative; padding-bottom: 8px; }
+.evBox .evBar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 4px; background: #0008; }
+.evBox .evBar i { display: block; height: 100%; width: 0; background: var(--cyan); }
+.evBox.live b, .evBox.live span { color: var(--gold); }
+.evBox.live .evBar i { background: var(--gold); }
+
+@media (max-width: 760px) {
+  /* five counters share the row on narrow screens; labels stay on one line */
+  .counters { gap: 5px; width: 100%; }
+  .counter { flex: 1 1 0; min-width: 0; padding-left: 3px; padding-right: 3px; }
+  .counter span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .counter b { font-size: 12px; white-space: nowrap; }
+}
 </style>
 </head>
 <body>
@@ -464,6 +479,7 @@ body.compact > *:not(#compact) { display: none !important; }
     <div class="counter bank box"><b id="bank">0</b><span>Coins</span></div>
     <div class="counter won box" title="Coins earned since your last rebirth"><b id="earned">0</b><span>This run</span></div>
     <div class="counter box"><b id="regen">FULL</b><span>Regen</span></div>
+    <div class="counter box evBox" id="evBox" hidden title="Random events"><b id="evNext">0s</b><span id="evLabel">Next event</span><i class="evBar"><i id="evFill"></i></i></div>
     <div class="counter box" id="tokBox" hidden><b id="tokens">0</b><span>Tokens</span></div>
     <div class="counter box" id="gemBox" hidden><b id="gems">0</b><span>Gems</span></div>
   </div>
@@ -712,7 +728,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.14.0";
+const VERSION = "1.15.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2657,7 +2673,7 @@ const EVENTS = [
   { id: "shower", name: "COIN SHOWER", desc: "Free coins rain onto the board", dur: 6 },
   { id: "magnet", name: "JACKPOT MAGNET", desc: "Every coin reaching the middle stays in it", dur: 20 },
 ];
-let ev = null, evEnd = 0, nextEv = 0, showerT = 0;
+let ev = null, evEnd = 0, nextEv = 0, evFrom = 0, showerT = 0;
 const eventOn = id => ev && ev.id === id;
 function startEvent(e) {
   stats.events = S("events") + 1;
@@ -2666,14 +2682,25 @@ function startEvent(e) {
   applyUpgrades(); sfx.event(e.id); music.bonusTime(true);
 }
 function updateEvents(dt) {
+  $("evBox").hidden = !eventsLvl() && !ev;
   if (!eventsLvl() && !ev) return;
   const now = performance.now() / 1000;
-  if (!nextEv && eventsLvl()) nextEv = now + 20 + Math.random() * 20;
+  if (!nextEv && eventsLvl()) { evFrom = now; nextEv = now + 20 + Math.random() * 20; }
   if (ev && now >= evEnd) {
     ev = null; $("eventBanner").hidden = true; applyUpgrades(); music.bonusTime(false);
-    nextEv = now + eventGap() * (0.6 + Math.random() * 0.8);
+    evFrom = now; nextEv = now + eventGap() * (0.6 + Math.random() * 0.8);
   }
   if (!ev && eventsLvl() && now >= nextEv) startEvent(EVENTS[Math.floor(Math.random() * EVENTS.length)]);
+  // the event counter: time to the next one (bar fills), or time left on this one (bar drains)
+  const box = $("evBox"); box.classList.toggle("live", !!ev);
+  if (ev) {
+    const total = ev.dur * eventLen();
+    $("evNext").textContent = Math.ceil(evEnd - now) + "s"; $("evLabel").textContent = innerWidth <= 760 ? ev.name.split(" ").pop() : ev.name;
+    $("evFill").style.width = Math.max(0, Math.min(100, (evEnd - now) / total * 100)) + "%";
+  } else if (nextEv) {
+    $("evNext").textContent = Math.max(0, Math.ceil(nextEv - now)) + "s"; $("evLabel").textContent = innerWidth <= 760 ? "Event" : "Next event";
+    $("evFill").style.width = Math.max(0, Math.min(100, (now - evFrom) / Math.max(1, nextEv - evFrom) * 100)) + "%";
+  }
   if (ev) {
     $("evDesc").textContent = `${ev.desc} · ${Math.ceil(evEnd - now)}s`;
     if (ev.id === "shower" && (showerT += dt) > 0.45) { showerT = 0; boardDrop(board, (Math.random() - 0.5) * BOARD.aimMax * 2).v = coinValue(); }
