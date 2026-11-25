@@ -734,7 +734,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.16.2";
+const VERSION = "1.16.3";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -3313,6 +3313,7 @@ function askReset() {
 }
 function doReset() {
   if (HOSTED) exportSaveFile();
+  settings.seenTut = false; settings.seenBank = false; settings.panel = false; saveSettings(); // the new game starts like a first game, tutorial and all
   try { localStorage.setItem("cc_save_before_reset", localStorage.getItem(SAVE_KEY) || ""); } catch {}
   setTimeout(() => { store.set(SAVE_KEY, null); saveBlocked = true; location.reload(); }, 400);
 }
@@ -3590,7 +3591,8 @@ setInterval(updateCompact, 500);
 let inGame = IS_MINI;
 try { inGame = inGame || sessionStorage.getItem("cc_inGame") === "1"; } catch {}
 if (location.hash !== "#sim") {
-  setPanel(settings.panel ?? innerWidth > 760); // a computer starts with the shop open, a phone with just the dock
+  // a brand-new game starts on the machine (and the tutorial) with the shop closed; after that, a computer opens it by default
+  setPanel(saved && earned > 0 ? (settings.panel ?? innerWidth > 760) : false);
   checkIncoming();
   if (inGame) startGame(); else openTitle();
 }
