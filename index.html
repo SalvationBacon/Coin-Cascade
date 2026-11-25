@@ -467,6 +467,13 @@ body.compact > *:not(#compact) { display: none !important; }
   .counter span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .counter b { font-size: 12px; white-space: nowrap; }
 }
+
+@media (max-width: 760px) {
+  /* pop-ups sit in the middle of the gap between the counters and the machine (over the top of the board if there's no gap) */
+  .toast, body.panelOpen .toast { top: calc(var(--gapTop, 100px) + max(var(--gapH, 0px), 70px) / 2); bottom: auto; left: 50%; right: auto;
+    transform: translate(-50%, -50%); width: min(360px, calc(100vw - 24px)); max-width: none; text-align: center; box-sizing: border-box; }
+  .eventBanner { top: calc(var(--gapTop, 100px) + 6px); }
+}
 </style>
 </head>
 <body>
@@ -728,7 +735,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.16.0";
+const VERSION = "1.16.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -981,6 +988,11 @@ function fitCamera() {
   const safeTop = Math.min(H * 0.4, (topR ? topR.bottom : 100) + 4);
   const lowest = vR && vR.height ? vR.top + 1 : H - 120; // the cabinet's top front edge sits exactly on the tray's top edge
   fitInto(right, safeTop, Math.max(safeTop + H * 0.3, lowest - 4));
+  // the empty gap between the counters and the top of the machine: pop-ups and the event banner go here on narrow screens
+  const signY = (1 - tmpFit.set(0, 10.1, -2.4).project(camera).y) / 2 * H;
+  const gapTop = topR ? topR.bottom : 0;
+  root.setProperty("--gapTop", Math.round(gapTop) + "px");
+  root.setProperty("--gapH", Math.round(Math.max(0, signY - gapTop)) + "px");
 }
 // pull the camera back until the machine fits (closest that fits = biggest on screen), then slide it into the gap
 function fitInto(right, safeTop, safeBot) {
