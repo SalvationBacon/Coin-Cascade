@@ -728,7 +728,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.15.2";
+const VERSION = "1.16.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1889,8 +1889,8 @@ const lvl = id => ups[id] || 0;
 const rl = id => rups[id] || 0;
 const fmtV = v => v < 10 && v % 1 ? v.toFixed(1) : fmt(v);
 const coinValue = (l = lvl("value")) => 1 + l;
-const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (achRow(2) ? 0.95 : 1) * (msHas("drop5k") ? 0.9 : 1) * Math.pow(0.88, chHas("slow")) * (msHas("drop20k") ? 0.95 : 1)) * (chOn("slow") ? 3 : 1);
-const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (achRow(1) ? 0.9 : 1) * (msHas("drop500") ? 0.9 : 1) * Math.pow(0.8, chHas("dry"));
+const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (achRow(2) ? 0.95 : 1) * (msHas("drop5k") ? 0.95 : 1) * Math.pow(0.88, chHas("slow")) * (msHas("drop20k") ? 0.95 : 1)) * (chOn("slow") ? 3 : 1);
+const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (achRow(1) ? 0.9 : 1) * (msHas("drop500") ? 0.95 : 1) * Math.pow(0.8, chHas("dry"));
 // regenCap = what Bigger Refill allows; regenLimit = what regen actually fills to right now
 const regenLimit = () => Math.min(regenCap(), Math.max(5, runMax)); // every run starts refilling to 5, then follows your best vault
 const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + 10 * chHas("pocketless");
@@ -1904,10 +1904,10 @@ const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1));
 const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
 const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
 // rebirth tree effects
-const payoutMult = (l = rl("golden")) => achPayMult() * (1 + 0.25 * l) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.25 : 1) * (1 + msPayout()) * (1 + 0.15 * chHas("leaky")) * (chOn("leaky") ? 0.5 : 1);
+const payoutMult = (l = rl("golden")) => achPayMult() * (1 + 0.25 * l) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chHas("leaky")) * (chOn("leaky") ? 0.5 : 1);
 const HEADSTART = [0, 10, 30, 100, 300, 1000];
 const startCoins = (l = rl("headstart")) => HEADSTART[l];
-const tokenMult = (l = rl("tokens")) => (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.15 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
+const tokenMult = (l = rl("tokens")) => (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
 // rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
 const REBIRTH_AT = 1000;
 const LATE = 1.25;   // each level of a node costs this much more than the last step did
@@ -1962,7 +1962,7 @@ const RUPGRADES = [
   { id: "weighted", name: "Weighted Coin", x: 0, y: -1, parent: "golden", max: 5, base: 3, grow: 2, text: l => `Win ${pct(flipOdds(l))} of coin flips` },
 ];
 const ASC_AT = 25; // tokens earned since the last ascension
-const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(2 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.2 : 1) * (msHas("gems50") ? 1.2 : 1));
+const gemGain = () => tokensAsc < ASC_AT ? 0 : Math.floor(2 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1));
 const AUPGRADES = [
   { id: "shine", name: "Gem Shine", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.8, text: l => `All payouts +${50 * l}%` },
   { id: "fountain", name: "Token Fountain", x: 1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% tokens per rebirth` },
@@ -2003,8 +2003,8 @@ function applyUpgrades() {
     if (m === 1 && chOn("allnothing")) return 0;
     return m;
   });
-  BOARD.jackpotKeep = eventOn("magnet") ? 1 : Math.min(1, 0.45 + 0.08 * lvl("wide") + (msHas("jack100") ? 0.05 : 0));
-  BOARD.luck = 0.04 * lvl("luck") + (msHas("jack10") ? 0.04 : 0) + 0.05 * al("gemluck");
+  BOARD.jackpotKeep = eventOn("magnet") ? 1 : Math.min(1, 0.45 + 0.08 * lvl("wide") + (msHas("jack100") ? 0.03 : 0));
+  BOARD.luck = 0.04 * lvl("luck") + (msHas("jack10") ? 0.02 : 0) + 0.05 * al("gemluck");
   drawBoard();
   $("bonusbar").textContent = `×${BOARD.slots[4]} in the middle · ×${BOARD.slots[0]} on the edges`;
   if (lvl("rails") && !railsBuilt) {
@@ -2518,32 +2518,34 @@ function renderShop() { refreshShop(); }
 // ---------- Milestones ----------
 // Permanent goals; each pays a small permanent bonus the moment it's reached.
 const MILESTONES = [
-  { id: "earn100", name: "Pocket Change", goal: 100, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
-  { id: "earn1k", name: "Coin Collector", goal: 1000, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
-  { id: "earn10k", name: "High Roller", goal: 10000, val: () => earned, unit: "coins earned", reward: "+10% payouts", pay: 0.1 },
-  { id: "earn100k", name: "Coin Baron", goal: 100000, val: () => earned, unit: "coins earned", reward: "+10% payouts", pay: 0.1 },
-  { id: "drop500", name: "Busy Hands", goal: 500, val: () => dropped, unit: "coins dropped", reward: "Regen 10% faster" },
-  { id: "drop5k", name: "Drop Machine", goal: 5000, val: () => dropped, unit: "coins dropped", reward: "Drop cooldown 10% shorter" },
-  { id: "jack10", name: "Bullseye", goal: 10, val: () => stats.jackpots, unit: "×5 hits", reward: "+4% Lucky Bounce" },
-  { id: "jack100", name: "Jackpot Junkie", goal: 100, val: () => stats.jackpots, unit: "×5 hits", reward: "5% more coins stay in the ×5" },
-  { id: "vault1k", name: "Full Vault", goal: 1000, val: () => stats.maxBank, unit: "coins held at once", reward: "+5 regen cap" },
-  { id: "streak5", name: "Hot Streak", goal: 5, val: () => stats.bestStreak, unit: "flips won in a row", reward: "+2% flip odds" },
-  { id: "reb1", name: "Born Again", goal: 1, val: () => rebirths, unit: "rebirths", reward: "+5 regen cap" },
-  { id: "reb5", name: "Old Soul", goal: 5, val: () => rebirths, unit: "rebirths", reward: "+10% tokens" },
-  { id: "asc1", name: "Ascended", goal: 1, val: () => ascensions, unit: "ascensions", reward: "+25% payouts" },
-  { id: "gems10", name: "Gem Hoarder", goal: 10, val: () => gemsTotal, unit: "gems earned", reward: "+10% tokens" },
-  { id: "chal3", name: "Up for Anything", goal: 3, val: () => Object.keys(chDone).length, unit: "challenges done", reward: "+10% payouts", pay: 0.1 },
-  { id: "bank100", name: "Regular Depositor", goal: 100, val: () => S("banks"), unit: "times banked", reward: "The tray holds +10 coins" },
-  { id: "earn1m", name: "Millionaire", goal: 1e6, val: () => earned, unit: "coins earned", reward: "+10% payouts", pay: 0.1 },
-  { id: "drop20k", name: "Tireless", goal: 20000, val: () => dropped, unit: "coins dropped", reward: "Drop cooldown 5% shorter" },
-  { id: "jack500", name: "Jackpot Legend", goal: 500, val: () => stats.jackpots, unit: "×5 hits", reward: "The middle slot pays +1" },
-  { id: "ach24", name: "Trophy Shelf", goal: 24, val: () => achCount(), unit: "achievements", reward: "+10% payouts", pay: 0.1 },
-  { id: "chlv15", name: "Glutton for Punishment", goal: 15, val: () => chLevelsTotal(), unit: "challenge levels beaten", reward: "+10% tokens" },
-  { id: "reb25", name: "Reincarnated", goal: 25, val: () => rebirths, unit: "rebirths", reward: "+15% tokens" },
-  { id: "asc3", name: "Frequent Ascender", goal: 3, val: () => ascensions, unit: "ascensions", reward: "+20% gems" },
-  { id: "gems50", name: "Gem Vault", goal: 50, val: () => gemsTotal, unit: "gems earned", reward: "+20% gems" },
-  { id: "earn100m", name: "Coin Tycoon", goal: 1e8, val: () => earned, unit: "coins earned", reward: "+15% payouts", pay: 0.15 },
+  { id: "earn100", name: "Pocket Change", goal: 1000, val: () => earned, unit: "coins earned", reward: "+3% payouts", pay: 0.03 },
+  { id: "earn1k", name: "Coin Collector", goal: 10000, val: () => earned, unit: "coins earned", reward: "+3% payouts", pay: 0.03 },
+  { id: "earn10k", name: "High Roller", goal: 100000, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
+  { id: "earn100k", name: "Coin Baron", goal: 1000000, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
+  { id: "drop500", name: "Busy Hands", goal: 2500, val: () => dropped, unit: "coins dropped", reward: "Regen 5% faster" },
+  { id: "drop5k", name: "Drop Machine", goal: 15000, val: () => dropped, unit: "coins dropped", reward: "Drop cooldown 5% shorter" },
+  { id: "jack10", name: "Bullseye", goal: 50, val: () => stats.jackpots, unit: "×5 hits", reward: "+2% Lucky Bounce" },
+  { id: "jack100", name: "Jackpot Junkie", goal: 300, val: () => stats.jackpots, unit: "×5 hits", reward: "3% more coins stay in the ×5" },
+  { id: "vault1k", name: "Full Vault", goal: 2500, val: () => stats.maxBank, unit: "coins held at once", reward: "+5 regen cap" },
+  { id: "streak5", name: "Hot Streak", goal: 6, val: () => stats.bestStreak, unit: "flips won in a row", reward: "+2% flip odds" },
+  { id: "reb1", name: "Born Again", goal: 2, val: () => rebirths, unit: "rebirths", reward: "+5 regen cap" },
+  { id: "reb5", name: "Old Soul", goal: 8, val: () => rebirths, unit: "rebirths", reward: "+10% tokens" },
+  { id: "asc1", name: "Ascended", goal: 1, val: () => ascensions, unit: "ascensions", reward: "+15% payouts" },
+  { id: "gems10", name: "Gem Hoarder", goal: 15, val: () => gemsTotal, unit: "gems earned", reward: "+10% tokens" },
+  { id: "chal3", name: "Up for Anything", goal: 5, val: () => chLevelsTotal(), unit: "challenge levels beaten", reward: "+5% payouts", pay: 0.05 },
+  { id: "bank100", name: "Regular Depositor", goal: 200, val: () => S("banks"), unit: "times banked", reward: "The tray holds +10 coins" },
+  { id: "earn1m", name: "Millionaire", goal: 1e7, val: () => earned, unit: "coins earned", reward: "+5% payouts", pay: 0.05 },
+  { id: "drop20k", name: "Tireless", goal: 50000, val: () => dropped, unit: "coins dropped", reward: "Drop cooldown 5% shorter" },
+  { id: "jack500", name: "Jackpot Legend", goal: 1500, val: () => stats.jackpots, unit: "×5 hits", reward: "The middle slot pays +1" },
+  { id: "ach24", name: "Trophy Shelf", goal: 24, val: () => achCount(), unit: "achievements", reward: "+5% payouts", pay: 0.05 },
+  { id: "chlv15", name: "Glutton for Punishment", goal: 20, val: () => chLevelsTotal(), unit: "challenge levels beaten", reward: "+10% tokens" },
+  { id: "reb25", name: "Reincarnated", goal: 30, val: () => rebirths, unit: "rebirths", reward: "+10% tokens" },
+  { id: "asc3", name: "Frequent Ascender", goal: 3, val: () => ascensions, unit: "ascensions", reward: "+15% gems" },
+  { id: "gems50", name: "Gem Vault", goal: 60, val: () => gemsTotal, unit: "gems earned", reward: "+15% gems" },
+  { id: "earn100m", name: "Coin Tycoon", goal: 1e9, val: () => earned, unit: "coins earned", reward: "+8% payouts", pay: 0.08 },
 ];
+// version 2 of the milestones: goals spread further apart, smaller rewards. Ones you no longer qualify for are re-locked once.
+if (!(saved && saved.msV === 2)) for (const m of MILESTONES) if (msDone[m.id] && m.val() < m.goal) delete msDone[m.id];
 const msPayout = () => MILESTONES.reduce((a, m) => a + (m.pay && msDone[m.id] ? m.pay : 0), 0);
 
 // ---------- Challenges ----------
@@ -2587,7 +2589,7 @@ function startUps() {
 }
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
-    stats, msDone, chDone, ach: achDone, achV: 2, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
+    stats, msDone, chDone, ach: achDone, achV: 2, msV: 2, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
     goldRandom: true, pegsRandom: true, runMax: 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
@@ -2714,7 +2716,7 @@ function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
-    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, layout, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
