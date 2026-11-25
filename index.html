@@ -696,7 +696,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.13.0";
+const VERSION = "1.13.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -929,7 +929,7 @@ function resize() {
 }
 // Narrow screens (phones, the mini window): fit the whole machine, from the dropper at the top to the
 // prize shelf at the bottom, into the gap between the counters and the buttons, whatever the window's shape.
-const FIT_PTS = [[0, 10.1, -2.4], [-3.9, 10.1, -2.4], [3.9, 10.1, -2.4], [-4.4, 4, 1.2], [4.4, 4, 1.2], [-3.7, 0, 3.0], [3.7, 0, 3.0], [0, 0, 3.0]].map(a => new THREE.Vector3(...a)); // top of the sign, the sides, and the front shelf (the base below it tucks behind the coin tray)
+const FIT_PTS = [[0, 10.1, -2.4], [-3.9, 10.1, -2.4], [3.9, 10.1, -2.4], [-4.4, 4, 1.2], [4.4, 4, 1.2], [-(HALF_W + 0.6), -0.07, FLOOR_FRONT + 0.05], [HALF_W + 0.6, -0.07, FLOOR_FRONT + 0.05]].map(a => new THREE.Vector3(...a)); // top of the sign, the sides, and the top front corners of the cabinet (where the coin tray starts)
 // Frame the machine in the part of the screen the HUD and shop panel leave free.
 function fitCamera() {
   const W = innerWidth, H = innerHeight, narrow = W <= 760, root = document.documentElement.style;
@@ -947,7 +947,7 @@ function fitCamera() {
   }
   const topR = document.querySelector(".top")?.getBoundingClientRect(), vR = $("vault")?.getBoundingClientRect(), hR = $("hint")?.getBoundingClientRect();
   const safeTop = Math.min(H * 0.4, (topR ? topR.bottom : 100) + 4);
-  const lowest = vR && vR.height ? vR.top + 6 : H - 120; // the front shelf meets the top edge of the coin tray
+  const lowest = vR && vR.height ? vR.top + 1 : H - 120; // the cabinet's top front edge sits exactly on the tray's top edge
   fitInto(right, safeTop, Math.max(safeTop + H * 0.3, lowest - 4));
 }
 // pull the camera back until the machine fits (closest that fits = biggest on screen), then slide it into the gap
@@ -969,9 +969,10 @@ function fitInto(right, safeTop, safeBot) {
   // the coin tray is the machine's front drawer: exactly as wide as the cabinet, hanging straight under the shelf
   const vault = $("vault");
   if (vault) {
-    const xa = (tmpFit.set(-(HALF_W + 0.35), 0, FLOOR_FRONT + 0.3).project(camera).x + 1) / 2 * W;
-    const xb = (tmpFit.set(HALF_W + 0.35, 0, FLOOR_FRONT + 0.3).project(camera).x + 1) / 2 * W;
-    const w = Math.round(Math.max(220, xb - xa)), l = Math.round((xa + xb) / 2 - w / 2);
+    // exactly the cabinet's front face: from its left top corner to its right top corner
+    const xa = (tmpFit.set(-(HALF_W + 0.6), -0.22, FLOOR_FRONT + 0.05).project(camera).x + 1) / 2 * W;
+    const xb = (tmpFit.set(HALF_W + 0.6, -0.22, FLOOR_FRONT + 0.05).project(camera).x + 1) / 2 * W;
+    const w = Math.round(Math.max(220, xb - xa)), l = Math.round(xa);
     if (vault.style.width !== w + "px" || vault.style.left !== l + "px") Object.assign(vault.style, { left: l + "px", width: w + "px", right: "auto", transform: "none" });
   }
 }
@@ -1345,17 +1346,13 @@ for (let i = 0; i < 16; i++) {
   scene.add(b); bulbs.push(mat);
 }
 
-// Prize tray below the front edge
-const tray = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2 + 0.4, 0.3, 1.6), toon({ color: hex(P.cabinet2) }));
-tray.position.set(0, -2.1, FLOOR_FRONT + 0.7); scene.add(tray);
-const trayGlow = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2 + 0.4, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: hex(P.accentB) }));
-trayGlow.position.set(0, -1.94, FLOOR_FRONT + 1.5); scene.add(trayGlow);
-// Cabinet body
-const cab = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2 + 1.2, 3, 14), toon({ color: hex(P.cabinet) }));
-cab.position.set(0, -1.72, -2.6); cab.receiveShadow = true; scene.add(cab);
+// Cabinet body: its front face sits flush under the lower shelf's lip, and the coin tray (drawn over it) is that front face
+const CAB_FRONT = FLOOR_FRONT + 0.05, CAB_HALF = HALF_W + 0.6, CAB_TOP = -0.22;
+const cab = new THREE.Mesh(new THREE.BoxGeometry(CAB_HALF * 2, 3, 14), toon({ color: hex(P.cabinet) }));
+cab.position.set(0, CAB_TOP - 1.5, CAB_FRONT - 7); cab.receiveShadow = true; scene.add(cab);
 for (const s of [-1, 1]) {
   const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 12), new THREE.MeshBasicMaterial({ color: s < 0 ? hex(P.accentA) : hex(P.accentB) }));
-  strip.position.set(s * (HALF_W + 0.6), -0.2, -3); scene.add(strip);
+  strip.position.set(s * (HALF_W + 0.6), -0.2, CAB_FRONT - 6.05); scene.add(strip);
 }
 
 // Pusher (kinematic)
