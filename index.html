@@ -728,7 +728,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.15.1";
+const VERSION = "1.15.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1931,7 +1931,7 @@ const UPGRADES = [
   { id: "coinspeed", name: "Coin Speed", x: 1, y: 0, parent: "regen", max: 8, base: 4, grow: 1.6, text: l => `Coins fall ${pct(coinSpeed(l))} speed` },
   { id: "pusher", name: "Pusher Speed", x: 2, y: 0, parent: "coinspeed", max: 8, base: 10, grow: 1.65, text: l => `One push every ${pushPeriod(l).toFixed(2)}s` },
   { id: "rails", name: "Side Rails", x: 3, y: 0, parent: "pusher", max: 1, base: 150, grow: 1, text: l => l ? "No coins lost off the sides" : "Coins can fall off the sides" },
-  { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 2.0, text: l => l ? `An event about every ${Math.round(eventGap(Math.max(l, rl("eventstart"))))}s` : "No random events" },
+  { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 3.0, text: l => l ? `An event about every ${Math.round(eventGap(Math.max(l, rl("eventstart"))))}s` : "No random events" },
   { id: "wheel", name: "Prize Wheel", x: 3, y: 1, parent: "eventlen", max: 1, base: 200, grow: 1, text: l => l ? "Earning charges the prize wheel" : "Unlocks the prize wheel" },
   { id: "wheelfast", name: "Fast Charge", x: 3, y: 2, parent: "wheel", max: 5, base: 150, grow: 2, text: l => `The wheel charges ${pct(1 + 0.2 * l)} as fast` },
   { id: "eventlen", name: "Longer Events", x: 2, y: 1, parent: "events", max: 5, base: 250, grow: 2.4, text: l => `Events last ${pct(eventLen(l))} as long` },
