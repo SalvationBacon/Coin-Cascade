@@ -745,7 +745,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.17.1";
+const VERSION = "1.18.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -764,7 +764,8 @@ let tokensAsc = (saved && saved.tokensAsc) || 0, gemsTotal = (saved && saved.gem
 const aups = (saved && saved.aup) || {};
 let autoRebOn = saved ? saved.autoRebOn !== false : true, autoRebAt = (saved && saved.autoRebAt) || 5;
 let wheelCharge = (saved && saved.wheelCharge) || 0, reelQueue = 0;
-let heir = (saved && saved.heir) || null; // the machine upgrade Heirloom keeps through rebirths
+let heir = (saved && saved.heir) || null;
+let autoBuyOn = saved ? saved.autoBuyOn !== false : true; // the machine upgrade Heirloom keeps through rebirths
 let runTime = (saved && saved.runTime) || 0, incomeRate = (saved && saved.incomeRate) || 0, rateEarn = 0, rateT = 0;
 const al = id => aups[id] || 0;
 let runEarned = saved ? (saved.runEarned != null ? saved.runEarned : saved.earned) : 0;
@@ -864,7 +865,7 @@ let chActive = (saved && saved.chActive) || null;
 // challenges have 5 levels: chHas(id) is how many you've beaten (0 to 5); older saves stored true for level 1
 const msHas = id => !!msDone[id], chHas = id => Number(chDone[id]) || 0, chOn = id => chActive === id;
 const CH_LEVELS = [1, 2.5, 6, 15, 40]; // goal multiplier for levels 1 to 5
-const chGoal = c => Math.round(c.goal * CH_LEVELS[Math.min(chHas(c.id), CH_LEVELS.length - 1)] * Math.pow(0.95, rl("chprep")));
+const chGoal = c => Math.round(c.goal * CH_LEVELS[Math.min(chHas(c.id), CH_LEVELS.length - 1)] * Math.pow(0.95, rl("chprep")) * Math.pow(0.9, al("chmaster")));
 const chLevelsTotal = () => Object.keys(chDone).reduce((a, k) => a + (Number(chDone[k]) || 0), 0);
 const pegMap = (saved && saved.pegs) || {}; // "row:index" -> "gold" | "split" | "double"
 const $ = id => document.getElementById(id);
@@ -1923,25 +1924,25 @@ const doubleDrop = (l = lvl("double")) => 0.05 * l;
 const pushPeriod = (l = lvl("pusher")) => PUSH_PERIOD * Math.pow(0.88, l) * Math.pow(0.9, chHas("heavy")) * (chOn("heavy") ? 1.6 : 1);
 const coinSpeed = (l = lvl("coinspeed")) => (1 + 0.15 * l) * (chOn("heavy") ? 0.5 : 1);
 const eventsLvl = () => Math.max(lvl("events"), rl("eventstart"));
-const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1));
+const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1)) / (1 + 0.15 * al("evmaster"));
 const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
 const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
 // rebirth tree effects
 const payoutMult = (l = rl("golden")) => achPayMult() * (1 + 0.25 * l) * (1 + Math.min(tokens * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chHas("leaky")) * (chOn("leaky") ? 0.5 : 1);
 const HEADSTART = [0, 10, 30, 100, 300, 1000];
-const startCoins = (l = rl("headstart")) => HEADSTART[l];
+const startCoins = (l = rl("headstart")) => HEADSTART[l] + 100 * al("gemstart");
 const tokenMult = (l = rl("tokens")) => (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
 // rebirth unlocks at 1,000 coins earned in a run (about 20 minutes on a first run): 2 tokens, then 3 at 2.25K, 4 at 4K, 6 at 9K ...
 const REBIRTH_AT = 1000;
 const LATE = 1.25;   // each level of a node costs this much more than the last step did
 const SPREAD = 1.03; // after your first 20 machine levels in a run, every level bought makes all machine upgrades this much dearer
 const machineLevels = () => { let n = 0; for (const k in ups) n += ups[k] || 0; return n; };
-const tokenGain = () => runEarned < REBIRTH_AT ? 0 : Math.floor(2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult());
+const tokenGain = () => runEarned < REBIRTH_AT ? 0 : Math.floor(2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult()) + al("rebbonus");
 const flipOdds = (l = rl("weighted")) => 0.5 + 0.02 * l + (msHas("streak5") ? 0.02 : 0);
 const cheaper = (l = rl("cheaper")) => Math.pow(0.9, l) * Math.pow(0.95, chHas("bare")) * (chOn("bare") ? 3 : 1);
 const pct = v => Math.round(v * 100) + "%";
 const mysteryChance = (l = lvl("mystery")) => 0.05 * l;
-const goldAmt = () => 1 + lvl("pegpower") + chHas("nopegs");
+const goldAmt = () => 1 + lvl("pegpower") + chHas("nopegs") + al("pegplus");
 const splitChance = () => 0.25 + 0.05 * lvl("pegpower");
 // x, y = position on the tree (up is negative y); parent = the node that reveals it
 const UPGRADES = [
@@ -2014,6 +2015,17 @@ const AUPGRADES = [
   { id: "goldstart", name: "Golden Start", x: -1, y: 1, parent: "startups", max: 3, base: 3, grow: 2.5, text: l => l ? `Every run starts with ${l} golden peg${l > 1 ? "s" : ""}` : "Runs start with no golden pegs" },
   { id: "wheelpro", name: "Wheel Master", x: -2, y: 0, parent: "startups", max: 5, base: 2, grow: 2, text: l => `Prize wheel prizes ${pct(1 + 0.25 * l)}` },
   { id: "board2", name: "Second Board", x: 1, y: -1, parent: "fever", max: 1, base: 5, grow: 1, text: l => l ? "Choose between two slot layouts" : "Only the classic slot layout" },
+  // second wave of gem upgrades
+  { id: "pegplus", name: "Gilded Pegs", x: 3, y: 0, parent: "keeppegs", max: 3, base: 3, grow: 2.5, text: l => `Golden pegs give +${l} more per touch` },
+  { id: "goldtray", name: "Golden Tray", x: 3, y: 1, parent: "bigtray", max: 5, base: 2, grow: 2, text: l => `Everything you bank is worth +${5 * l}%` },
+  { id: "autobuy", name: "Auto Buyer", x: 1, y: 2, parent: "autoreb", max: 1, base: 6, grow: 1, text: l => l ? `Buys the cheapest machine upgrade you can afford (${autoBuyOn ? "on" : "off"})` : "You buy every upgrade by hand" },
+  { id: "rebbonus", name: "Token Bonus", x: 0, y: 2, parent: "offline", max: 5, base: 3, grow: 2, text: l => `+${l} token${l === 1 ? "" : "s"} on every rebirth` },
+  { id: "splitstart", name: "Splitter Start", x: -1, y: 2, parent: "goldstart", max: 2, base: 4, grow: 3, text: l => l ? `Every run starts with ${l} splitter peg${l > 1 ? "s" : ""}` : "Runs start with no splitter pegs" },
+  { id: "gemstart", name: "Gem Purse", x: -2, y: 1, parent: "goldstart", max: 5, base: 1, grow: 2, text: l => `Every run starts with +${100 * l} coins` },
+  { id: "luck7", name: "Lucky Sevens", x: -3, y: 0, parent: "wheelpro", max: 4, base: 2, grow: 2, text: l => `7s and 10s on the reels ${pct(1 + 0.25 * l)} as often` },
+  { id: "mystmaster", name: "Mystery Master", x: -2, y: -1, parent: "gemluck", max: 3, base: 3, grow: 2.5, text: l => `Mystery coins pay ×0 ${pct(Math.pow(0.75, l))} as often` },
+  { id: "evmaster", name: "Event Master", x: 0, y: -2, parent: "fever", max: 3, base: 3, grow: 2.5, text: l => `Random events come ${pct(1 + 0.15 * l)} as often` },
+  { id: "chmaster", name: "Challenge Master", x: 2, y: -1, parent: "board2", max: 3, base: 3, grow: 2.5, text: l => `Challenge goals ${pct(Math.pow(0.9, l))}` },
   { id: "bigtray", name: "Deep Tray", x: 2, y: 1, parent: "keeppegs", max: 4, base: 2, grow: 2, text: l => `The coin tray holds ${40 + (msHas("bank100") ? 10 : 0) + 10 * l} coins` },
 ];
 const TREES = {
@@ -2136,6 +2148,12 @@ function renderInfo() {
   buyBtn.addEventListener("click", () => buy(T, u));
   if (u.peg) {
     const p = document.createElement("p"); p.className = "c"; p.textContent = "Each one lands on a random peg and stays put until your next rebirth."; info.appendChild(p);
+  }
+  if (u.id === "autobuy" && l > 0) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog";
+    t.textContent = autoBuyOn ? "Auto Buyer is ON (click to switch off)" : "Auto Buyer is OFF (click to switch on)";
+    t.addEventListener("click", () => { autoBuyOn = !autoBuyOn; save(); renderInfo(); });
+    info.appendChild(t);
   }
   if (u.id === "heirloom" && l > 0) {
     const sel = document.createElement("select"); sel.className = "heirPick"; sel.setAttribute("aria-label", "Upgrade to keep");
@@ -2625,6 +2643,7 @@ function startUps() {
   const u = {}, L = al("startups");
   if (L) for (const id of ["regen", "cooldown", "coinspeed"]) u[id] = Math.min(2 * L, UPGRADES.find(x => x.id === id).max);
   if (al("goldstart")) u.goldpeg = Math.max(u.goldpeg || 0, al("goldstart"));
+  if (al("splitstart")) { u.goldpeg = Math.max(u.goldpeg || 0, 1); u.splitpeg = Math.max(u.splitpeg || 0, al("splitstart")); }
   if (rl("reelstart")) u.reels = 1;
   if (rl("heirloom") && heir && ups[heir]) u[heir] = Math.max(u[heir] || 0, ups[heir]); // Heirloom: one upgrade keeps its level
   if (al("keeppegs")) for (const id of ["goldpeg", "splitpeg", "doublepeg", "pegpower"]) if (ups[id]) u[id] = ups[id];
@@ -2633,7 +2652,7 @@ function startUps() {
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
     stats, msDone, chDone, ach: achDone, achV: 2, msV: 2, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
-    goldRandom: true, pegsRandom: true, runMax: 0, heir, wheelCharge: rl("chargedwheel") ? wheelNeed() * 0.5 : 0, t: Date.now(), coins: null }, extra);
+    goldRandom: true, pegsRandom: true, runMax: 0, heir, autoBuyOn, wheelCharge: rl("chargedwheel") ? wheelNeed() * 0.5 : 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
 function showToast(title, text) {
@@ -2759,7 +2778,7 @@ function save() {
   if (saveBlocked) return;
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
-    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
+    bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, t: Date.now(), pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
@@ -2820,7 +2839,7 @@ function bankTray(auto) {
   stats.banks = S("banks") + 1;
   if (auto) stats.fullBanks = S("fullBanks") + 1;
   else { stats.bigBank = Math.max(S("bigBank"), live.length); if (live.length === 1) stats.penny = 1; if (live.length === TRAY_CAP - 1) stats.hoard = 1; }
-  const bonus = auto ? 0 : amt * 0.03 * rl("bankbonus"); // Bank Bonus: pressing BANK yourself pays a little extra
+  const bonus = (auto ? 0 : amt * 0.03 * rl("bankbonus")) + amt * 0.05 * al("goldtray"); // Bank Bonus: pressing BANK yourself pays a little extra
   bank += amt + bonus; bankedFx = 1.2;
   $("jarUnit").textContent = `${auto ? "Tray full: banked" : "Banked"} +${fmtV(amt + bonus)}${bonus ? ` (bonus ${fmtV(bonus)})` : ""}`;
   sfx.bonus(); refreshHud(); save(); updateTrayHud();
@@ -3066,8 +3085,9 @@ refreshHud();
 // average about ×1.6, but a third of them turn out to be worth nothing
 const MYSTERY = [[0, 35], [1, 35], [2, 18], [5, 8], [10, 3.5], [25, 0.5]];
 function rollMystery() {
-  let r = Math.random() * 100;
-  for (const [m, w] of MYSTERY) if ((r -= w) <= 0) return m;
+  const table = MYSTERY.map(([m, w]) => [m, m === 0 ? w * Math.pow(0.75, al("mystmaster")) : w]); // Mystery Master: fewer ×0s
+  let r = Math.random() * table.reduce((a, [, w]) => a + w, 0);
+  for (const [m, w] of table) if ((r -= w) <= 0) return m;
   return 1;
 }
 
@@ -3077,7 +3097,7 @@ const reelFaces = REEL_SYMS.map(v => valueFace(v).image);
 const rc = $("reelCanvas"), rg = rc.getContext("2d"); rg.imageSmoothingEnabled = false;
 let reelT = -1, reelRes = [0, 0, 0], reelShown = [0, 0, 0], reelIdle = 0;
 function reelPick() {
-  const hot = 1 + 0.25 * lvl("reelluck"), w = [40, 25, 18, 12 * hot, 5 * hot], tot = w.reduce((a, b) => a + b, 0);
+  const hot = (1 + 0.25 * lvl("reelluck")) * (1 + 0.25 * al("luck7")), w = [40, 25, 18, 12 * hot, 5 * hot], tot = w.reduce((a, b) => a + b, 0);
   let r = Math.random() * tot;
   for (let i = 0; i < w.length; i++) if ((r -= w[i]) <= 0) return i;
   return 0;
@@ -3207,8 +3227,14 @@ const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vect
 const clock = new THREE.Clock();
 let acc = 0, lightT = 0;
 // one frame of game logic (dt seconds); frame() below draws it
-let piggyT = 0;
+let piggyT = 0, autoBuyT = 0;
 function tick(dt) {
+  // Auto Buyer: every 2 seconds, the cheapest machine upgrade you can afford (not while placing or in a challenge's first second)
+  if (al("autobuy") && autoBuyOn && (autoBuyT += dt) >= 2) {
+    autoBuyT = 0; const T = TREES.main;
+    const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
+    if (u) buy(T, u);
+  }
   // Piggy Bank: 1% interest on your coins every minute, capped
   if (rl("piggy") && (piggyT += dt) >= 60) { piggyT = 0; const add = Math.min(bank * 0.01, 25 * rl("piggy") * coinValue()); if (add >= 0.01) { bank += add; earned += add; runEarned += add; refreshHud(); } }
   acc += dt;
