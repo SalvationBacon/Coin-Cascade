@@ -1,5 +1,5 @@
 // Offline support. Bump CACHE on every release so players get the new version.
-const CACHE = 'cc-v1.10.0';
+const CACHE = 'cc-v1.11.0';
 const ASSETS = ['./', './index.html', './manifest.json', './lib/three.module.js', './lib/rapier.es.js', './lib/qrcode.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', './favicon.png'];
 

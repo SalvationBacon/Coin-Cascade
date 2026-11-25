@@ -435,6 +435,10 @@ body.compact > *:not(#compact) { display: none !important; }
 .sendCard { align-items: center; text-align: center; max-width: min(360px, calc(100vw - 32px)); }
 #qr { width: min(260px, 70vw); height: auto; aspect-ratio: 1; image-rendering: pixelated; background: #fff; border: 3px solid var(--ink); }
 .xfer .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* the tray belongs to the cabinet: its trim on three sides, open at the top where the shelf drops coins in */
+.vault { background: var(--cab2, #1c2028); border: 4px solid var(--trimC, #f5b83d); border-top: 0; box-shadow: 0 6px 0 var(--ink); }
+.vault canvas { background: #00000040; }
 </style>
 </head>
 <body>
@@ -516,7 +520,7 @@ body.compact > *:not(#compact) { display: none !important; }
   <canvas id="qr" width="10" height="10" aria-label="QR code with your progress"></canvas>
   <p id="sendMsg">Scan this with your other device's camera, or open the link there. It asks before replacing anything.</p>
   <div class="row"><button id="sendCopy" type="button">COPY LINK</button><button id="sendClose" class="quit" type="button">CLOSE</button></div></div></div>
-<div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2>Load progress from another device?</h2><p id="recvMsg"></p>
+<div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2 id="recvTitle">Load progress from another device?</h2><p id="recvMsg"></p>
   <div class="row"><button id="recvYes" type="button">LOAD IT</button><button id="recvNo" class="quit" type="button">KEEP THIS ONE</button></div></div></div>
 <div class="overlay" id="welcome" hidden><div class="card box"><h2>Welcome back</h2><p id="welcomeText"></p><button id="welcomeOk" type="button">COLLECT</button></div></div>
 <div class="toast box" id="toast" hidden><b id="toastTitle"></b><span id="toastText"></span></div>
@@ -701,7 +705,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.10.0";
+const VERSION = "1.11.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -887,6 +891,7 @@ function makeTarget() {
   rt = new THREE.WebGLRenderTarget(lowW, lowH, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, samples: gfx.msaa });
 }
 
+document.documentElement.style.setProperty("--trimC", P.metal || P.trim); document.documentElement.style.setProperty("--cab2", P.cabinet2 || P.cabinet);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(hex(P.bg));
 
@@ -970,6 +975,14 @@ function fitInto(right, safeTop, safeBot) {
   // sit the machine right on top of the coin tray; any spare room goes above it
   camera.setViewOffset(W, H, (s.x0 + s.x1) / 2 - right / 2, s.y1 - safeBot, W, H);
   camera.updateProjectionMatrix();
+  // the coin tray is the machine's front drawer: exactly as wide as the cabinet, hanging straight under the shelf
+  const vault = $("vault");
+  if (vault) {
+    const xa = (tmpFit.set(-(HALF_W + 0.35), 0, FLOOR_FRONT + 0.3).project(camera).x + 1) / 2 * W;
+    const xb = (tmpFit.set(HALF_W + 0.35, 0, FLOOR_FRONT + 0.3).project(camera).x + 1) / 2 * W;
+    const w = Math.round(Math.max(220, xb - xa)), l = Math.round((xa + xb) / 2 - w / 2);
+    if (vault.style.width !== w + "px" || vault.style.left !== l + "px") Object.assign(vault.style, { left: l + "px", width: w + "px", right: "auto", transform: "none" });
+  }
 }
 resize();
 
@@ -2458,6 +2471,17 @@ function renderSettings() {
     if (Date.now() - importArmed > 3000) { importArmed = Date.now(); ld.textContent = "CLICK TO REPLACE YOUR GAME"; msg.textContent = "This replaces your current game with the pasted one."; setTimeout(() => { ld.textContent = "LOAD PASTED CODE"; }, 3000); return; }
     store.set(SAVE_KEY, data); saveBlocked = true; location.reload();
   });
+  // cloud save
+  const cs = card("", "Cloud save", [[cloudStatus(), ""]]);
+  cs.querySelector("p").id = "cloudStatus";
+  const crow = document.createElement("div"); crow.className = "row";
+  if (!syncReady()) { /* explained in the status line */ }
+  else if (!fbUser) { const si = document.createElement("button"); si.type = "button"; si.textContent = "SIGN IN WITH GOOGLE"; si.addEventListener("click", cloudSignIn); crow.appendChild(si); }
+  else {
+    const sn = document.createElement("button"); sn.type = "button"; sn.textContent = "SYNC NOW"; sn.addEventListener("click", () => cloudSync(true)); crow.appendChild(sn);
+    const so = document.createElement("button"); so.type = "button"; so.className = "quit"; so.textContent = "SIGN OUT"; so.addEventListener("click", cloudSignOut); crow.appendChild(so);
+  }
+  cs.appendChild(crow); w.appendChild(cs);
   const sd = document.createElement("button"); sd.type = "button"; sd.textContent = "SEND TO ANOTHER DEVICE";
   sd.addEventListener("click", openSend);
   row.append(cp, ld); bk.append(ta, row, sd, msg); w.appendChild(bk);
@@ -3296,13 +3320,102 @@ async function checkIncoming() {
   const code = location.hash.slice(6);
   history.replaceState(null, "", location.pathname + location.search); // don't offer it again on reload
   recvData = await unpackSave(code);
+  $("recvTitle").textContent = "Load progress from another device?"; $("recvYes").textContent = "LOAD IT"; $("recvNo").textContent = "KEEP THIS ONE";
   $("recvMsg").textContent = recvData
     ? `The link has: ${saveLine(recvData)}. This device has: ${saved ? saveLine({ earned, rebirths, ascensions }) : "no save yet"}. Loading replaces this device's progress.`
     : "That link didn't contain a Coin Cascade save. Try copying it again.";
   $("recvYes").hidden = !recvData; $("recvBox").hidden = false;
 }
-$("recvYes").addEventListener("click", () => { if (!recvData) return; store.set(SAVE_KEY, recvData); saveBlocked = true; goInGame(); location.reload(); });
-$("recvNo").addEventListener("click", () => { $("recvBox").hidden = true; });
+$("recvYes").addEventListener("click", () => {
+  if (cloudPending) { const { cloud, data } = cloudPending; cloudPending = null; adoptCloud(cloud, data); return; }
+  if (!recvData) return; store.set(SAVE_KEY, recvData); saveBlocked = true; goInGame(); location.reload();
+});
+$("recvNo").addEventListener("click", () => {
+  $("recvBox").hidden = true;
+  if (cloudPending) { // keep this device: it becomes the newest cloud revision
+    const { cloud } = cloudPending; cloudPending = null;
+    syncMeta.set(Object.assign(syncMeta.get(), { rev: cloud.rev, earned: -1 })); lastUp = ""; cloudSync(true);
+  }
+});
+
+// ---------- Cloud save (Firebase, free plan) ----------
+// Sign in with Google once per device; the save then syncs on its own. Each upload carries a revision number, so a
+// device only overwrites the cloud if it has seen the latest revision. If two devices both moved on, you choose.
+const FIREBASE = null; // the web app config from the Firebase console goes here: { apiKey, authDomain, projectId, appId }
+const FB_SDK = "https://cdn.jsdelivr.net/npm/firebase@10.12.2/";
+let fb = null, fbUser = null, fbLoading = null, lastUp = "", cloudBusy = false, cloudMsg = "";
+const syncMeta = { get() { try { return JSON.parse(localStorage.getItem("cc_sync") || "{}"); } catch { return {}; } }, set(m) { try { localStorage.setItem("cc_sync", JSON.stringify(m)); } catch {} } };
+const syncReady = () => !!(FIREBASE && HOSTED);
+function cloudStatus() {
+  if (!FIREBASE) return "Cloud save isn't switched on for this copy of the game yet.";
+  if (!HOSTED) return "Cloud save works in the installed app and on the GitHub page, not here.";
+  if (!fbUser) return "Sign in with Google to keep this game in sync across your phone and computer.";
+  const m = syncMeta.get();
+  return `Signed in as ${fbUser.displayName || fbUser.email || "you"}. ${cloudMsg || (m.at ? `Last synced ${dur(Math.max(1, (Date.now() - m.at) / 1000))} ago.` : "Not synced yet.")}`;
+}
+const refreshCloudCard = () => { const el = $("cloudStatus"); if (el) el.textContent = cloudStatus(); };
+function loadScript(u) { return new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = u; sc.onload = res; sc.onerror = () => rej(new Error("couldn't load " + u)); document.head.appendChild(sc); }); }
+function loadFirebase() {
+  if (!syncReady()) return Promise.reject(new Error("off"));
+  if (!fbLoading) fbLoading = (async () => {
+    if (!window.firebase) for (const f of ["firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js"]) await loadScript(FB_SDK + f);
+    firebase.initializeApp(FIREBASE);
+    fb = { auth: firebase.auth(), db: firebase.firestore() };
+    try { await fb.auth.getRedirectResult(); } catch {}
+    fb.auth.onAuthStateChanged(u => { fbUser = u; settings.cloud = !!u; saveSettings(); if (!$("tree").hidden && treeId === "set") renderTree(); if (u) cloudSync(false); });
+  })();
+  return fbLoading;
+}
+async function cloudSignIn() {
+  try { await loadFirebase(); } catch { cloudMsg = "Couldn't reach the sign-in service. Check your connection."; refreshCloudCard(); return; }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try { await fb.auth.signInWithPopup(provider); }
+  catch (e) { if (/popup|operation-not-supported|web-storage/i.test(String(e && e.code))) await fb.auth.signInWithRedirect(provider); else { cloudMsg = "Sign-in didn't finish."; refreshCloudCard(); } }
+}
+async function cloudSignOut() { if (fb) await fb.auth.signOut(); syncMeta.set({}); cloudMsg = ""; renderTree(); }
+// the cloud copy: a packed save plus a few numbers to show in prompts
+async function cloudSync(manual) {
+  if (!fb || !fbUser || cloudBusy || saveBlocked || awayOn) return;
+  cloudBusy = true;
+  try {
+    const ref = fb.db.collection("saves").doc(fbUser.uid), m = syncMeta.get();
+    const snap = await ref.get(), cloud = snap.exists ? snap.data() : null;
+    if (cloud && (cloud.rev || 0) > (m.rev || 0)) {
+      // another device saved since we last synced
+      const data = await unpackSave(cloud.data || "");
+      // this device has its own progress to lose: since its last sync, or ever (if it has never synced)
+      const movedOn = m.rev ? earned > (m.earned || 0) + 0.5 : earned > 50;
+      if (data && !movedOn) { adoptCloud(cloud, data); return; }
+      if (data) { askCloud(cloud, data); return; }
+    }
+    const d = transferSave(); if (!d) return;
+    const code = await packSave(d);
+    if (code === lastUp && !manual) { syncMeta.set(Object.assign(m, { at: Date.now() })); return; }
+    const rev = Math.max(m.rev || 0, (cloud && cloud.rev) || 0) + 1;
+    await fb.db.runTransaction(async tx => {
+      const cur = await tx.get(ref);
+      if (cur.exists && (cur.data().rev || 0) > (m.rev || 0) && (!cloud || cur.data().rev !== cloud.rev)) throw new Error("newer");
+      tx.set(ref, { data: code, rev, earned: d.earned || 0, rebirths: d.rebirths || 0, ascensions: d.ascensions || 0, savedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    });
+    lastUp = code; syncMeta.set({ rev, earned: d.earned || 0, at: Date.now() }); cloudMsg = manual ? "Synced just now." : "";
+  } catch (e) { cloudMsg = String(e && e.message) === "newer" ? "Another device just saved; checking again shortly." : "Couldn't sync right now; it'll try again."; }
+  finally { cloudBusy = false; refreshCloudCard(); }
+}
+function adoptCloud(cloud, data) {
+  syncMeta.set({ rev: cloud.rev, earned: data.earned || 0, at: Date.now() });
+  store.set(SAVE_KEY, data); saveBlocked = true; goInGame(); location.reload();
+}
+let cloudPending = null;
+function askCloud(cloud, data) {
+  cloudPending = { cloud, data };
+  $("recvTitle").textContent = "Two versions of your game";
+  $("recvMsg").textContent = `Your cloud save has: ${saveLine(data)}. This device has: ${saveLine({ earned, rebirths, ascensions })}. Which one do you want to keep playing?`;
+  $("recvYes").textContent = "USE CLOUD SAVE"; $("recvNo").textContent = "KEEP THIS DEVICE"; $("recvYes").hidden = false; $("recvBox").hidden = false;
+}
+// sync about once a minute while playing, and whenever the game goes into the background
+setInterval(() => { if (!document.hidden) cloudSync(false); }, 60000);
+document.addEventListener("visibilitychange", () => { if (document.hidden) cloudSync(false); else if (fbUser) cloudSync(false); });
+if (syncReady() && settings.cloud) loadFirebase().catch(() => {});
 
 // ---------- Install button ----------
 // Chrome and Edge hand us an install prompt; on iPhone and iPad it's Share, then Add to Home Screen.
