@@ -532,7 +532,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 let titleOpen = false, welcomeReady = false; // title screen state (see "Title screen")
 const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
@@ -591,18 +591,37 @@ function refreshHud() {
 // ordered dithering and dark outlines. The canvas is scaled up with hard pixel edges.
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setPixelRatio(1);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.BasicShadowMap;
+// Graphics setting. Max draws at your screen's full sharpness with smooth shadows and edges;
+// Retro is the chunky ~500-pixel-tall look; Low also turns shadows off for slow computers.
+const GFX = {
+  max:    { name: "MAX",    shadows: 2048, soft: true,  msaa: 4, note: "Full screen sharpness, smooth shadows and edges." },
+  high:   { name: "HIGH",   shadows: 1024, soft: true,  msaa: 0, note: "Sharp, a little lighter on the graphics card." },
+  retro:  { name: "RETRO",  shadows: 512,  soft: false, msaa: 0, note: "Big chunky pixels, like an old arcade screen." },
+  low:    { name: "LOW",    shadows: 0,    soft: false, msaa: 0, note: "Chunky pixels and no shadows, for slow computers." },
+};
+const isPhone = innerWidth < 700 || matchMedia("(pointer: coarse)").matches;
+const gfxKey = GFX[settings.gfx] ? settings.gfx : (isPhone ? "high" : "max");
+const gfx = GFX[gfxKey];
+renderer.shadowMap.enabled = gfx.shadows > 0;
+renderer.shadowMap.type = gfx.soft ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
 $("game").appendChild(renderer.domElement);
 
 let lowW = 0, lowH = 0, rt = null;
 // Quality: the game draws about 500 pixels tall on every device (a phone and a 1440p monitor
 // do the same work). If frames are still slow, it steps down: shadows off, then chunkier pixels.
 // phones draw at full resolution (a narrow portrait screen at 2x looked too chunky); bigger screens at about 500 game pixels tall
-function pixelSize() { return innerWidth < 700 ? 1 : Math.max(2, Math.round(innerHeight / 500)); } // about 500 game pixels tall on every screen
+// game pixels per CSS pixel for the chosen graphics level
+function renderScale() {
+  if (gfxKey === "max") {
+    const r = Math.min(devicePixelRatio || 1, 2);
+    return Math.min(r, Math.sqrt(4.2e6 / (innerWidth * innerHeight))); // keep 4K screens to about 4 million pixels
+  }
+  if (gfxKey === "high") return 1;
+  return innerWidth < 700 ? 1 : 1 / Math.max(2, Math.round(innerHeight / 500)); // about 500 game pixels tall
+}
 function makeTarget() {
   rt?.dispose();
-  rt = new THREE.WebGLRenderTarget(lowW, lowH, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  rt = new THREE.WebGLRenderTarget(lowW, lowH, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, samples: gfx.msaa });
 }
 
 const scene = new THREE.Scene();
@@ -639,9 +658,11 @@ const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
 
 function resize() {
-  const p = pixelSize();
-  lowW = Math.ceil(innerWidth / p); lowH = Math.ceil(innerHeight / p);
+  const k0 = renderScale();
+  lowW = Math.ceil(innerWidth * k0); lowH = Math.ceil(innerHeight * k0);
   renderer.setSize(lowW, lowH, false);
+  // chunky looks scale up with hard pixel edges; sharp ones scale smoothly (no uneven pixels on 125%/150% screens)
+  renderer.domElement.style.imageRendering = k0 < 1 ? "pixelated" : "auto";
   makeTarget();
   post.uniforms.res.value.set(lowW, lowH);
   camera.aspect = innerWidth / innerHeight;
@@ -703,7 +724,7 @@ const glassMat = new THREE.MeshBasicMaterial({ color: hex(P.glass), transparent:
 scene.add(new THREE.AmbientLight(hex(P.ambient), 0.9));
 const key = new THREE.DirectionalLight(0xfff0d8, 2.4);
 key.position.set(3, 12, 6); key.castShadow = true;
-key.shadow.mapSize.set(512, 512);
+key.shadow.mapSize.set(gfx.shadows || 512, gfx.shadows || 512);
 Object.assign(key.shadow.camera, { left: -6, right: 6, top: 8, bottom: -8, near: 1, far: 30 });
 key.shadow.bias = -0.002;
 scene.add(key);
@@ -1853,6 +1874,15 @@ function renderSettings() {
   vol.addEventListener("change", () => { sfx.unlock(); sfx.click(); });
   snd.append(tg, lab, vol); w.appendChild(snd);
   // motion
+  const gf = card("", "Graphics", [[`${gfx.note} Lower it if the game runs slowly.`, ""]]);
+  const gr = document.createElement("div"); gr.className = "row";
+  for (const [k, g] of Object.entries(GFX)) {
+    const gb = document.createElement("button"); gb.type = "button"; gb.textContent = g.name;
+    if (k === gfxKey) { gb.disabled = true; gb.textContent = "✓ " + g.name; }
+    gb.addEventListener("click", () => applyLook("gfx", k));
+    gr.appendChild(gb);
+  }
+  gf.appendChild(gr); w.appendChild(gf);
   const mo = card("", "Motion", [["Calm mode stops the flashing chase lights and makes popups fade in place instead of floating.", ""]]);
   const mb = document.createElement("button"); mb.type = "button"; mb.textContent = settings.calm ? "CALM MODE: ON" : "CALM MODE: OFF";
   mb.addEventListener("click", () => { settings.calm = !settings.calm; saveSettings(); renderTree(); });
