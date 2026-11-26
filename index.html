@@ -814,7 +814,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.28.2";
+const VERSION = "1.28.3";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1414,9 +1414,16 @@ function drawBoard() {
     const x0 = board.edges[k], w = board.edges[k + 1] - x0;
     g.fillStyle = SLOT_COLORS[SLOT_KIND[k]];
     g.fillRect(bx(x0), by(BOARD.slotTop), w * PX, (BOARD.slotTop - BOARD.exitY) * PX);
-    g.font = (w < 0.7 ? 10 : 12) + 'px "Press Start 2P", monospace';
-    g.fillStyle = m === 0 ? "#d0708a" : m === 5 ? "#fff2a6" : "#ffffff";
-    g.fillText("×" + m, bx(x0 + w / 2), by((BOARD.slotTop + BOARD.exitY) / 2));
+    // shrink the label until it fits its slot (a big jackpot like ×11 in the narrow middle slot)
+    // too long for a readable size? drop the × and show just the number, as big as fits
+    const num = String(Math.round(m * 10) / 10), room = w * PX - 4, top = w < 0.7 ? 10 : 12;
+    let label = "×" + num, fs = top;
+    const fits = (t, f) => { g.font = f + 'px "Press Start 2P", monospace'; return g.measureText(t).width <= room; };
+    while (fs > 8 && !fits(label, fs)) fs--;
+    if (!fits(label, fs)) { label = num; fs = top; while (fs > 6 && !fits(label, fs)) fs--; }
+    g.font = fs + 'px "Press Start 2P", monospace';
+    g.fillStyle = m === 0 ? "#d0708a" : k === (BOARD.slots.length - 1) / 2 ? "#fff2a6" : "#ffffff";
+    g.fillText(label, bx(x0 + w / 2), by((BOARD.slotTop + BOARD.exitY) / 2));
   });
   boardTex.needsUpdate = true;
 }
