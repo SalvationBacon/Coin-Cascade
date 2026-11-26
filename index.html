@@ -425,6 +425,10 @@ body.compact > *:not(#compact) { display: none !important; }
 
 .bankBtn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: auto; z-index: 2; font-family: var(--display); font-size: 11px; color: var(--ink);
   background: var(--gold); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 12px; cursor: pointer; }
+.tiltBtn { position: absolute; right: 92px; top: 50%; transform: translateY(-50%); pointer-events: auto; z-index: 2; font-family: var(--display); font-size: 10px; color: var(--fg);
+  background: var(--panel); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 10px 8px; cursor: pointer; }
+.tiltBtn[hidden] { display: none; }
+.tiltBtn:disabled { color: #6b778a; cursor: default; box-shadow: none; }
 .bankBtn:disabled { background: #2a3140; color: #6b778a; cursor: default; box-shadow: none; }
 .bankBtn:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 .bankBtn.nudge { animation: bankPulse 0.8s steps(2) infinite; }
@@ -498,9 +502,9 @@ body.compact > *:not(#compact) { display: none !important; }
 .hotBox b { color: #ff9a5a; } .hotBox .evBar i { background: #ff7a3a; } .hotBox.max b { color: #ffd24a; }
 
 @media (max-width: 760px) {
-  /* five counters share the row on narrow screens; labels stay on one line */
-  .counters { gap: 5px; width: 100%; }
-  .counter { flex: 1 1 0; min-width: 0; padding-left: 3px; padding-right: 3px; }
+  /* on narrow screens the counters sit four to a row (a second row when there are more); labels stay on one line */
+  .counters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; width: 100%; } /* four a row, then a second row */
+  .counter { min-width: 0; padding-left: 3px; padding-right: 3px; }
   .counter span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .counter b { font-size: 12px; white-space: nowrap; }
 }
@@ -564,7 +568,7 @@ body.compact > *:not(#compact) { display: none !important; }
 </div>
 
 <canvas class="flyLayer" id="flyLayer" aria-hidden="true"></canvas>
-<div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the tray</span><button class="bankBtn" id="bankBtn" type="button" title="Move the tray into your coins (B)">BANK</button></div>
+<div class="vault box" id="vault"><canvas id="jar" width="96" height="120"></canvas><b id="jarCount">0</b><span id="jarUnit">in the tray</span><button class="tiltBtn" id="tiltBtn" type="button" hidden title="Shove the pile forward (T)">TILT</button><button class="bankBtn" id="bankBtn" type="button" title="Move the tray into your coins (B)">BANK</button></div>
 
 <button class="cogBtn box" id="cogBtn" hidden type="button" aria-label="Settings" title="Settings, stats and style"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7 1h2v2h2V2h2v2h-1v1h1v2h2v2h-2v2h-1v1h1v2h-2v-1H9v2H7v-2H5v1H3v-2h1v-1H3V9H1V7h2V5h1V4H3V2h2v1h2zM6 6v4h4V6z"/></svg></button>
 <button class="treeBtn box" id="treeBtn" type="button" hidden>UPGRADES<i id="treeBadge" hidden>!</i></button>
@@ -816,7 +820,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.31.0";
+const VERSION = "1.32.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1333,8 +1337,15 @@ const PX = 40;                                   // board texture pixels per uni
 // slot colours go by the slot's position (edge / one / zero / jackpot), not its current multiplier,
 // so upgraded slots (x4, x6, ...) keep their colour
 // slot layouts: the classic one, and Lucky Lanes (unlocked with Second Board in the ascension tree)
-const LAYOUTS = { classic: { name: "Classic", slots: [3, 1, 0, 1, 5, 1, 0, 1, 3] }, lanes: { name: "Lucky Lanes", slots: [1, 3, 1, 0, 5, 0, 1, 3, 1] } };
-let layout = saved && saved.layout === "lanes" && saved.aup && saved.aup.board2 ? "lanes" : "classic";
+// slot layouts: the middle is always the narrow jackpot. Second Board (Ascension tree) opens Lucky Lanes; rebuilding opens more.
+const LAYOUTS = {
+  classic: { name: "Classic", slots: [3, 1, 0, 1, 5, 1, 0, 1, 3], ok: () => true, how: "" },
+  lanes: { name: "Lucky Lanes", slots: [1, 3, 1, 0, 5, 0, 1, 3, 1], ok: d => !!(d.aup && d.aup.board2), how: "Buy Second Board (Ascension tree)" },
+  fortune: { name: "Fortune Row", slots: [3, 0, 3, 1, 5, 1, 3, 0, 3], ok: d => (d.rebuilds || 0) >= 1, how: "Rebuild the machine once" },
+  golden: { name: "Golden Mile", slots: [3, 1, 3, 0, 5, 0, 3, 1, 3], ok: d => (d.rebuilds || 0) >= 3, how: "Rebuild the machine 3 times" },
+};
+const layoutOpen = k => LAYOUTS[k].ok({ aup: typeof aups !== "undefined" ? aups : saved && saved.aup, rebuilds: typeof rebuilds !== "undefined" ? rebuilds : saved && saved.rebuilds });
+let layout = saved && LAYOUTS[saved.layout] && LAYOUTS[saved.layout].ok(saved) ? saved.layout : "classic";
 BOARD.slots = LAYOUTS[layout].slots.slice();
 const SLOT_KIND = BOARD.slots.slice();
 const SLOT_COLORS = { 0: "#0c0c0e", 1: "#00000066", 3: "#1f6a66", 5: "#a8600a" };
@@ -1422,13 +1433,15 @@ function drawBoard() {
     g.fillRect(bx(x0), by(BOARD.slotTop), w * PX, (BOARD.slotTop - BOARD.exitY) * PX);
     // shrink the label until it fits its slot (a big jackpot like ×11 in the narrow middle slot)
     // too long for a readable size? drop the × and show just the number, as big as fits
+    let pk = null; try { if (m === 0 && SLOT_KIND[k] === 0 && al("pockets")) pk = (pockets[k] || [0])[0] + "/" + pocketSize(); } catch {}
     const num = String(Math.round(m * 10) / 10), room = w * PX - 4, top = w < 0.7 ? 10 : 12;
-    let label = "×" + num, fs = top;
+    let label = pk || "×" + num, fs = top;
     const fits = (t, f) => { g.font = f + 'px "Press Start 2P", monospace'; return g.measureText(t).width <= room; };
     while (fs > 8 && !fits(label, fs)) fs--;
     if (!fits(label, fs)) { label = num; fs = top; while (fs > 6 && !fits(label, fs)) fs--; }
     g.font = fs + 'px "Press Start 2P", monospace';
-    g.fillStyle = m === 0 ? "#d0708a" : k === (BOARD.slots.length - 1) / 2 ? "#fff2a6" : "#ffffff";
+    g.fillStyle = pk ? "#8ff0e0" : m === 0 ? "#d0708a" : k === (BOARD.slots.length - 1) / 2 ? "#fff2a6" : "#ffffff";
+    if (pk) label = label;
     g.fillText(label, bx(x0 + w / 2), by((BOARD.slotTop + BOARD.exitY) / 2));
   });
   boardTex.needsUpdate = true;
@@ -1806,6 +1819,16 @@ function onSlot(c, mult, slot) {
   let base = BASE_SLOTS[slot];
   if (mult === 0) {
     if (Math.random() < luckyZero()) { mult = 1; base = 1; popAt(at, "SAVED", ""); sfx.lucky(); }
+    else if (al("pockets") && BASE_SLOTS[slot] === 0) {
+      const pk = pockets[slot] || (pockets[slot] = [0, 0]); pk[0]++; pk[1] += (c.v || 1) * (c.hh || 1);
+      if (pk[0] >= pocketSize()) {
+        _eq.setFromAxisAngle(new THREE.Vector3(0, 0, 1), c.a).multiply(_qx);
+        const win = pk[1] * pocketMult(); pockets[slot] = [0, 0];
+        const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, win, 0, _eq.clone()); coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
+        popAt(at, `POCKET ×${pocketMult()} = ${fmtV(win)}`, "big"); sfx.fanfare(); stats.pockets = S("pockets") + 1;
+      } else { popAt(at, `POCKET ${pk[0]}/${pocketSize()}`, ""); sfx.click(); }
+      drawBoard(); return;
+    }
     else { popAt(at, "×0", "lost"); sfx.lost(); return; }
   }
   // Hand the coin to the pusher, standing on edge, now worth its multiplier
@@ -2085,6 +2108,7 @@ function pusherZ(ph) { return PUSH_BACK + (PUSH_FWD - PUSH_BACK) * (0.5 - 0.5 * 
 function stepPhysics(counting) {
   pusherT += STEP / pushPeriod();
   pusherBody.setNextKinematicTranslation({ x: 0, y: PUSH_TOP / 2 + 0.01, z: pusherZ(pusherT) });
+  if (counting) edgeMagnet();
   world.step();
   for (let i = coins.length - 1; i >= 0; i--) {
     const t = coins[i].body.translation();
@@ -2121,6 +2145,10 @@ function stepPhysics(counting) {
 
 // ---------- Upgrades (bought on the trees) ----------
 const BASE_SLOTS = BOARD.slots.slice();
+// Coin Pockets: a ×0 slot holds on to the coins it catches, then pays them all out at once
+const pocketSize = () => 8;
+const pocketMult = () => 2 + al("pockets");
+const pockets = (saved && saved.pockets) || {}; // slot -> [coins caught, their value]
 const lvl = id => ups[id] || 0;
 const rl = id => rups[id] || 0;
 const fmtV = v => v < 10 && v % 1 ? v.toFixed(1) : fmt(v);
@@ -2238,6 +2266,7 @@ const AUPGRADES = [
   { id: "offline", name: "Night Shift", x: 0, y: 1, parent: "shine", max: 5, base: 2, grow: 2, text: l => `Offline earnings ${50 + 10 * l}% of income, for up to ${8 + 2 * l} hours` },
   { id: "goldstart", name: "Golden Start", x: -1, y: 1, parent: "startups", max: 3, base: 3, grow: 2.5, text: l => l ? `Every run starts with ${l} golden peg${l > 1 ? "s" : ""}` : "Runs start with no golden pegs" },
   { id: "wheelpro", name: "Wheel Master", x: -2, y: 0, parent: "startups", max: 5, base: 2, grow: 2, text: l => `Prize wheel prizes ${pct(1 + 0.25 * l)}` },
+  { id: "pockets", name: "Coin Pockets", x: 1, y: -2, parent: "board2", max: 3, base: 4, grow: 2.5, text: l => l ? `The ×0 slots become pockets: every ${pocketSize()} coins caught pay out together at ×${pocketMult()}` : "The ×0 slots just swallow coins" },
   { id: "board2", name: "Second Board", x: 1, y: -1, parent: "fever", max: 1, base: 5, grow: 1, text: l => l ? "Choose between two slot layouts" : "Only the classic slot layout" },
   // second wave of gem upgrades
   { id: "doublesock", name: "Doubler Socket", x: 3, y: -1, parent: "pegplus", max: 2, base: 5, grow: 2.5, text: l => `Up to ${2 + l} doubler pegs` },
@@ -2276,6 +2305,8 @@ const WUPGRADES = [
   { id: "gemforge", name: "Gem Forge", x: -2, y: 1, parent: "gempress", max: Infinity, base: 5, grow: 1.6, text: l => `Gems per ascension ×${fmtV(Math.pow(1.2, l))}` },
   { id: "tokmint", name: "Token Mint", x: -2, y: 2, parent: "tokvault", max: Infinity, base: 4, grow: 1.55, text: l => `Tokens per rebirth ×${fmtV(Math.pow(1.2, l))}` },
   { id: "lathe", name: "Parts Lathe", x: 0, y: 2, parent: "morepegs", max: Infinity, base: 6, grow: 1.8, text: l => `Parts per rebuild ×${fmtV(Math.pow(1.15, l))}` },
+  { id: "tiltbar", name: "Tilt Bar", x: 2, y: 1, parent: "motor", max: 3, base: 3, grow: 2.5, text: l => l ? `A TILT button by the tray shoves the whole pile forward (every ${tiltCd()}s)` : "No way to give the machine a shove" },
+  { id: "edgemag", name: "Edge Magnet", x: 3, y: 1, parent: "tiltbar", max: 3, base: 4, grow: 2.5, text: l => l ? `Coins near the front edge are tugged over it (strength ${l})` : "Coins sit at the edge until pushed" },
   { id: "tokbuyer", name: "Token Buyer", x: -4, y: 0, parent: "autoasc", max: 1, base: 4, grow: 1, text: l => l ? `Buys the cheapest Rebirth tree upgrade you can afford (${tokBuyOn ? "on" : "off"})` : "You spend tokens by hand" },
   { id: "gembuyer", name: "Gem Buyer", x: -4, y: 1, parent: "tokbuyer", max: 1, base: 8, grow: 1, text: l => l ? `Buys the cheapest Ascension tree upgrade you can afford (${gemBuyOn ? "on" : "off"})` : "You spend gems by hand" },
   { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? (autoAscAt ? `Ascends for you at ${fmt(autoAscAt)} gems` : "Ascends for you at the best rate") : "You ascend by hand" },
@@ -2451,6 +2482,7 @@ function renderInfo() {
   if (u.id === "board2" && l > 0) {
     const chips = document.createElement("div"); chips.className = "chips";
     for (const [k, L] of Object.entries(LAYOUTS)) {
+      if (!layoutOpen(k)) continue;
       const c = document.createElement("button"); c.type = "button"; c.textContent = `${L.name}: ${L.slots.map(m => "×" + m).join(" ")}`; c.className = k === layout ? "on" : "";
       c.addEventListener("click", () => { if (k === layout) return; layout = k; save(); saveBlocked = true; location.reload(); });
       chips.appendChild(c);
@@ -2859,6 +2891,15 @@ function applyLook(key, val) { settings[key] = val; saveSettings(); save(); save
 function renderStyle() {
   const w = cardsWrap("Themes and coin styles are trophies: you unlock them by playing. Picking one reloads the game in the new look (your progress is saved first).");
   const head = t => { const h = document.createElement("h3"); h.textContent = t; h.style.gridColumn = "1 / -1"; h.className = "listHead"; return h; };
+  if (Object.keys(LAYOUTS).some(k => k !== "classic" && layoutOpen(k))) {
+    w.appendChild(head("Board layout"));
+    for (const [k, L] of Object.entries(LAYOUTS)) {
+      const open = layoutOpen(k), using = k === layout;
+      const c = card(open ? "" : "locked", (using ? "✓ " : "") + L.name, [[L.slots.map(m => "×" + m).join(" "), ""], [open ? (using ? "In use" : "") : "Locked: " + L.how, ""]]);
+      if (open && !using) { const b = document.createElement("button"); b.type = "button"; b.textContent = "USE THIS LAYOUT"; b.addEventListener("click", () => { layout = k; save(); saveBlocked = true; location.reload(); }); c.appendChild(b); }
+      w.appendChild(c);
+    }
+  }
   w.appendChild(head("Machine themes"));
   for (const t of THEMES) {
     const pal = PALETTES[t.id], open = t.req(), using = (settings.theme || "midnight") === t.id;
@@ -2908,6 +2949,9 @@ function renderHelp() {
     ["Playing by hand", [
       "Hot Hand: every coin you drop yourself heats your hand up (the Auto Dropper doesn't). A hot hand's coins are worth up to +25% more, shown in the HOT HAND box. Stop for a moment and it cools off. Hot Streak (Rebirth tree) raises the cap.",
       "Bonus marker: after your first rebirth a ×2 marker glides above the slots, pausing over each one. A coin that lands in the slot under it is worth double. Bullseye (Rebirth tree) makes it ×3 or ×4.",
+      "Coin Pockets (Ascension tree): the ×0 slots catch coins instead of swallowing them, and every 8 coins pay out together at ×3 or more. The slot shows how full it is.",
+      "Board layouts: Second Board (Ascension tree) opens Lucky Lanes, and rebuilding opens Fortune Row (1 rebuild) and Golden Mile (3 rebuilds). Pick one in Menu → Style.",
+      "Tilt Bar (Workshop): a TILT button by the tray (or the T key) shoves the whole pile forward. Edge Magnet (Workshop) tugs coins sitting at the front edge over it.",
       "Prizes: every few minutes a prize drops onto the pusher: a big gold coin, a token bundle (green T), or once you've ascended a gem chip (teal gem). Push it off the front to win it. Off the sides, it's gone. Prize Hunter (Rebirth tree) makes them come more often.",
     ]],
     ["The coin tray", [
@@ -3359,7 +3403,7 @@ function save() {
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, tokBuyOn, gemBuyOn, ascT, ascPk, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, tokBuyOn, gemBuyOn, ascT, ascPk, pockets, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.prize ? "p:" + c.prize : c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
@@ -3434,7 +3478,7 @@ function sizeJar() {
   const k = TRAY_K;
   JW = jar.width = Math.max(40, Math.round(r.width / k)); JH = jar.height = Math.max(30, Math.round(r.height / k)); FLOOR = JH - 4;
   jg.imageSmoothingEnabled = false;
-  const bb = $("bankBtn"); TRAY_RIGHT = JW - (bb ? Math.ceil((bb.offsetWidth + 18) / k) : 0); // coins stay left of the BANK button
+  const bb = $("bankBtn"), tb = $("tiltBtn"); TRAY_RIGHT = JW - (bb ? Math.ceil((bb.offsetWidth + 18 + (tb && !tb.hidden ? tb.offsetWidth + 8 : 0)) / k) : 0); // coins stay left of the buttons
   const usable = Math.max(1, (TRAY_RIGHT - 8) * (FLOOR - 6));
   RC = Math.max(5, Math.min(10, Math.sqrt(usable * 1.5 / (TRAY_CAP * Math.PI))));
   for (const c of coinTray) c.x = Math.min(c.x, TRAY_RIGHT - RC - 3);
@@ -3870,6 +3914,31 @@ function awardPrize(kind, pos) {
   else { const n = Math.max(2, Math.floor(Math.sqrt(S("tokensTotal")))); tokens += n; tokensAsc += n; stats.tokensTotal = S("tokensTotal") + n; popAt(pos, `+${n} TOKENS`, "big"); }
   stats.prizesWon = S("prizesWon") + 1; sfx.fanfare(); refreshHud();
 }
+// ---------- Tilt Bar ----------
+// Give the cabinet a shove: every coin on the shelf jumps forward a little.
+const tiltCd = () => Math.round(45 * Math.pow(0.8, wl("tiltbar") - 1));
+let tiltAt = 0, tiltShown = "", shakeT = 0, shakeBase = 0;
+function doTilt() {
+  if (!wl("tiltbar") || Date.now() < tiltAt || titleOpen) return;
+  tiltAt = Date.now() + tiltCd() * 1000; stats.tilts = S("tilts") + 1;
+  for (const c of coins) { const v = c.body.linvel(); c.body.setLinvel({ x: v.x + (Math.random() - 0.5) * 0.4, y: v.y + 1.2, z: v.z + 1.8 }, true); }
+  if (shakeT <= 0) shakeBase = camera.position.x; shakeT = 0.35; sfx.crash();
+}
+function updateTilt(dt) {
+  const b = $("tiltBtn"), own = !!wl("tiltbar");
+  if (b.hidden === own) { b.hidden = !own; sizeJar(); }
+  if (!own) return;
+  const left = Math.max(0, Math.ceil((tiltAt - Date.now()) / 1000)), txt = left ? left + "s" : "TILT";
+  if (txt !== tiltShown) { tiltShown = txt; b.textContent = txt; b.disabled = left > 0; }
+  if (shakeT > 0) { shakeT -= dt; camera.position.x = shakeBase + (shakeT > 0 ? (Math.random() - 0.5) * 0.08 * shakeT / 0.35 : 0); } // a quick rattle, then back where it was
+}
+$("tiltBtn").addEventListener("click", () => { sfx.unlock(); doTilt(); });
+addEventListener("keydown", e => { if (e.code === "KeyT" && !e.target.closest?.("input, textarea")) doTilt(); });
+// Edge Magnet: coins resting near the front edge get a gentle tug over it
+function edgeMagnet() {
+  const l = wl("edgemag"); if (!l) return;
+  for (const c of coins) { const t = c.body.translation(); if (t.z > FLOOR_FRONT - 0.55 && t.z < FLOOR_FRONT && t.y < 0.5) { const v = c.body.linvel(); c.body.setLinvel({ x: v.x, y: v.y, z: v.z + 0.012 * l }, true); } }
+}
 function fillMachine() {
   for (let i = 0; i < 100 + 20 * rl("bigpile"); i++) {
     const x = (Math.random() - 0.5) * (HALF_W * 2 - 1);
@@ -4099,7 +4168,7 @@ function tick(dt) {
   if (keys.ArrowLeft || keys.KeyA) aimX = Math.max(-BOARD.aimMax, aimX - 4 * dt);
   if (keys.ArrowRight || keys.KeyD) aimX = Math.min(BOARD.aimMax, aimX + 4 * dt);
   if (holding || keys.Space) dropCoin(true); else if (autoOwned() && autoOn) dropCoin(false);
-  updateHot(dt); updateMarker(dt); updatePrizes(dt);
+  updateHot(dt); updateMarker(dt); updatePrizes(dt); updateTilt(dt);
   stepBoard(Math.min(dt, 0.05));
   updateRegen(dt); updateEvents(dt); updateReels(dt); updateWheel(dt);
   stats.playTime = (stats.playTime || 0) + dt; runTime += dt;
@@ -4533,7 +4602,7 @@ if (location.hash === "#sim") {
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
     get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, get pegMap() { return pegMap; }, shufflePegs, startMoving, placeAtId, get held() { return held; }, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
     WUPGRADES, wl, partGain, rebuild: doRebuild, get parts() { return parts; }, get gemsRb() { return gemsRb; }, get ascensions() { return ascensions; }, get rebirths() { return rebirths; },
-    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, spawnPrize, get hot() { return hot; }, stk, stStop, drawTower, renderTower,
+    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, spawnPrize, doTilt, pockets, get layout() { return layout; }, get hot() { return hot; }, stk, stStop, drawTower, renderTower,
     get stats() { return stats; }, achCount, chLevelsTotal, get playTime() { return stats.playTime || 0; },
   };
 } else frame();
