@@ -495,6 +495,7 @@ body.compact > *:not(#compact) { display: none !important; }
 .evBox .evBar i { display: block; height: 100%; width: 0; background: var(--cyan); }
 .evBox.live b, .evBox.live span { color: var(--gold); }
 .evBox.live .evBar i { background: var(--gold); }
+.hotBox b { color: #ff9a5a; } .hotBox .evBar i { background: #ff7a3a; } .hotBox.max b { color: #ffd24a; }
 
 @media (max-width: 760px) {
   /* five counters share the row on narrow screens; labels stay on one line */
@@ -545,6 +546,7 @@ body.compact > *:not(#compact) { display: none !important; }
     <div class="counter bank box"><b id="bank">0</b><span>Coins</span></div>
     <div class="counter won box" title="Coins earned since your last rebirth"><b id="earned">0</b><span>This run</span></div>
     <div class="counter box"><b id="regen">FULL</b><span>Regen</span></div>
+    <div class="counter box evBox hotBox" id="hotBox" hidden title="Hot Hand: drop by hand to heat up. Coins you drop are worth more."><b id="hotVal">×1.00</b><span>Hot hand</span><i class="evBar"><i id="hotFill"></i></i></div>
     <div class="counter box evBox" id="evBox" hidden title="Random events"><b id="evNext">0s</b><span id="evLabel">Next event</span><i class="evBar"><i id="evFill"></i></i></div>
     <div class="counter box" id="tokBox" hidden><b id="tokens">0</b><span>Tokens</span></div>
     <div class="counter box" id="gemBox" hidden><b id="gems">0</b><span>Gems</span></div>
@@ -814,7 +816,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.30.1";
+const VERSION = "1.31.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1529,6 +1531,8 @@ const DIGITS = { 0: ["###", "#.#", "#.#", "#.#", "###"], 1: [".#.", "##.", ".#."
   9: ["###", "#.#", "###", "..#", "###"], "?": ["###", "..#", ".##", "...", ".#."], K: ["#.#", "##.", "#..", "##.", "#.#"], M: ["#.#", "###", "###", "#.#", "#.#"] };
 function tierCols(v) {
   if (v === "?") return { base: "#3a4250", mid: "#2a303c", rim: "#11161f", hi: "#5a6478", ink: "#f5b83d", side: "#2a303c" };
+  if (v === "GEM") return { base: "#16444c", mid: "#0f3238", rim: "#06171a", hi: "#2a6670", ink: "#6ff5e6", side: "#0f3238" };
+  if (v === "TOK") return { base: "#2a5a2e", mid: "#1e4422", rim: "#0c1f0e", hi: "#4a8a4e", ink: "#ffd24a", side: "#1e4422" };
   if (v <= 1) return { ...P.silver, side: P.silverSide };
   if (v === 2) return { base: "#f0b080", mid: "#c87848", rim: "#7a3a18", hi: "#ffe0c8", ink: "#6a2c10", side: "#b86a3a" };
   if (v === 3) return { base: "#8ff0e0", mid: "#3fc0b0", rim: "#1a6a66", hi: "#e6fffa", ink: "#14524e", side: "#3fb0a2" };
@@ -1544,7 +1548,7 @@ const GILD = { base: "#ffd34d", mid: "#ec9f1e", hi: "#fff2a6" };
 function valueFace(v, style = settings.coinStyle) {
   let cols = tierCols(v);
   const label = coinLabel(v);
-  if (style === "gilded" && v !== "?") cols = { ...cols, ...GILD, ink: cols.rim === GILD.rim ? "#7a4006" : cols.rim };
+  if (style === "gilded" && typeof v !== "string") cols = { ...cols, ...GILD, ink: cols.rim === GILD.rim ? "#7a4006" : cols.rim };
   return pixTex(16, 16, g => {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const dx = Math.abs(x - 7.5), dy = Math.abs(y - 7.5), r = Math.hypot(dx, dy);
@@ -1552,7 +1556,7 @@ function valueFace(v, style = settings.coinStyle) {
         // octagonal arcade token with a groove ring
         const o = Math.max(dx, dy, (dx + dy) * 0.8);
         if (o > 7.6) continue;
-        g.fillStyle = o > 6.6 ? cols.rim : o > 5.4 && o <= 6.6 && (y < 5 || y > 11) ? (v === "?" ? cols.mid : cols.ink) : cols.base; // flat-sided token, dark groove inside the rim (kept clear of the number)
+        g.fillStyle = o > 6.6 ? cols.rim : o > 5.4 && o <= 6.6 && (y < 5 || y > 11) ? (typeof v === "string" ? cols.mid : cols.ink) : cols.base; // flat-sided token, dark groove inside the rim (kept clear of the number)
         if (o <= 5.6 && x + y < 8) g.fillStyle = cols.hi;
       } else {
         if (r > 8) continue;
@@ -1563,6 +1567,11 @@ function valueFace(v, style = settings.coinStyle) {
         if (style === "minted" && r <= 5.7 && x + y === 11) g.fillStyle = cols.base;
       }
       g.fillRect(x, y, 1, 1);
+    }
+    const ICONS = { GEM: ["..##..", ".####.", "######", "######", ".####.", "..##.."], TOK: ["######", "######", "..##..", "..##..", "..##..", "..##.."] };
+    if (ICONS[v]) { // prize coins: a gem or a T, big, with a drop shadow
+      for (const [dx, dy, col] of [[1, 1, cols.rim], [0, 0, cols.ink]]) { g.fillStyle = col; ICONS[v].forEach((row, y) => [...row].forEach((c, x) => { if (c === "#") g.fillRect(5 + x + dx, 5 + y + dy, 1, 1); })); }
+      return;
     }
     if (v === "?") { // mystery coins get one big question mark (with a dark drop shadow so it pops)
       const Q = [".####.", "##..##", "....##", "...##.", "..##..", "..##..", "......", "..##..", "..##.."];
@@ -1582,7 +1591,7 @@ function lookFor(v) {
   let L = looks.get(v);
   if (!L) {
     const cols = tierCols(v), face = toon({ map: valueFace(v) }), side = toon({ color: hex(cols.side) });
-    const geo = v >= 5 ? goldGeo : coinGeo, mats = [side, face, face];
+    const geo = (typeof v === "string" ? v !== "?" : v >= 5) ? goldGeo : coinGeo, mats = [side, face, face];
     const inst = new THREE.InstancedMesh(geo, mats, MAX_PER_LOOK);
     inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage); inst.count = 0;
     inst.castShadow = false; inst.receiveShadow = true; inst.frustumCulled = false; scene.add(inst);
@@ -1748,6 +1757,40 @@ function boardMesh(c) {
 function updateBoardCoins() {
   for (const c of board.coins) { const g = boardMesh(c); g.position.set(c.x, c.y, BOARD_Z); g.rotation.z = c.a; }
 }
+// ---------- Bonus marker ----------
+// After your first rebirth a ×2 marker drifts back and forth above the slots. Time your drop so the coin lands
+// in the slot it's over.
+const markerOn = () => rebirths > 0 || ascensions > 0 || rebuilds > 0;
+const markerMult = () => 2 + rl("bullseye");
+let markerT = Math.random() * 100, markerX = 0, markerMesh = null, markerShown = "";
+function markerSlot() { let best = 0; board.centers.forEach((c, j) => { if (Math.abs(c - markerX) < Math.abs(board.centers[best] - markerX)) best = j; }); return best; }
+function markerTex(txt) {
+  const cv = document.createElement("canvas"); cv.width = 64; cv.height = 96; const g = cv.getContext("2d");
+  g.fillStyle = "#ffd24a";
+  g.fillRect(2, 30, 60, 5); g.fillRect(2, 91, 60, 5); g.fillRect(2, 30, 5, 66); g.fillRect(57, 30, 5, 66); // the frame round the slot
+  g.fillRect(6, 2, 52, 26); g.fillStyle = "#3a2006"; g.fillRect(9, 5, 46, 20);                            // the tag above it
+  g.fillStyle = "#ffd24a"; g.font = '14px "Press Start 2P", monospace'; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 32, 16);
+  const t = new THREE.CanvasTexture(cv); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; return t;
+}
+function updateMarker(dt) {
+  if (!markerOn()) { if (markerMesh) markerMesh.visible = false; return; }
+  if (!markerMesh) {
+    const w = BOARD.spacing * 0.98, frameH = (BOARD.slotTop - BOARD.exitY) + 0.12, h = frameH * 96 / 66;
+    markerMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false }));
+    markerMesh.renderOrder = 5;
+    markerMesh.position.set(0, BOARD.exitY - 0.06 + h / 2, BOARD_Z + 0.3); scene.add(markerMesh);
+  }
+  const txt = "×" + markerMult();
+  if (txt !== markerShown) { markerShown = txt; markerMesh.material.map = markerTex(txt); markerMesh.material.needsUpdate = true; }
+  markerMesh.visible = true;
+  // glides from edge to edge and back, pausing a moment over each slot so it can be aimed at
+  markerT += dt;
+  const span = board.centers[board.centers.length - 1], n = board.centers.length - 1, period = 2.2;
+  const step = markerT / period, i = Math.floor(step) % (2 * n), f = step % 1, ease = f < 0.55 ? 0 : (f - 0.55) / 0.45;
+  const from = i < n ? i : 2 * n - i, to = i < n ? i + 1 : 2 * n - i - 1;
+  markerX = board.centers[from] + (board.centers[to] - board.centers[from]) * (ease * ease * (3 - 2 * ease));
+  markerMesh.position.x = markerX; void span;
+}
 const _eq = new THREE.Quaternion(), _qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 let lastTick = 0;
 function stepBoard(dt) {
@@ -1767,7 +1810,12 @@ function onSlot(c, mult, slot) {
   }
   // Hand the coin to the pusher, standing on edge, now worth its multiplier
   _eq.setFromAxisAngle(new THREE.Vector3(0, 0, 1), c.a).multiply(_qx);
-  let value = mult * (c.v || 1) * (eventOn("gold") ? 2 : 1);
+  let value = mult * (c.v || 1) * (eventOn("gold") ? 2 : 1) * (c.hh || 1);
+  // the moving ×2 marker: a coin landing in the slot it's over is worth double (or more with Bullseye)
+  if (markerOn() && slot === markerSlot()) {
+    value *= markerMult(); stats.markerHits = S("markerHits") + 1;
+    popAt(new THREE.Vector3(at.x, at.y + 1.4, at.z), `BONUS ×${markerMult()}`, "big"); sfx.kaching();
+  }
   // Flip Gates: a coin in a paying slot may hit a gate and flip: heads doubles it, tails halves it
   if (mult > 0 && lvl("flipgate") && Math.random() < 0.08 * lvl("flipgate")) {
     const heads = Math.random() < 0.5; value = heads ? value * 2 : Math.max(1, Math.round(value / 2));
@@ -1792,7 +1840,19 @@ function onSlot(c, mult, slot) {
 }
 
 let warm = false, lastDrop = 0, holding = false;
-function dropCoin() {
+// Hot Hand: every coin you drop yourself heats your hand up (the Auto Dropper doesn't), and a hot hand's coins are
+// worth more. Stop dropping by hand for a moment and it cools off.
+const HOT_MAX = 40;
+let hot = 0, lastManual = -1e9, hotShown = "";
+const hotCap = () => 0.25 + 0.1 * rl("hotstreak");          // the most it adds: +25%, more with Hot Streak
+const hotMult = () => 1 + hotCap() * hot / HOT_MAX;
+function updateHot(dt) {
+  if (performance.now() - lastManual > 1500) hot = Math.max(0, hot - 6 * dt);
+  const box = $("hotBox"), txt = "×" + hotMult().toFixed(2);
+  box.hidden = hot <= 0 && dropped < 30;
+  if (txt !== hotShown) { hotShown = txt; $("hotVal").textContent = txt; $("hotFill").style.width = (hot / HOT_MAX * 100) + "%"; box.classList.toggle("max", hot >= HOT_MAX - 0.01); }
+}
+function dropCoin(manual = true) {
   if (!warm || bank < 1 || placing || titleOpen) return; // payouts can be fractional, so a drop needs at least a whole coin
   const now = performance.now();
   if (now - lastDrop < dropCooldown() * (eventOn("frenzy") ? 0.35 : 1) * 1000) return;
@@ -1802,7 +1862,8 @@ function dropCoin() {
   let value = coinValue();
   if (eventOn("frenzy") || Math.random() < freeDrop()) { popAt(new THREE.Vector3(aimX, BOARD.dropY + 0.5, BOARD_Z), "FREE", ""); if (!eventOn("frenzy")) sfx.free(); }
   else { const price = chOn("tax") ? 2 : 1; value = Math.max(1, Math.min(value, Math.floor(bank / price))); bank = Math.max(0, bank - value * price); }
-  boardDrop(board, aimX + (Math.random() - 0.5) * 0.04).v = value;
+  if (manual) { hot = Math.min(HOT_MAX, hot + 1); lastManual = now; stats.hotMax = Math.max(S("hotMax"), Math.round(hot)); }
+  const bc = boardDrop(board, aimX + (Math.random() - 0.5) * 0.04); bc.v = value; bc.hh = hotMult();
   if (Math.random() < doubleDrop()) setTimeout(() => { boardDrop(board, (Math.random() - 0.5) * BOARD.aimMax * 2).v = coinValue(); popAt(new THREE.Vector3(0, BOARD.dropY + 0.4, BOARD_Z), "FREE COIN", ""); sfx.extra(); }, 180);
   sfx.drop();
   refreshHud();
@@ -2037,6 +2098,7 @@ function stepPhysics(counting) {
     const c = coins[i];
     if (counting) {
       if (t.z > FLOOR_FRONT - 0.3 && Math.abs(t.x) < HALF_W) {
+        if (c.prize) { awardPrize(c.prize, new THREE.Vector3(t.x, 0.3, FLOOR_FRONT + 0.4)); refreshHud(); removeCoin(i); continue; }
         const mult = c.mystery ? rollMystery() : 1;
         const v = c.value * mult * payoutMult();
         wheelCharge += v;
@@ -2144,6 +2206,9 @@ const RUPGRADES = [
   { id: "piggy", name: "Piggy Bank", x: 0, y: 3, parent: "quickbank", max: 5, base: 6, grow: 2, text: l => l ? `Your coins earn 1% interest a minute (up to ${25 * l}× coin value)` : "No interest on your coins" },
   // board branch (up and left)
   { id: "sparesock", name: "Spare Sockets", x: -1, y: -2, parent: "sticky", max: 2, base: 5, grow: 3, text: l => `Up to ${4 + l + wl("morepegs")} splitter pegs` },
+  { id: "hotstreak", name: "Hot Streak", x: 0, y: -2, parent: "weighted", max: 5, base: 4, grow: 2, text: l => `A hot hand adds up to +${Math.round(100 * (0.25 + 0.1 * l))}%` },
+  { id: "prizehunt", name: "Prize Hunter", x: 1, y: 2, parent: "eventstart", max: 3, base: 5, grow: 2.5, text: l => `Prizes drop on the pusher ${pct(1 / Math.pow(0.85, l))} as often` },
+  { id: "bullseye", name: "Bullseye", x: 2, y: 2, parent: "chprep", max: 2, base: 6, grow: 3, text: l => `The bonus marker pays ×${2 + l}` },
   { id: "sticky", name: "Sticky Jackpot", x: -1, y: -1, parent: "golden", max: 5, base: 2, grow: 2, text: l => `+${3 * l}% of coins stay in the ×5` },
   { id: "bargain", name: "Bargain Value", x: -2, y: -1, parent: "sticky", max: 3, base: 3, grow: 2, text: l => `Coin Value upgrades cost ${pct(Math.pow(0.85, l))}` },
   { id: "bigpile", name: "Bigger Pile", x: -3, y: 0, parent: "regenkeep", max: 4, base: 2, grow: 2, text: l => `Each run starts with ${100 + 20 * l} coins on the pusher` },
@@ -2840,6 +2905,11 @@ function renderHelp() {
       "Each drop costs one coin. Regen slowly gives coins back, so you can always keep playing. The gold coin at the top of the board fills up to show when your next drop is ready. Hold to keep dropping.",
       "THIS RUN at the top counts the coins you've earned since your last rebirth.",
     ]],
+    ["Playing by hand", [
+      "Hot Hand: every coin you drop yourself heats your hand up (the Auto Dropper doesn't). A hot hand's coins are worth up to +25% more, shown in the HOT HAND box. Stop for a moment and it cools off. Hot Streak (Rebirth tree) raises the cap.",
+      "Bonus marker: after your first rebirth a ×2 marker glides above the slots, pausing over each one. A coin that lands in the slot under it is worth double. Bullseye (Rebirth tree) makes it ×3 or ×4.",
+      "Prizes: every few minutes a prize drops onto the pusher: a big gold coin, a token bundle (green T), or once you've ascended a gem chip (teal gem). Push it off the front to win it. Off the sides, it's gone. Prize Hunter (Rebirth tree) makes them come more often.",
+    ]],
     ["The coin tray", [
       "Coins that fall off the pusher pile up in the tray. They aren't yours to spend until you press BANK.",
       "When the tray is full it banks itself, so nothing is ever lost. Upgrades can make the tray bigger or pay a bonus when you bank by hand.",
@@ -3290,7 +3360,7 @@ function save() {
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
     gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, tokBuyOn, gemBuyOn, ascT, ascPk, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
-    coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
+    coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.prize ? "p:" + c.prize : c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
 setInterval(save, 5000);
@@ -3773,6 +3843,33 @@ trimPegs();
 if (!(saved && saved.goldRandom)) for (const id of Object.keys(pegMap)) if (pegMap[id] === "gold") delete pegMap[id]; // old hand-placed ones get re-rolled once
 if (!(saved && saved.pegsRandom)) for (const id of Object.keys(pegMap)) delete pegMap[id]; // same for hand-placed splitter and doubler pegs
 fillGold(); drawSpecialPegs();
+// ---------- Prizes on the pusher ----------
+// Now and then (after your first rebirth) a prize drops onto the shelf: a big gold coin, a token bundle, or (once
+// you've ascended) a gem chip. Push it off the front edge to win it; off the sides, it's gone.
+let prizeT = 0, nextPrize = 120 + Math.random() * 60;
+const prizeGap = () => (150 + Math.random() * 90) * Math.pow(0.85, rl("prizehunt"));
+function spawnPrize(kind) {
+  const x = (Math.random() - 0.5) * (HALF_W * 2 - 1.4), z = 0.9 + Math.random() * 1.2;
+  let c;
+  if (kind === "gold") c = spawnCoin(x, 1.4, z, Math.max(25, Math.round(25 * coinValue())), 0.2);
+  else { c = spawnCoin(x, 1.4, z, 5, 0.2); c.prize = kind; }
+  stats.prizes = S("prizes") + 1;
+  popAt(new THREE.Vector3(x, 1.6, z), kind === "gold" ? "BIG COIN!" : kind === "gem" ? "GEM PRIZE!" : "TOKEN PRIZE!", "big"); sfx.bonus();
+  return c;
+}
+function updatePrizes(dt) {
+  if (!markerOn() || titleOpen) return;
+  if ((prizeT += dt) < nextPrize) return;
+  prizeT = 0; nextPrize = prizeGap();
+  if (coins.filter(c => c.prize || c.value >= 25 * coinValue()).length >= 3) return; // don't flood the shelf
+  const r = Math.random() * 100, kind = ascensions > 0 && r < 15 ? "gem" : r < 45 ? "tok" : "gold";
+  spawnPrize(kind);
+}
+function awardPrize(kind, pos) {
+  if (kind === "gem") { const n = 1 + Math.floor(Math.sqrt(gemsTotal) / 4); gems += n; gemsTotal += n; gemsRb += n; popAt(pos, `+${n} GEM${n > 1 ? "S" : ""}`, "big"); }
+  else { const n = Math.max(2, Math.floor(Math.sqrt(S("tokensTotal")))); tokens += n; tokensAsc += n; stats.tokensTotal = S("tokensTotal") + n; popAt(pos, `+${n} TOKENS`, "big"); }
+  stats.prizesWon = S("prizesWon") + 1; sfx.fanfare(); refreshHud();
+}
 function fillMachine() {
   for (let i = 0; i < 100 + 20 * rl("bigpile"); i++) {
     const x = (Math.random() - 0.5) * (HALF_W * 2 - 1);
@@ -3790,6 +3887,7 @@ if (saved && saved.coins) {
   for (const [k, v, x, y, z, qx, qy, qz, qw] of saved.coins) {
     const c = spawnCoin(x, y, z, v, 0, new THREE.Quaternion(qx, qy, qz, qw));
     if (k === "m") c.mystery = true;
+    if (typeof k === "string" && k.startsWith("p:")) c.prize = k.slice(2);
     c.body.sleep();
   }
   bank += saved.inflight || 0; // coins that were mid-board when you left come back
@@ -4000,7 +4098,8 @@ function tick(dt) {
 
   if (keys.ArrowLeft || keys.KeyA) aimX = Math.max(-BOARD.aimMax, aimX - 4 * dt);
   if (keys.ArrowRight || keys.KeyD) aimX = Math.min(BOARD.aimMax, aimX + 4 * dt);
-  if (holding || keys.Space || (autoOwned() && autoOn)) dropCoin();
+  if (holding || keys.Space) dropCoin(true); else if (autoOwned() && autoOn) dropCoin(false);
+  updateHot(dt); updateMarker(dt); updatePrizes(dt);
   stepBoard(Math.min(dt, 0.05));
   updateRegen(dt); updateEvents(dt); updateReels(dt); updateWheel(dt);
   stats.playTime = (stats.playTime || 0) + dt; runTime += dt;
@@ -4029,7 +4128,7 @@ function frame() {
   for (const c of coins) {
     const t = c.body.translation(), r = c.body.rotation();
     _p.set(t.x, t.y, t.z); _q.set(r.x, r.y, r.z, r.w); _m.compose(_p, _q, _s);
-    const L = lookFor(c.mystery ? "?" : c.value);
+    const L = lookFor(c.prize ? (c.prize === "gem" ? "GEM" : "TOK") : c.mystery ? "?" : c.value);
     if (L.n < MAX_PER_LOOK) L.inst.setMatrixAt(L.n++, _m);
   }
   for (const L of looks.values()) { L.inst.count = L.n; L.inst.instanceMatrix.needsUpdate = true; }
@@ -4434,7 +4533,7 @@ if (location.hash === "#sim") {
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
     get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, get pegMap() { return pegMap; }, shufflePegs, startMoving, placeAtId, get held() { return held; }, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
     WUPGRADES, wl, partGain, rebuild: doRebuild, get parts() { return parts; }, get gemsRb() { return gemsRb; }, get ascensions() { return ascensions; }, get rebirths() { return rebirths; },
-    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, stk, stStop, drawTower, renderTower,
+    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, spawnPrize, get hot() { return hot; }, stk, stStop, drawTower, renderTower,
     get stats() { return stats; }, achCount, chLevelsTotal, get playTime() { return stats.playTime || 0; },
   };
 } else frame();
