@@ -445,6 +445,12 @@ body.compact > *:not(#compact) { display: none !important; }
 .achInfo { position: sticky; bottom: 0; display: grid; gap: 4px; padding: 10px 12px; }
 .achInfo b { font-family: var(--display); font-weight: 400; font-size: 9px; line-height: 1.5; color: var(--gold); }
 .achInfo span { font-size: 17px; line-height: 1.1; color: var(--fg); }
+.achInfo .achBar { display: block; height: 8px; margin-top: 4px; background: var(--ink); }
+.achInfo .achBar i { display: block; height: 100%; background: var(--cyan); }
+.achInfo em { font-style: normal; font-size: 15px; color: var(--muted); }
+.ach { position: relative; }
+.ach .ap { position: absolute; left: 4px; right: 4px; bottom: 4px; height: 3px; background: #00000080; }
+.ach .ap i { display: block; height: 100%; background: var(--cyan); }
 /* pop-ups sit off the board: top-left on a computer, just above the coin tray on phones */
 .toast { left: max(16px, env(safe-area-inset-left, 0px)); top: calc(70px + env(safe-area-inset-top, 0px)); transform: none; text-align: left; max-width: min(320px, calc(100vw - var(--panelW, 84px) - 32px)); padding: 8px 12px; }
 .toast b { font-size: 10px; } .toast span { font-size: 16px; }
@@ -808,7 +814,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.28.0";
+const VERSION = "1.28.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2626,6 +2632,21 @@ function renderList() {
 }
 // Achievements: rows of 8 tiles, Antimatter Dimensions style. Tap a tile to see what it wants.
 let achSel = null;
+// progress toward each achievement that counts something: [how far you are, the goal]
+const ACH_PROG = {
+  a_drop: () => [dropped, 250], a_bank: () => [S("banks"), 15], a_hold25: () => [stats.maxBank, 150], a_buy: () => [S("buys"), 30],
+  a_jack: () => [stats.jackpots, 15], a_lost: () => [S("lost"), 25], a_full: () => [S("fullBanks"), 10], a_lv10: () => [machineLevels(), 25],
+  a_run1k: () => [runEarned, 5000], a_gold: () => [S("goldHits"), 1000], a_split: () => [S("splits"), 150], a_doubler: () => [S("doubles"), 75],
+  a_reel: () => [S("reelSpins"), 100], a_flip: () => [S("flipWins"), 30], a_coin25: () => [S("bestCoin"), 100], a_jack25: () => [stats.jackpots, 150],
+  a_reb: () => [rebirths, 3], a_event: () => [S("events"), 30], a_wheel: () => [S("wheelSpins"), 25], a_myst0: () => [S("myst0n"), 50],
+  a_bank30: () => [S("bigBank"), 35], a_earn10k: () => [earned, 1e5], a_half: () => [machineLevels(), Math.ceil(UPGRADES.reduce((a, u) => a + u.max, 0) / 2)],
+  a_streak5: () => [stats.bestStreak, 6], a_reb5: () => [rebirths, 10], a_chal: () => [chLevelsTotal(), 5], a_tok25: () => [S("tokensTotal"), 100],
+  a_hold1k: () => [stats.maxBank, 1e4], a_777: () => [S("reel777"), 3], a_asc: () => [ascensions, 2], a_gem10: () => [gemsTotal, 30],
+  a_earn100k: () => [earned, 1e7], a_max: () => [UPGRADES.filter(u => u.max > 1 && lvl(u.id) >= u.max).length, 5],
+  a_gold6: () => [Math.min(6, lvl("goldpeg")) + Math.min(2, lvl("doublepeg")), 8], a_streak8: () => [stats.bestStreak, 10],
+  a_5h: () => [Math.floor(S("playTime") / 3600), 10], a_all: () => [ACH.filter(a => a.id !== "a_all" && achDone[a.id]).length, ACH.length - 1],
+};
+const achProg = a => { const f = ACH_PROG[a.id]; if (!f || achDone[a.id] || (a.secret && a.id !== "a_all")) return null; const [v, g] = f(); return [Math.min(Math.floor(v || 0), g), g]; };
 function renderAch() {
   const area = $("treeArea"); area.textContent = "";
   const wrap = document.createElement("div"); wrap.className = "achWrap";
@@ -2638,6 +2659,12 @@ function renderAch() {
     info.innerHTML = "<b></b><span></span>";
     info.querySelector("b").textContent = (got ? "✓ " : "") + (hide ? "Secret achievement" : a.name);
     info.querySelector("span").textContent = hide ? "Keep playing and you might stumble into it." : a.how;
+    const pr = !hide && achProg(a);
+    if (pr) {
+      const bar = document.createElement("i"); bar.className = "achBar"; const f = document.createElement("i"); f.style.width = (pr[0] / pr[1] * 100) + "%"; bar.appendChild(f);
+      const t = document.createElement("em"); t.textContent = `${fmt(pr[0])} / ${fmt(pr[1])}`;
+      info.append(bar, t);
+    }
   };
   ACH_ROWS.forEach((row, r) => {
     const box = document.createElement("div"); box.className = "achRow";
@@ -2651,6 +2678,8 @@ function renderAch() {
       b.className = "ach" + (achDone[a.id] ? " got" : "") + (achSel === a.id ? " sel" : "");
       b.textContent = a.secret && !achDone[a.id] ? "?" : String(r * 8 + i + 1);
       b.setAttribute("aria-label", a.secret && !achDone[a.id] ? "Secret achievement" : a.name);
+      const pr = achProg(a); // a thin bar along the bottom of the tile shows how close it is
+      if (pr && pr[0] > 0) { const bar = document.createElement("i"); bar.className = "ap"; const f = document.createElement("i"); f.style.width = (pr[0] / pr[1] * 100) + "%"; bar.appendChild(f); b.appendChild(bar); }
       b.addEventListener("click", () => { achSel = a.id; grid.parentNode.parentNode.querySelectorAll(".ach.sel").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); showInfo(a); });
       grid.appendChild(b);
     }
