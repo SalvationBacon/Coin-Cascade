@@ -785,7 +785,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.26.1";
+const VERSION = "1.26.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2174,7 +2174,7 @@ function applyUpgrades() {
   function baseSlotPay(m) {
     if (m === 5) return chOn("nojack") || chOn("edgeonly") ? 0 : (wl("jack10") ? 10 : 5) + lvl("jackpot") + chHas("nojack") + 2 * al("fever") + 2 * chHas("jackonly") + (msHas("jack500") ? 1 : 0);
     if (chOn("jackonly")) return 0;
-    if (m === 3) return 3 + lvl("edge") + chHas("allnothing") + chHas("edgeonly") + wl("edges");
+    if (m === 3) return 3 + lvl("edge") + chHas("allnothing") + chHas("edgeonly") + wl("edges") + (chOn("edgeonly") ? 3 : 0);
     if (chOn("edgeonly")) return 0;
     if (m === 1 && chOn("allnothing")) return 0;
     if (m === 0) return wl("zeros"); // No More Zeros
@@ -2895,14 +2895,14 @@ const CHALLENGES = [
   { id: "nojack", name: "No Jackpot", rule: "The middle slot pays ×0.", goal: 500, need: 1, reward: "The middle slot pays +1" },
   { id: "slow", name: "Slow Hands", rule: "Drops take 3× as long.", goal: 500, need: 1, reward: "Drops 12% faster" },
   { id: "leaky", name: "Leaky Machine", rule: "Every payout is halved.", goal: 400, need: 1, reward: "Payouts +15%" },
-  { id: "dry", name: "Dry Spell", rule: "No regen. You start with 20 coins.", goal: 300, need: 3, start: 20, reward: "Regen 20% faster" },
+  { id: "dry", name: "Dry Spell", rule: "Regen is 5× slower. You start with 30 coins.", goal: 300, need: 3, start: 30, reward: "Regen 20% faster" },
   { id: "allnothing", name: "All or Nothing", rule: "The ×1 slots pay ×0.", goal: 300, need: 3, reward: "Edge slots pay +1" },
   { id: "heavy", name: "Heavy Coins", rule: "Coins and the pusher move at half speed.", goal: 500, need: 3, reward: "Pusher 10% faster" },
   { id: "pocketless", name: "Pocketless", rule: "Regen only fills up to 2 coins.", goal: 1500, need: 0, needAsc: 1, reward: "Regen cap +10" },
   { id: "nopegs", name: "No Pegs", rule: "Special pegs do nothing.", goal: 2000, need: 0, needAsc: 1, reward: "Golden pegs give +1" },
-  { id: "jackonly", name: "Jackpot Only", rule: "Only the middle slot pays.", goal: 1000, need: 0, needAsc: 1, reward: "The middle slot pays +2" },
+  { id: "jackonly", name: "Jackpot Only", rule: "Only the middle slot pays.", goal: 500, need: 0, needAsc: 1, reward: "The middle slot pays +2" },
   { id: "tax", name: "Coin Tax", rule: "Every drop costs twice its value.", goal: 1500, need: 0, needAsc: 2, reward: "+3% free drops" },
-  { id: "edgeonly", name: "Edges Only", rule: "Only the edge slots pay.", goal: 1200, need: 0, needAsc: 2, reward: "Edge slots pay +1" },
+  { id: "edgeonly", name: "Edges Only", rule: "Only the edge slots pay, but they pay +3.", goal: 120, need: 0, needAsc: 2, reward: "Edge slots pay +1" },
   { id: "bare", name: "Bare Machine", rule: "Machine upgrades cost 3× as much.", goal: 2000, need: 0, needAsc: 3, reward: "Machine upgrades 5% cheaper" },
 ];
 // a fresh run keeps everything permanent and resets the machine
@@ -3550,10 +3550,9 @@ $("cashOut").addEventListener("click", () => {
 // ---------- Regen ----------
 let regenT = 0;
 function updateRegen(dt) {
-  if (chOn("dry")) { regenT = 0; $("regen").textContent = "OFF"; return; }
   if (bank >= regenLimit()) { regenT = 0; $("regen").textContent = "FULL"; return; }
   regenT += dt;
-  const iv = regenInterval();
+  const iv = regenInterval() * (chOn("dry") ? 5 : 1);
   if (regenT >= iv) { regenT -= iv; bank++; refreshHud(); }
   $("regen").textContent = Math.ceil(iv - regenT) + "s";
 }
