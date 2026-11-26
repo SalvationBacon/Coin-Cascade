@@ -807,7 +807,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.27.2";
+const VERSION = "1.27.3";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1277,7 +1277,7 @@ function boardDrop(bd, x, from) {
   } else {
     legs.push(leg(B, cx, cy, tx, B.exitY, fallTime(B, cy, B.exitY, 1.2), false));
   }
-  const c = { x: from ? cx : x, y: from ? cy : B.dropY, a: 0, vx: 0, vy: 0, legs, i: 0, t: 0, slot };
+  const c = { x: from ? cx : x, y: from ? cy : B.dropY, a: 0, vx: 0, vy: 0, legs, i: 0, t: 0, slot, mystery: !from && Math.random() < mysteryChance() };
   bd.coins.push(c);
   return c;
 }
@@ -1704,11 +1704,11 @@ function onSpecialPeg(c, L) {
   else if (type === "double") { stats.doubles = S("doubles") + 1; c.v = (c.v || 1) * 2; popAt(at, "×2", "big"); retint(c); sfx.doubler(); }
   else if (type === "split" && Math.random() < splitChance()) {
     const [k, j] = L.pegId.split(":").map(Number);
-    if (k < BOARD.rows - 1) { stats.splits = S("splits") + 1; boardDrop(board, 0, { k, j }).v = c.v || 1; popAt(at, "SPLIT", ""); sfx.split(); }
+    if (k < BOARD.rows - 1) { stats.splits = S("splits") + 1; const cp = boardDrop(board, 0, { k, j }); cp.v = c.v || 1; cp.mystery = !!c.mystery; popAt(at, "SPLIT", ""); sfx.split(); }
   }
 }
 // a board coin changes its face when its value changes
-function retint(c) { const g = boardMeshes.get(c); if (g) g.children[0].material = lookFor(c.v).mats; }
+function retint(c) { const g = boardMeshes.get(c); if (g && !c.mystery) g.children[0].material = lookFor(c.v).mats; } // a ? coin keeps its ?
 
 // Each board coin is drawn as a coin standing on its edge, spinning as it rolls off pegs
 const boardMeshes = new Map();
@@ -1716,7 +1716,7 @@ function boardMesh(c) {
   let g = boardMeshes.get(c);
   if (!g) {
     g = new THREE.Group();
-    const m = new THREE.Mesh(coinGeo, lookFor(c.v || 1).mats); m.rotation.x = Math.PI / 2; m.castShadow = true;
+    const m = new THREE.Mesh(coinGeo, lookFor(c.mystery ? "?" : c.v || 1).mats); m.rotation.x = Math.PI / 2; m.castShadow = true;
     g.add(m); scene.add(g); boardMeshes.set(c, g);
   }
   return g;
@@ -1751,10 +1751,10 @@ function onSlot(c, mult, slot) {
     stats.gates = S("gates") + 1;
   }
   const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, value, 0, _eq.clone());
-  if (Math.random() < mysteryChance()) coin.mystery = true; // its value stays hidden until it pays out
+  if (c.mystery) coin.mystery = true; // it was a ? coin from the moment it was dropped; its value stays hidden until it lands in the tray
   coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
   // show the coin's own value (what's printed on it); payout bonuses like Golden Touch only apply when it falls off the front
-  popAt(at, coin.value !== mult ? `×${mult} = ${fmtV(coin.value)}` : "×" + mult, base === 5 ? "big" : "");
+  popAt(at, coin.value !== mult && !coin.mystery ? `×${mult} = ${fmtV(coin.value)}` : "×" + mult, base === 5 ? "big" : "");
   if (base === 5) { stats.jackpots++; if (lvl("reels")) reelQueue = Math.min(reelQueue + 1, 5); }
   if (base === 5) sfx.bonus(); else if (base === 3) sfx.win(1); else sfx.click();
 }
@@ -2780,7 +2780,7 @@ function renderHelp() {
       "Prize Wheel: charges up as you earn. Spin it for a pile of coins or a free event.",
       "Coin Stacker: a row of blocks slides side to side; stop it on top of the row below. Overhang falls off, and the row shrinks from 3 to 2 to 1 and speeds up as you climb. Reach the MINOR line (row 8) to take ×2 your bet, or risk it for the MAJOR (×20) at row 12.",
       "Scratch Cards: three matching symbols pay up to ×200. You can buy one card every 20 seconds.",
-      "Some luck upgrades work on the board by themselves instead: Flip Gates (coins flip for ×2 or ×½ in their slot), Slot Reels (every ×5 hit spins the reels) and Mystery Coins (? coins that only show their value once they land in your tray).",
+      "Some luck upgrades work on the board by themselves instead: Flip Gates (coins flip for ×2 or ×½ in their slot), Slot Reels (every ×5 hit spins the reels) and Mystery Coins (some coins drop as ? coins and only show their value once they land in your tray).",
       "Random Events (Gold Rush, Frenzy, Coin Shower, Jackpot Magnet) turn up every few minutes. A bar shows when the next one is due.",
     ]],
     ["Special pegs", [
