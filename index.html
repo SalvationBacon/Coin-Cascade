@@ -820,7 +820,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.32.0";
+const VERSION = "1.32.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1541,7 +1541,8 @@ const goldGeo = new THREE.CylinderGeometry(GOLD_R, GOLD_R, GOLD_H, 18);
 const DIGITS = { 0: ["###", "#.#", "#.#", "#.#", "###"], 1: [".#.", "##.", ".#.", ".#.", "###"], 2: ["###", "..#", "###", "#..", "###"],
   3: ["###", "..#", "###", "..#", "###"], 4: ["#.#", "#.#", "###", "..#", "..#"], 5: ["###", "#..", "###", "..#", "###"],
   6: ["###", "#..", "###", "#.#", "###"], 7: ["###", "..#", "..#", ".#.", ".#."], 8: ["###", "#.#", "###", "#.#", "###"],
-  9: ["###", "#.#", "###", "..#", "###"], "?": ["###", "..#", ".##", "...", ".#."], K: ["#.#", "##.", "#..", "##.", "#.#"], M: ["#.#", "###", "###", "#.#", "#.#"] };
+  9: ["###", "#.#", "###", "..#", "###"], "?": ["###", "..#", ".##", "...", ".#."], K: ["#.#", "##.", "#..", "##.", "#.#"], M: ["#.#", "###", "###", "#.#", "#.#"],
+  B: ["##.", "#.#", "##.", "#.#", "##."], T: ["###", ".#.", ".#.", ".#.", ".#."], Q: ["###", "#.#", "#.#", "##.", "..#"] };
 function tierCols(v) {
   if (v === "?") return { base: "#3a4250", mid: "#2a303c", rim: "#11161f", hi: "#5a6478", ink: "#f5b83d", side: "#2a303c" };
   if (v === "GEM") return { base: "#16444c", mid: "#0f3238", rim: "#06171a", hi: "#2a6670", ink: "#6ff5e6", side: "#0f3238" };
@@ -1556,7 +1557,13 @@ function tierCols(v) {
   if (v < 1000) return { base: "#f4f8ff", mid: "#c8d4e8", rim: "#6a7a9a", hi: "#ffffff", ink: "#a06a10", side: "#b8c4d8" };
   return { base: "#ffb8e4", mid: "#e060b0", rim: "#7a1a5a", hi: "#ffe8f6", ink: "#5a0c40", side: "#d050a0" };
 }
-const coinLabel = v => typeof v === "string" ? v : v < 1000 ? String(v) : v < 1e6 ? Math.floor(v / 1000) + "K" : Math.floor(v / 1e6) + "M";
+const COIN_SUF = ["", "K", "M", "B", "T", "Q"];
+const coinLabel = v => {
+  if (typeof v === "string") return v;
+  v = Math.max(1, Math.round(v));
+  let e = 0; while (v >= 1000 && e < COIN_SUF.length - 1) { v /= 1000; e++; }
+  return Math.min(999, Math.floor(v)) + COIN_SUF[e];
+};
 const GILD = { base: "#ffd34d", mid: "#ec9f1e", hi: "#fff2a6" };
 function valueFace(v, style = settings.coinStyle) {
   let cols = tierCols(v);
@@ -1601,14 +1608,16 @@ function valueFace(v, style = settings.coinStyle) {
 const MAX_PER_LOOK = 300;
 const looks = new Map(); // value -> { geo, mats, inst, n }
 function lookFor(v) {
-  let L = looks.get(v);
+  if (typeof v === "number") v = Math.max(1, Math.round(v));
+  const key = typeof v === "number" ? coinLabel(v) + (v < 5 ? ":" + v : "") : v; // 1-4 have their own colours
+  let L = looks.get(key);
   if (!L) {
     const cols = tierCols(v), face = toon({ map: valueFace(v) }), side = toon({ color: hex(cols.side) });
     const geo = (typeof v === "string" ? v !== "?" : v >= 5) ? goldGeo : coinGeo, mats = [side, face, face];
     const inst = new THREE.InstancedMesh(geo, mats, MAX_PER_LOOK);
     inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage); inst.count = 0;
     inst.castShadow = false; inst.receiveShadow = true; inst.frustumCulled = false; scene.add(inst);
-    L = { geo, mats, inst, n: 0 }; looks.set(v, L);
+    L = { geo, mats, inst, n: 0 }; looks.set(key, L);
   }
   return L;
 }
@@ -3585,7 +3594,7 @@ const fly = $("flyLayer"), flyG = fly.getContext("2d");
 function sizeFly() { fly.width = innerWidth; fly.height = innerHeight; flyG.imageSmoothingEnabled = false; }
 sizeFly(); addEventListener("resize", sizeFly);
 const flyFaces = new Map();
-const flyFace = v => { const k = Math.min(v, 1e6); if (!flyFaces.has(k)) flyFaces.set(k, valueFace(k).image); return flyFaces.get(k); };
+const flyFace = v => { const k = Math.max(1, Math.round(v)), key = coinLabel(k) + (k < 5 ? ":" + k : ""); if (!flyFaces.has(key)) flyFaces.set(key, valueFace(k).image); return flyFaces.get(key); };
 let mystFaceImg = null;
 const mystFace = () => mystFaceImg || (mystFaceImg = valueFace("?").image);
 // a mystery coin flips over in the tray to show what it was worth
@@ -4602,7 +4611,7 @@ if (location.hash === "#sim") {
     get field() { return coins.length; }, get onBoard() { return board.coins.length; }, setHolding(v) { holding = v; },
     get tokens() { return tokens; }, get gems() { return gems; }, get tokensAsc() { return tokensAsc; }, gemGain, get pegMap() { return pegMap; }, shufflePegs, startMoving, placeAtId, get held() { return held; }, AUPGRADES, al, rebirth: doRebirth, ascend: doAscend,
     WUPGRADES, wl, partGain, rebuild: doRebuild, get parts() { return parts; }, get gemsRb() { return gemsRb; }, get ascensions() { return ascensions; }, get rebirths() { return rebirths; },
-    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, spawnPrize, doTilt, pockets, get layout() { return layout; }, get hot() { return hot; }, stk, stStop, drawTower, renderTower,
+    get chDone() { return chDone; }, get chActive() { return chActive; }, chGoal, CHALLENGES, valueFace, coinLabel, spawnPrize, doTilt, pockets, get layout() { return layout; }, get hot() { return hot; }, stk, stStop, drawTower, renderTower,
     get stats() { return stats; }, achCount, chLevelsTotal, get playTime() { return stats.playTime || 0; },
   };
 } else frame();
