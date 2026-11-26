@@ -457,7 +457,8 @@ body.compact > *:not(#compact) { display: none !important; }
   .vault { left: calc((100vw - var(--panelW, 84px)) / 2); right: auto; width: min(560px, calc(100vw - var(--panelW, 84px) - 32px)); transform: translateX(-50%); height: 120px; }
 }
 
-.pips { display: flex; gap: 4px; } .pips i { width: 14px; height: 8px; background: #ffffff18; border: 2px solid var(--ink); } .pips i.on { background: var(--gold); }
+.pips { display: flex; gap: 4px; } .pips i { width: 14px; height: 8px; background: #ffffff18; border: 2px solid var(--ink); } .pips .pipMore { margin-left: 4px; font-family: var(--display); font-size: 9px; color: var(--gold); align-self: center; }
+.pips i.on { background: var(--gold); }
 
 .overlay.xfer { z-index: 40; }
 #elsewhere { z-index: 90; }
@@ -807,7 +808,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.27.3";
+const VERSION = "1.28.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -932,7 +933,13 @@ let chActive = (saved && saved.chActive) || null;
 // challenges have 5 levels: chHas(id) is how many you've beaten (0 to 5); older saves stored true for level 1
 const msHas = id => !!msDone[id], chHas = id => Number(chDone[id]) || 0, chOn = id => chActive === id;
 const CH_LEVELS = [1, 2.5, 6, 15, 40]; // goal multiplier for levels 1 to 5
-const chGoal = c => Math.round(c.goal * CH_LEVELS[Math.min(chHas(c.id), CH_LEVELS.length - 1)] * Math.pow(0.95, rl("chprep")) * Math.pow(0.9, al("chmaster")));
+// after the first rebuild challenges never run out: level 6, 7, 8… each 2.5× the last
+const chEndless = () => rebuilds > 0 || partsTotal > 0;
+const chMaxed = id => !chEndless() && chHas(id) >= CH_LEVELS.length;
+const chLvMult = n => n < CH_LEVELS.length ? CH_LEVELS[n] : CH_LEVELS[CH_LEVELS.length - 1] * Math.pow(2.5, n - CH_LEVELS.length + 1);
+// how much of a challenge's reward you have: one per level up to 5, then half a reward per level after that
+const chRw = id => { const n = chHas(id); return n <= 5 ? n : 5 + 0.5 * (n - 5); };
+const chGoal = c => Math.round(c.goal * chLvMult(chHas(c.id)) * Math.pow(0.95, rl("chprep")) * Math.pow(0.9, al("chmaster")));
 const chLevelsTotal = () => Object.keys(chDone).reduce((a, k) => a + (Number(chDone[k]) || 0), 0);
 const pegMap = (saved && saved.pegs) || {}; // "row:index" -> "gold" | "split" | "double"
 const $ = id => document.getElementById(id);
@@ -2031,15 +2038,15 @@ const lvl = id => ups[id] || 0;
 const rl = id => rups[id] || 0;
 const fmtV = v => v < 10 && v % 1 ? v.toFixed(1) : fmt(v);
 const coinValue = (l = lvl("value")) => 1 + l + wl("press");
-const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (achRow(2) ? 0.95 : 1) * (msHas("drop5k") ? 0.95 : 1) * Math.pow(0.88, chHas("slow")) * (msHas("drop20k") ? 0.95 : 1)) * (chOn("slow") ? 3 : 1);
-const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (achRow(1) ? 0.9 : 1) * (msHas("drop500") ? 0.95 : 1) * Math.pow(0.8, chHas("dry"));
+const dropCooldown = (l = lvl("cooldown")) => Math.max(0.35, 2 * Math.pow(0.88, l) * (achRow(2) ? 0.95 : 1) * (msHas("drop5k") ? 0.95 : 1) * Math.pow(0.88, chRw("slow")) * (msHas("drop20k") ? 0.95 : 1)) * (chOn("slow") ? 3 : 1);
+const regenInterval = (l = lvl("regen")) => 5 * Math.pow(0.85, l) * (achRow(1) ? 0.9 : 1) * (msHas("drop500") ? 0.95 : 1) * Math.pow(0.8, chRw("dry"));
 // regenCap = what Bigger Refill allows; regenLimit = what regen actually fills to right now
 const regenLimit = () => Math.min(regenCap(), Math.max(5, runMax)); // every run starts refilling to 5, then follows your best vault
-const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + 10 * chHas("pocketless");
-const freeDrop = (l = lvl("free")) => 0.04 * l + 0.03 * chHas("tax");
+const regenCap = (l = lvl("cap")) => chOn("pocketless") ? 2 : 5 + 5 * l + 5 * rl("regenkeep") + (msHas("reb1") ? 5 : 0) + (msHas("vault1k") ? 5 : 0) + 10 * chRw("pocketless");
+const freeDrop = (l = lvl("free")) => 0.04 * l + 0.03 * chRw("tax");
 const luckyZero = (l = lvl("lucky")) => 0.1 * l;
 const doubleDrop = (l = lvl("double")) => 0.05 * l;
-const pushPeriod = (l = lvl("pusher")) => PUSH_PERIOD * Math.pow(0.88, l) * Math.pow(0.85, wl("motor")) * Math.pow(0.9, chHas("heavy")) * (chOn("heavy") ? 1.6 : 1);
+const pushPeriod = (l = lvl("pusher")) => PUSH_PERIOD * Math.pow(0.88, l) * Math.pow(0.85, wl("motor")) * Math.pow(0.9, chRw("heavy")) * (chOn("heavy") ? 1.6 : 1);
 const coinSpeed = (l = lvl("coinspeed")) => (1 + 0.15 * l) * (chOn("heavy") ? 0.5 : 1);
 const eventsLvl = () => Math.max(lvl("events"), rl("eventstart"));
 const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1)) / (1 + 0.15 * al("evmaster"));
@@ -2047,7 +2054,7 @@ const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
 const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
 // rebirth tree effects
 const markMult = () => 1 + 0.1 * rebuilds; // Machine Mark: every rebuild adds +10% payouts, forever
-const payoutMult = (l = rl("golden")) => achPayMult() * markMult() * Math.pow(1.25, wl("overclock")) * (1 + 0.5 * wl("plating")) * (1 + 0.25 * l) * (1 + Math.min(tokens * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chHas("leaky")) * (chOn("leaky") ? 0.5 : 1);
+const payoutMult = (l = rl("golden")) => achPayMult() * markMult() * Math.pow(1.25, wl("overclock")) * (1 + 0.5 * wl("plating")) * (1 + 0.25 * l) * (1 + Math.min(tokens * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chRw("leaky")) * (chOn("leaky") ? 0.5 : 1);
 const HEADSTART = [0, 10, 30, 100, 300, 1000];
 const startCoins = (l = rl("headstart")) => HEADSTART[l] + 100 * al("gemstart");
 const tokenMult = (l = rl("tokens")) => Math.pow(1.2, wl("tokmint")) * (1 + wl("tokpress")) * (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
@@ -2058,10 +2065,10 @@ const SPREAD = 1.03; // after your first 20 machine levels in a run, every level
 const machineLevels = () => { let n = 0; for (const k in ups) n += ups[k] || 0; return n; };
 const tokenGain = () => runEarned < REBIRTH_AT ? 0 : Math.floor(2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult()) + al("rebbonus");
 const flipOdds = (l = rl("weighted")) => 0.5 + 0.02 * l + (msHas("streak5") ? 0.02 : 0);
-const cheaper = (l = rl("cheaper")) => Math.pow(0.9, l) * Math.pow(0.95, chHas("bare")) * (chOn("bare") ? 3 : 1);
+const cheaper = (l = rl("cheaper")) => Math.pow(0.9, l) * Math.pow(0.95, chRw("bare")) * (chOn("bare") ? 3 : 1);
 const pct = v => Math.round(v * 100) + "%";
 const mysteryChance = (l = lvl("mystery")) => 0.05 * l;
-const goldAmt = () => 1 + lvl("pegpower") + chHas("nopegs") + al("pegplus");
+const goldAmt = () => 1 + lvl("pegpower") + chRw("nopegs") + al("pegplus");
 const splitChance = () => 0.25 + 0.05 * lvl("pegpower");
 // x, y = position on the tree (up is negative y); parent = the node that reveals it
 const UPGRADES = [
@@ -2203,9 +2210,9 @@ function applyUpgrades() {
     return Math.abs(i - mid) === 1 && wl("neigh") && !chOn("jackonly") && !chOn("edgeonly") ? Math.max(v, 1 + wl("neigh")) : v; // Lucky Neighbours
   }
   function baseSlotPay(m) {
-    if (m === 5) return chOn("nojack") || chOn("edgeonly") ? 0 : (wl("jack10") ? 10 : 5) + lvl("jackpot") + chHas("nojack") + 2 * al("fever") + 2 * chHas("jackonly") + (msHas("jack500") ? 1 : 0);
+    if (m === 5) return chOn("nojack") || chOn("edgeonly") ? 0 : (wl("jack10") ? 10 : 5) + lvl("jackpot") + chRw("nojack") + 2 * al("fever") + 2 * chRw("jackonly") + (msHas("jack500") ? 1 : 0);
     if (chOn("jackonly")) return 0;
-    if (m === 3) return 3 + lvl("edge") + chHas("allnothing") + chHas("edgeonly") + wl("edges") + (chOn("edgeonly") ? 3 : 0);
+    if (m === 3) return 3 + lvl("edge") + chRw("allnothing") + chRw("edgeonly") + wl("edges") + (chOn("edgeonly") ? 3 : 0);
     if (chOn("edgeonly")) return 0;
     if (m === 1 && chOn("allnothing")) return 0;
     if (m === 0) return wl("zeros"); // No More Zeros
@@ -2748,7 +2755,7 @@ function renderStats() {
     ["Coins", [["Earned in total: ", fmt(earned)], ["Earned this run: ", fmt(runEarned)], ["In the vault: ", fmt(bank)], ["Biggest vault: ", fmt(stats.maxBank)], ["Income lately: ", `${fmtV(incomeRate * 60)} a minute`]]],
     ["Machine", [["Coins dropped: ", fmt(dropped)], ["×5 hits: ", fmt(stats.jackpots)], ["Best flip streak: ", String(stats.bestStreak)]]],
     ["Progress", [["Rebirths: ", fmt(rebirths)], ["Tokens earned: ", fmt(stats.tokensTotal || 0)], ["Ascensions: ", fmt(ascensions)], ["Gems earned: ", fmt(gemsTotal)], ...(rebuilds ? [["Rebuilds: ", fmt(rebuilds)], ["Machine Mark: ", `${rebuilds + 1} (+${10 * rebuilds}% payouts)`], ["Parts earned: ", fmt(partsTotal)]] : []),
-      ["Milestones: ", `${Object.keys(msDone).length} / ${MILESTONES.length}`], ["Challenge levels: ", `${chLevelsTotal()} / ${CHALLENGES.length * 5}`]]],
+      ["Milestones: ", `${Object.keys(msDone).length} / ${MILESTONES.length}`], ["Challenge levels: ", chEndless() ? fmt(chLevelsTotal()) : `${chLevelsTotal()} / ${CHALLENGES.length * 5}`]]],
   ];
   for (const [title, lines] of groups) w.appendChild(card("", title, lines));
 }
@@ -2814,6 +2821,7 @@ function renderHelp() {
     ["The endless game", [
       "Coin Cascade never runs out. Once you reach the Workshop, two things keep growing forever:",
       "Machine Mark: every rebuild raises your machine's Mark by one and adds +10% to all payouts, with no limit.",
+      "Endless challenges: after your first rebuild, every challenge keeps going past level 5, each level harder than the last.",
       "The Forge: four Workshop upgrades have no top level. Overclock (payouts ×1.25 a level), Gem Forge (gems ×1.2), Token Mint (tokens ×1.2) and Parts Lathe (parts ×1.15). Each level costs more parts, but every level makes the next rebuild come faster.",
     ]],
     ["Milestones", [
@@ -2828,7 +2836,7 @@ function renderHelp() {
     ["Challenges", [
       "Challenges (Goals → Challenges) open after your first rebirth. Starting one restarts your run with a handicap, such as no jackpot slot or no regen.",
       "Reach the goal to beat a level and earn its reward. Each challenge has 5 levels: the same handicap with a bigger goal each time, and the reward again at every level.",
-      "Challenge rewards are permanent.",
+      "Challenge rewards are permanent. After your first rebuild challenges never end: level 6 and up, each goal 2.5× the last, each new level's reward at half strength.",
       "You don't get tokens for the run you leave when you start a challenge, so rebirth first if you have tokens waiting.",
     ]],
     ["Saving and backups", [
@@ -3063,7 +3071,7 @@ function checkGoals() {
     $("bonusbar").textContent = `CHALLENGE ${c.name}: ${fmt(runEarned)} / ${fmt(chGoal(c))} earned`;
     if (runEarned >= chGoal(c)) {
       chDone[c.id] = chHas(c.id) + 1; chActive = null; applyUpgrades();
-      showToast(`CHALLENGE BEATEN: ${c.name.toUpperCase()} ${chHas(c.id)}/5`, `${c.reward}, forever`); save();
+      showToast(`CHALLENGE BEATEN: ${c.name.toUpperCase()} ${chHas(c.id) > 5 ? "LEVEL " + chHas(c.id) : chHas(c.id) + "/5"}`, `${c.reward}${chHas(c.id) > 5 ? " (half strength past level 5)" : ""}, forever`); save();
     }
   }
 }
@@ -3072,7 +3080,7 @@ function updateChBadge() {
   const b = $("chBadge"), c = chActive && CHALLENGES.find(x => x.id === chActive);
   b.hidden = !c; if (!c) return;
   const goal = chGoal(c), lv = chHas(c.id) + 1;
-  $("chName").innerHTML = `<span class="chLbl">CHALLENGE · </span>`; $("chName").append(`${c.name} ${lv}/5`);
+  $("chName").innerHTML = `<span class="chLbl">CHALLENGE · </span>`; $("chName").append(lv > 5 ? `${c.name} level ${lv}` : `${c.name} ${lv}/5`);
   $("chRule").textContent = c.rule;
   $("chFill").style.width = Math.min(100, runEarned / goal * 100) + "%";
   $("chProg").textContent = `${fmt(runEarned)} / ${fmt(goal)} earned`;
@@ -3100,14 +3108,15 @@ function renderGoals() {
 }
 let chArmed = { id: null, t: 0 };
 function renderChallenges() {
-  const w = cardsWrap(`Starting a challenge restarts your run with a handicap. You don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Each challenge has 5 levels: same handicap, a bigger goal each time, and its reward again every level. ${chLevelsTotal()} of ${CHALLENGES.length * 5} levels beaten.`);
+  const w = cardsWrap(`Starting a challenge restarts your run with a handicap. You don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Each challenge has 5 levels: same handicap, a bigger goal each time, and its reward again every level.${chEndless() ? " Since your first rebuild they never end: level 6 and up, each goal 2.5× the last, each reward at half strength." : " After your first rebuild, challenges keep going past level 5."} ${chLevelsTotal()} of ${CHALLENGES.length * 5} levels beaten.`);
   for (const c of CHALLENGES) {
-    const lv = chHas(c.id), all = lv >= CH_LEVELS.length, on = chOn(c.id), locked = rebirths < c.need || ascensions < (c.needAsc || 0);
-    const cd = card(all ? "done" : on ? "active" : locked ? "locked" : "", `${all ? "✓ " : ""}${c.name} · ${lv}/5`,
+    const lv = chHas(c.id), all = chMaxed(c.id), on = chOn(c.id), locked = rebirths < c.need || ascensions < (c.needAsc || 0);
+    const cd = card(all ? "done" : on ? "active" : locked ? "locked" : "", `${all ? "✓ " : ""}${c.name} · ${lv > 5 ? "level " + lv : lv + "/5"}`,
       [["Rule: ", c.rule], all ? ["Every level beaten", ""] : ["Level " + (lv + 1) + " goal: ", `earn ${fmt(chGoal(c))} coins in the run`],
-       ["Reward each level: ", c.reward + (lv ? ` (you have it ×${lv})` : "")]]);
+       ["Reward each level: ", c.reward + (lv > 5 ? ` (you have it ×${chRw(c.id)}: levels past 5 count half)` : lv ? ` (you have it ×${lv})` : "")]]);
     const pips = document.createElement("div"); pips.className = "pips";
     for (let i = 0; i < CH_LEVELS.length; i++) { const d = document.createElement("i"); if (i < lv) d.className = "on"; pips.appendChild(d); }
+    if (lv > 5) { const x = document.createElement("span"); x.className = "pipMore"; x.textContent = `+${lv - 5}`; pips.appendChild(x); }
     cd.appendChild(pips);
     if (on) {
       cd.appendChild(progressBar(runEarned / chGoal(c)));
