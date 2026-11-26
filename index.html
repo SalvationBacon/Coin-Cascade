@@ -814,7 +814,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.28.3";
+const VERSION = "1.29.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -831,7 +831,7 @@ let tokens = (saved && saved.tokens) || 0, rebirths = (saved && saved.rebirths) 
 let gems = (saved && saved.gems) || 0, ascensions = (saved && saved.ascensions) || 0;
 let tokensAsc = (saved && saved.tokensAsc) || 0, gemsTotal = (saved && saved.gemsTotal) || 0;
 const aups = (saved && saved.aup) || {};
-let autoRebOn = saved ? saved.autoRebOn !== false : true, autoRebAt = (saved && saved.autoRebAt) || 5;
+let autoRebOn = saved ? saved.autoRebOn !== false : true, autoRebAt = saved && saved.autoRebAt != null ? saved.autoRebAt : 5; // 0 = at the best rate
 let wheelCharge = (saved && saved.wheelCharge) || 0, reelQueue = 0;
 let heir = (saved && saved.heir) || null;
 let autoBuyOn = saved ? saved.autoBuyOn !== false : true; // the machine upgrade Heirloom keeps through rebirths
@@ -841,7 +841,11 @@ const al = id => aups[id] || 0;
 const wups = (saved && saved.wup) || {};
 const wl = id => wups[id] || 0;
 let parts = (saved && saved.parts) || 0, partsTotal = (saved && saved.partsTotal) || 0, rebuilds = (saved && saved.rebuilds) || 0, gemsRb = (saved && saved.gemsRb) || 0;
-let autoAscOn = saved ? saved.autoAscOn !== false : true, autoAscAt = (saved && saved.autoAscAt) || 5;
+let autoAscOn = saved ? saved.autoAscOn !== false : true, autoAscAt = saved && saved.autoAscAt != null ? saved.autoAscAt : 5;
+// Token Buyer and Gem Buyer (Workshop) spend tokens and gems on the prestige trees for you
+let tokBuyOn = saved ? saved.tokBuyOn !== false : true, gemBuyOn = saved ? saved.gemBuyOn !== false : true, prestBuyT = 0;
+// "best rate" for Auto Ascend: when the last ascension began (play time), and the best gems-per-second seen since
+let ascT = saved && saved.ascT != null ? saved.ascT : (saved && saved.stats && saved.stats.playTime) || 0, ascPk = (saved && saved.ascPk) || 0, rebPk = 0;
 let runEarned = saved ? (saved.runEarned != null ? saved.runEarned : saved.earned) : 0;
 const rups = (saved && saved.rup) || {};
 if (rups.autostart && !rups.autounlock) rups.autounlock = 1; // older saves: Auto From Start already implies Automation
@@ -2158,7 +2162,7 @@ const AUPGRADES = [
   { id: "shine", name: "Gem Shine", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.8, text: l => `All payouts +${50 * l}%` },
   { id: "fountain", name: "Token Fountain", x: 1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% tokens per rebirth` },
   { id: "keeppegs", name: "Peg Keeper", x: 2, y: 0, parent: "fountain", max: 1, base: 4, grow: 1, text: l => l ? "Special pegs survive rebirths" : "Special pegs reset on rebirth" },
-  { id: "autoreb", name: "Auto Rebirth", x: 1, y: 1, parent: "fountain", max: 1, base: 3, grow: 1, text: l => l ? `Rebirths for you at ${autoRebAt} tokens` : "You rebirth by hand" },
+  { id: "autoreb", name: "Auto Rebirth", x: 1, y: 1, parent: "fountain", max: 1, base: 3, grow: 1, text: l => l ? (autoRebAt ? `Rebirths for you at ${fmt(autoRebAt)} tokens` : "Rebirths for you at the best rate") : "You rebirth by hand" },
   { id: "startups", name: "Running Start", x: -1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => l ? `Runs start with Regen, Quick Drop and Coin Speed at level ${2 * l}` : "Runs start from scratch" },
   { id: "fever", name: "Jackpot Fever", x: 0, y: -1, parent: "shine", max: 5, base: 3, grow: 2.2, text: l => `Middle slot +${2 * l}` },
   { id: "gemluck", name: "Gem Luck", x: -1, y: -1, parent: "fever", max: 5, base: 2, grow: 2, text: l => `+${5 * l}% Lucky Bounce` },
@@ -2203,7 +2207,9 @@ const WUPGRADES = [
   { id: "gemforge", name: "Gem Forge", x: -2, y: 1, parent: "gempress", max: Infinity, base: 5, grow: 1.6, text: l => `Gems per ascension ×${fmtV(Math.pow(1.2, l))}` },
   { id: "tokmint", name: "Token Mint", x: -2, y: 2, parent: "tokvault", max: Infinity, base: 4, grow: 1.55, text: l => `Tokens per rebirth ×${fmtV(Math.pow(1.2, l))}` },
   { id: "lathe", name: "Parts Lathe", x: 0, y: 2, parent: "morepegs", max: Infinity, base: 6, grow: 1.8, text: l => `Parts per rebuild ×${fmtV(Math.pow(1.15, l))}` },
-  { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? `Ascends for you at ${autoAscAt} gems` : "You ascend by hand" },
+  { id: "tokbuyer", name: "Token Buyer", x: -4, y: 0, parent: "autoasc", max: 1, base: 4, grow: 1, text: l => l ? `Buys the cheapest Rebirth tree upgrade you can afford (${tokBuyOn ? "on" : "off"})` : "You spend tokens by hand" },
+  { id: "gembuyer", name: "Gem Buyer", x: -4, y: 1, parent: "tokbuyer", max: 1, base: 8, grow: 1, text: l => l ? `Buys the cheapest Ascension tree upgrade you can afford (${gemBuyOn ? "on" : "off"})` : "You spend gems by hand" },
+  { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? (autoAscAt ? `Ascends for you at ${fmt(autoAscAt)} gems` : "Ascends for you at the best rate") : "You ascend by hand" },
 ];
 const TREES = {
   work: { list: WUPGRADES, lv: wl, set: (id, v) => { wups[id] = v; }, cost: u => Math.ceil(u.base * Math.pow(u.grow, wl(u.id))), has: () => parts, pay: c => { parts -= c; }, unit: "parts" },
@@ -2341,12 +2347,21 @@ function renderInfo() {
     t.textContent = autoAscOn ? "Auto Ascend is ON (click to switch off)" : "Auto Ascend is OFF (click to switch on)";
     t.addEventListener("click", () => { autoAscOn = !autoAscOn; save(); renderInfo(); });
     const chips = document.createElement("div"); chips.className = "chips";
-    for (const n of [2, 5, 10, 25]) {
-      const c = document.createElement("button"); c.type = "button"; c.textContent = `at ${n} gems`; c.className = n === autoAscAt ? "on" : "";
+    for (const n of [2, 5, 10, 25, 50, 100, 250, 1000, 0]) {
+      const c = document.createElement("button"); c.type = "button"; c.textContent = n ? `at ${fmt(n)} gems` : "at the best rate"; c.className = n === autoAscAt ? "on" : "";
+      if (!n) c.title = "Ascends once waiting longer would earn gems more slowly";
       c.addEventListener("click", () => { autoAscAt = n; save(); renderInfo(); });
       chips.appendChild(c);
     }
     info.append(t, chips);
+  }
+  for (const [id, label, get, set] of [["tokbuyer", "Token Buyer", () => tokBuyOn, v => { tokBuyOn = v; }], ["gembuyer", "Gem Buyer", () => gemBuyOn, v => { gemBuyOn = v; }]]) {
+    if (u.id !== id || !l) continue;
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog";
+    t.textContent = get() ? `${label} is ON (click to switch off)` : `${label} is OFF (click to switch on)`;
+    t.addEventListener("click", () => { set(!get()); save(); renderInfo(); });
+    const p = document.createElement("p"); p.className = "c"; p.textContent = "It never buys automation (Automation, Auto From Start, Auto Rebirth, Auto Buyer), so nothing switches on that you didn't choose.";
+    info.append(t, p);
   }
   if (u.id === "autobuy" && l > 0) {
     const t = document.createElement("button"); t.type = "button"; t.className = "tog";
@@ -2383,8 +2398,9 @@ function renderInfo() {
     t.textContent = autoRebOn ? "Auto Rebirth is ON (click to switch off)" : "Auto Rebirth is OFF (click to switch on)";
     t.addEventListener("click", () => { autoRebOn = !autoRebOn; save(); renderInfo(); });
     const chips = document.createElement("div"); chips.className = "chips";
-    for (const n of [2, 5, 10, 25]) {
-      const c = document.createElement("button"); c.type = "button"; c.textContent = `at ${n} tokens`; c.className = n === autoRebAt ? "on" : "";
+    for (const n of [2, 5, 10, 25, 50, 100, 250, 1000, 10000, 0]) {
+      const c = document.createElement("button"); c.type = "button"; c.textContent = n ? `at ${fmt(n)} tokens` : "at the best rate"; c.className = n === autoRebAt ? "on" : "";
+      if (!n) c.title = "Rebirths once a longer run would earn tokens more slowly";
       c.addEventListener("click", () => { autoRebAt = n; save(); renderInfo(); });
       chips.appendChild(c);
     }
@@ -2862,6 +2878,12 @@ function renderHelp() {
       "You keep your parts and the Workshop, plus achievements, milestones and challenges.",
       "Parts buy the strongest upgrades in the game in the Workshop (Prestige → Workshop), such as Magnet Pegs and more gems per ascension.",
     ]],
+    ["Automation", [
+      "Rebirth tree: Automation unlocks the Auto Dropper; Auto From Start gives it to you every run.",
+      "Ascension tree: Auto Rebirth rebirths for you (at a token amount you pick, or at the best rate), and Auto Buyer buys machine upgrades.",
+      "Workshop: Auto Ascend ascends for you (at a gem amount, or at the best rate); Token Buyer and Gem Buyer spend your tokens and gems on the Rebirth and Ascension trees.",
+      "\"Best rate\" waits until a longer run (or ascension) would earn more slowly, then goes. The buyers never buy automation upgrades, so nothing switches on that you didn't choose. Rebuilding always stays your call.",
+    ]],
     ["The endless game", [
       "Coin Cascade never runs out. Once you reach the Workshop, two things keep growing forever:",
       "Machine Mark: every rebuild raises your machine's Mark by one and adds +10% to all payouts, with no limit.",
@@ -3062,7 +3084,7 @@ function doRebirth() {
 // the third reset: everything up to and including gems and the ascension tree, for Parts
 function doRebuild() {
   const n = partGain(); if (n < 1) return;
-  parts += n; partsTotal += n; rebuilds++; gemsRb = 0;
+  parts += n; partsTotal += n; rebuilds++; gemsRb = 0; ascT = S("playTime"); ascPk = 0;
   gems = 0; tokens = 0; tokensAsc = 0;
   for (const k in rups) delete rups[k];
   for (const k in aups) delete aups[k];
@@ -3074,6 +3096,7 @@ function doRebuild() {
 function doAscend() {
   const g = gemGain(); if (g < 1) return;
   gems += g; gemsTotal += g; gemsRb += g; ascensions++; tokensAsc = 0; tokens = Math.floor(tokens * 0.1 * wl("tokvault"));
+  ascT = S("playTime"); ascPk = 0;
   for (const k in rups) delete rups[k];
   store.set(SAVE_KEY, freshRun({ bank: 0, chActive: null }));
   saveBlocked = true; location.reload();
@@ -3093,7 +3116,7 @@ function startUps() {
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
     stats, msDone, chDone, ach: achDone, achV: 2, msV: 2, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
-    goldRandom: true, pegsRandom: true, runMax: 0, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, wheelCharge: rl("chargedwheel") ? wheelNeed() * 0.5 : 0, t: Date.now(), coins: null }, extra);
+    goldRandom: true, pegsRandom: true, runMax: 0, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tokBuyOn, gemBuyOn, ascT, ascPk, wheelCharge: rl("chargedwheel") ? wheelNeed() * 0.5 : 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
 function showToast(title, text) {
@@ -3101,10 +3124,27 @@ function showToast(title, text) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 3500);
   sfx.achieve();
 }
+// "best rate": rebirth (or ascend) once waiting longer stops paying off, i.e. the reward per second has peaked
+const tokenRaw = () => runEarned < REBIRTH_AT ? 0 : 2 * Math.sqrt(runEarned / REBIRTH_AT) * tokenMult() + al("rebbonus");
+function autoRebNow() {
+  if (autoRebAt > 0) return tokenGain() >= autoRebAt;
+  if (tokenGain() < 2 || runTime < 20) { rebPk = 0; return false; }
+  const rate = tokenRaw() / runTime;
+  if (rate < rebPk * 0.95) return true;
+  rebPk = Math.max(rebPk, rate); return false;
+}
+function autoAscNow() {
+  if (autoAscAt > 0) return gemGain() >= autoAscAt;
+  // judged at the start of each run, when the last run's tokens have just been counted
+  if (gemGain() < 1 || runTime > 5) return false;
+  const rate = gemGain() / Math.max(60, S("playTime") - ascT);
+  if (ascPk > 0 && rate < ascPk * 0.97) return true;
+  ascPk = Math.max(ascPk, rate); return false;
+}
 function checkGoals() {
   checkCosmetics(); checkAch();
-  if (wl("autoasc") && autoAscOn && !chActive && !saveBlocked && gemGain() >= autoAscAt) { doAscend(); return; }
-  if (al("autoreb") && autoRebOn && !chActive && !saveBlocked && tokenGain() >= autoRebAt) { doRebirth(); return; }
+  if (wl("autoasc") && autoAscOn && !chActive && !saveBlocked && autoAscNow()) { doAscend(); return; }
+  if (al("autoreb") && autoRebOn && !chActive && !saveBlocked && autoRebNow()) { doRebirth(); return; }
   stats.maxBank = Math.max(stats.maxBank, Math.floor(bank)); runMax = Math.max(runMax, Math.floor(bank));
   for (const m of MILESTONES) {
     if (!msDone[m.id] && m.val() >= m.goal) { msDone[m.id] = true; applyUpgrades(); showToast("MILESTONE: " + m.name.toUpperCase(), m.reward); save(); }
@@ -3240,7 +3280,7 @@ function save() {
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, tokBuyOn, gemBuyOn, ascT, ascPk, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
@@ -3927,6 +3967,19 @@ function tick(dt) {
     autoBuyT = 0; const T = TREES.main;
     const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
     if (u) { buy(T, u); sfx.tick(); }
+  }
+  // Token Buyer / Gem Buyer: every 2 seconds, the cheapest prestige-tree upgrade you can afford (never the automation ones)
+  if ((wl("tokbuyer") && tokBuyOn || wl("gembuyer") && gemBuyOn) && (prestBuyT += dt) >= 2) {
+    prestBuyT = 0;
+    const SKIP = ["autounlock", "autostart", "autoreb", "autobuy"];
+    for (const [key, on] of [["reb", wl("tokbuyer") && tokBuyOn], ["asc", wl("gembuyer") && gemBuyOn]]) {
+      if (!on) continue;
+      const T = TREES[key];
+      for (let k = 0; k < 3; k++) { // up to three a go, so a big pile of tokens doesn't take ages to spend
+        const u = T.list.filter(x => !SKIP.includes(x.id) && nodeState(T, x) === "open" && T.lv(x.id) < x.max && T.has() >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
+        if (!u) break; buy(T, u); if (!k) sfx.tick();
+      }
+    }
   }
   // Piggy Bank: 1% interest on your coins every minute, capped
   if (rl("piggy") && (piggyT += dt) >= 60) { piggyT = 0; const add = Math.min(bank * 0.01, 25 * rl("piggy") * coinValue()); if (add >= 0.01) { bank += add; earned += add; runEarned += add; refreshHud(); } }
