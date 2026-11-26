@@ -814,7 +814,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.28.1";
+const VERSION = "1.28.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1763,11 +1763,19 @@ function onSlot(c, mult, slot) {
     popAt(new THREE.Vector3(at.x, at.y + 0.5, at.z), heads ? "HEADS ×2" : "TAILS ½", heads ? "big" : "lost"); heads ? sfx.heads() : sfx.tails();
     stats.gates = S("gates") + 1;
   }
+  // a ? coin shows what it's worth as it passes through its slot: anything from ×0 to ×25 on top of the slot
+  if (c.mystery) {
+    const mm = rollMystery();
+    if (mm >= 25) stats.myst25 = S("myst25") + 1;
+    if (mm === 0) { stats.myst0n = S("myst0n") + 1; popAt(at, "? = ×0", "lost"); sfx.sad(); return; }
+    value *= mm;
+    popAt(new THREE.Vector3(at.x, at.y + 0.9, at.z), `? = ×${mm}`, mm >= 5 ? "big" : "");
+    if (mm >= 5) sfx.fanfare();
+  }
   const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, value, 0, _eq.clone());
-  if (c.mystery) coin.mystery = true; // it was a ? coin from the moment it was dropped; its value stays hidden until it lands in the tray
   coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
   // show the coin's own value (what's printed on it); payout bonuses like Golden Touch only apply when it falls off the front
-  popAt(at, coin.value !== mult && !coin.mystery ? `×${mult} = ${fmtV(coin.value)}` : "×" + mult, base === 5 ? "big" : "");
+  popAt(at, coin.value !== mult ? `×${mult} = ${fmtV(coin.value)}` : "×" + mult, base === 5 ? "big" : "");
   if (base === 5) { stats.jackpots++; if (lvl("reels")) reelQueue = Math.min(reelQueue + 1, 5); }
   if (base === 5) sfx.bonus(); else if (base === 3) sfx.win(1); else sfx.click();
 }
@@ -2816,7 +2824,7 @@ function renderHelp() {
       "Prize Wheel: charges up as you earn. Spin it for a pile of coins or a free event.",
       "Coin Stacker: a row of blocks slides side to side; stop it on top of the row below. Overhang falls off, and the row shrinks from 3 to 2 to 1 and speeds up as you climb. Reach the MINOR line (row 8) to take ×2 your bet, or risk it for the MAJOR (×20) at row 12.",
       "Scratch Cards: three matching symbols pay up to ×200. You can buy one card every 20 seconds.",
-      "Some luck upgrades work on the board by themselves instead: Flip Gates (coins flip for ×2 or ×½ in their slot), Slot Reels (every ×5 hit spins the reels) and Mystery Coins (some coins drop as ? coins and only show their value once they land in your tray).",
+      "Some luck upgrades work on the board by themselves instead: Flip Gates (coins flip for ×2 or ×½ in their slot), Slot Reels (every ×5 hit spins the reels) and Mystery Coins (some coins drop as ? coins, then show what they're worth, anything from ×0 to ×25, as they pass through their slot).",
       "Random Events (Gold Rush, Frenzy, Coin Shower, Jackpot Magnet) turn up every few minutes. A bar shows when the next one is due.",
     ]],
     ["Special pegs", [
