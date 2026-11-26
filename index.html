@@ -807,7 +807,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.27.1";
+const VERSION = "1.27.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1528,7 +1528,7 @@ function valueFace(v, style = settings.coinStyle) {
         // octagonal arcade token with a groove ring
         const o = Math.max(dx, dy, (dx + dy) * 0.8);
         if (o > 7.6) continue;
-        g.fillStyle = o > 6.6 ? cols.rim : o > 5.4 && o <= 6.6 && (y < 5 || y > 11) ? cols.ink : cols.base; // flat-sided token, dark groove inside the rim (kept clear of the number)
+        g.fillStyle = o > 6.6 ? cols.rim : o > 5.4 && o <= 6.6 && (y < 5 || y > 11) ? (v === "?" ? cols.mid : cols.ink) : cols.base; // flat-sided token, dark groove inside the rim (kept clear of the number)
         if (o <= 5.6 && x + y < 8) g.fillStyle = cols.hi;
       } else {
         if (r > 8) continue;
@@ -1539,6 +1539,13 @@ function valueFace(v, style = settings.coinStyle) {
         if (style === "minted" && r <= 5.7 && x + y === 11) g.fillStyle = cols.base;
       }
       g.fillRect(x, y, 1, 1);
+    }
+    if (v === "?") { // mystery coins get one big question mark (with a dark drop shadow so it pops)
+      const Q = [".####.", "##..##", "....##", "...##.", "..##..", "..##..", "......", "..##..", "..##.."];
+      for (const [dx, dy, col] of [[1, 1, cols.rim], [0, 0, cols.ink]]) {
+        g.fillStyle = col; Q.forEach((row, y) => [...row].forEach((c, x) => { if (c === "#") g.fillRect(5 + x + dx, 3 + y + dy, 1, 1); }));
+      }
+      return;
     }
     const w = label.length * 4 - 1, ox = Math.floor(8 - w / 2), oy = 6;
     g.fillStyle = cols.ink;
