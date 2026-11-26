@@ -125,7 +125,17 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
 .treeHead h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 13px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
 .treeCoins { font-family: var(--display); font-size: 11px; color: var(--fg); margin-right: auto; }
 .treeClose { font-family: var(--display); font-size: 10px; color: var(--ink); background: var(--gold); border: 3px solid var(--ink); padding: 8px 10px; cursor: pointer; }
+.treeWrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .treeScroll { flex: 1; overflow: auto; min-height: 0; scrollbar-width: none; cursor: grab; }
+.zoomBar { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; z-index: 2; }
+.zoomBar[hidden] { display: none; }
+.zoomBar button { min-width: 36px; height: 36px; padding: 0 8px; font-family: var(--display); font-size: 12px; color: var(--fg); background: var(--panel); border: 3px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); cursor: pointer; }
+.zoomBar button:disabled { opacity: 0.4; cursor: default; }
+.zoomBar #zFit { font-size: 9px; }
+#zoomBar button { display: inline-block; width: auto; min-width: 34px; height: 34px; margin: 0; padding: 0 8px; font-size: 13px; line-height: 1; }
+#zoomBar button:disabled { display: inline-block; opacity: 0.4; }
+#zoomBar #zFit { font-size: 9px; }
+@media (max-width: 760px) { #zoomBar { right: 6px; bottom: 6px; } #zoomBar button { min-width: 30px; height: 30px; padding: 0 6px; } }
 .treeScroll::-webkit-scrollbar { display: none; }
 .treeScroll.dragging { cursor: grabbing; user-select: none; }
 .treeArea { position: relative; margin: 0 auto; }
@@ -630,7 +640,8 @@ body.compact > *:not(#compact) { display: none !important; }
     <button class="treeClose" id="treeClose" type="button" title="Hide the shop (Esc)">HIDE</button>
   </div>
   <div class="rebirthBar box" id="rebirthBar" hidden><p id="rebText"></p><button class="rebBtn" id="rebBtn" type="button">REBIRTH</button></div>
-  <div class="treeScroll" id="treeScroll"><div class="treeArea" id="treeArea"></div></div>
+  <div class="treeWrap"><div class="treeScroll" id="treeScroll"><div class="treeArea" id="treeArea"></div></div>
+    <div class="zoomBar" id="zoomBar" hidden><button type="button" id="zOut" title="Zoom out" aria-label="Zoom out">−</button><button type="button" id="zFit" title="Fit the whole tree">FIT</button><button type="button" id="zIn" title="Zoom in" aria-label="Zoom in">+</button></div></div>
   <div class="treeInfo box" id="treeInfo"></div>
 </div>
 
@@ -796,7 +807,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.26.3";
+const VERSION = "1.27.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2236,14 +2247,14 @@ function renderTree() {
   $("treeInfo").hidden = listTab && treeId !== "mainlist";
   if (listTab) {
     $("rebirthBar").hidden = true; $("treeCoins").textContent = `${fmt(bank)} coins`;
-    const a = $("treeArea"); a.style.width = ""; a.style.height = "";
+    const a = $("treeArea"); a.style.width = ""; a.style.height = ""; a.style.zoom = ""; updateZoomBar();
     return treeId === "mainlist" ? renderList() : treeId === "arcade" ? renderArcade() : treeId === "ach" ? renderAch() : treeId === "ch" ? renderChallenges() : treeId === "goals" ? renderGoals() : treeId === "stats" ? renderStats() : treeId === "style" ? renderStyle() : treeId === "help" ? renderHelp() : renderSettings();
   }
   const T = TREES[treeId], e = extents(T), area = $("treeArea");
   $("treeCoins").textContent = `${fmt(T.has())} ${T.unit}`;
   renderRebirthBar();
   const W = 48 + (e.maxX - e.minX + 1) * CELL_W, H = 48 + (e.maxY - e.minY + 1) * CELL_H;
-  area.style.width = W + "px"; area.style.height = H + "px";
+  area.style.width = W + "px"; area.style.height = H + "px"; area.style.zoom = treeZoom(); updateZoomBar();
   area.textContent = "";
   const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
   svg.setAttribute("width", W); svg.setAttribute("height", H);
@@ -2412,10 +2423,62 @@ function updateInfoCost() {
   if (b) b.disabled = maxed || T.has() < T.cost(u);
 }
 const wheelPct = () => { const m = /(\d+)%/.exec($("wheelBtn").textContent); return $("wheelBtn").classList.contains("ready") ? 100 : m ? +m[1] : 0; };
+// ---------- Zooming the skill trees ----------
+// Each tree remembers its own zoom. Buttons, the mouse wheel and a two-finger pinch all zoom.
+const Z_MIN = 0.3, Z_MAX = 1.5;
+const treeZoom = () => (TREES[treeId] && settings.treeZoom && settings.treeZoom[treeId]) || 1;
+function updateZoomBar() {
+  const on = !!TREES[treeId], z = treeZoom();
+  $("zoomBar").hidden = !on; if (!on) return;
+  $("zOut").disabled = z <= Z_MIN + 0.001; $("zIn").disabled = z >= Z_MAX - 0.001;
+}
+// px/py: the point (inside the tree view) that stays put while zooming
+function setTreeZoom(z, px, py) {
+  if (!TREES[treeId]) return;
+  const sc = $("treeScroll"), a = $("treeArea"), old = treeZoom();
+  z = Math.max(Z_MIN, Math.min(Z_MAX, z));
+  if (px == null) { px = sc.clientWidth / 2; py = sc.clientHeight / 2; }
+  const cx = (sc.scrollLeft + px) / old, cy = (sc.scrollTop + py) / old;
+  settings.treeZoom = Object.assign({}, settings.treeZoom, { [treeId]: z }); saveSettings();
+  a.style.zoom = z;
+  sc.scrollLeft = cx * z - px; sc.scrollTop = cy * z - py;
+  updateZoomBar();
+}
+function fitTree() {
+  if (!TREES[treeId]) return;
+  const T = TREES[treeId], e = extents(T), sc = $("treeScroll");
+  const W = 48 + (e.maxX - e.minX + 1) * CELL_W, H = 48 + (e.maxY - e.minY + 1) * CELL_H;
+  const z = Math.max(Z_MIN, Math.min(1, (sc.clientWidth - 8) / W, (sc.clientHeight - 8) / H));
+  setTreeZoom(z); sc.scrollLeft = (W * z - sc.clientWidth) / 2; sc.scrollTop = (H * z - sc.clientHeight) / 2;
+}
+$("zIn").addEventListener("click", () => setTreeZoom(treeZoom() * 1.25));
+$("zOut").addEventListener("click", () => setTreeZoom(treeZoom() / 1.25));
+$("zFit").addEventListener("click", fitTree);
+{
+  const sc = $("treeScroll");
+  // mouse wheel (and trackpad pinch) zooms around the pointer
+  sc.addEventListener("wheel", e => {
+    if (!TREES[treeId]) return;
+    e.preventDefault();
+    const r = sc.getBoundingClientRect(), k = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+    setTreeZoom(treeZoom() * k, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  // two fingers pinch to zoom; one finger still scrolls as normal
+  let pinch = null;
+  const mid = t => { const r = sc.getBoundingClientRect(); return [(t[0].clientX + t[1].clientX) / 2 - r.left, (t[0].clientY + t[1].clientY) / 2 - r.top]; };
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  sc.addEventListener("touchstart", e => { if (e.touches.length === 2 && TREES[treeId]) pinch = { d: dist(e.touches), z: treeZoom() }; }, { passive: true });
+  sc.addEventListener("touchmove", e => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const [mx, my] = mid(e.touches); setTreeZoom(pinch.z * dist(e.touches) / pinch.d, mx, my);
+  }, { passive: false });
+  sc.addEventListener("touchend", e => { if (e.touches.length < 2) pinch = null; });
+}
 function centerTree() {
   if (!TREES[treeId]) return;
-  const T = TREES[treeId], root = T.list[0], [cx, cy] = nodeCenter(T, root), sc = $("treeScroll");
-  sc.scrollLeft = cx - sc.clientWidth / 2; sc.scrollTop = cy - sc.clientHeight / 2;
+  const T = TREES[treeId], root = T.list[0], [cx, cy] = nodeCenter(T, root), sc = $("treeScroll"), z = treeZoom();
+  sc.scrollLeft = cx * z - sc.clientWidth / 2; sc.scrollTop = cy * z - sc.clientHeight / 2;
 }
 // Drag the tree (or any menu page) around with the mouse; fingers already scroll natively.
 // A drag that moves more than a few pixels doesn't count as a click on the node it started on.
