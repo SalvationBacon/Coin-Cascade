@@ -438,6 +438,27 @@ body.compact > *:not(#compact) { display: none !important; }
 
 /* achievements grid */
 .achWrap { display: grid; gap: 10px; padding: 2px 2px 8px; }
+/* goal lists (milestones, challenges): compact rows instead of big cards */
+.gl { display: grid; gap: 6px; padding: 2px 2px 10px; }
+.glHead { margin: 2px 2px 4px; font-size: 16px; line-height: 1.2; color: var(--muted); }
+.glHead b { font-family: var(--display); font-weight: 400; font-size: 9px; color: var(--gold); }
+.glSub { margin: 8px 2px 0; font-family: var(--display); font-size: 8px; color: var(--muted); letter-spacing: 0.04em; }
+.gr { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 3px 10px; align-items: center; padding: 8px 10px; background: var(--panel); border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--panel-edge); text-align: left; }
+.gr > img { width: 27px; height: 27px; image-rendering: pixelated; grid-row: 1 / span 2; align-self: start; }
+.gr .gn { font-family: var(--display); font-size: 9px; line-height: 1.4; color: var(--fg); min-width: 0; }
+.gr .gw { font-size: 15px; color: var(--gold); text-align: right; white-space: nowrap; }
+.gr .gd { grid-column: 2 / 4; font-size: 15px; line-height: 1.15; color: var(--muted); }
+.gr .gbar { grid-column: 2 / 4; height: 6px; background: var(--ink); }
+.gr .gbar i { display: block; height: 100%; background: var(--cyan); }
+.gr .gb { grid-column: 3; grid-row: 1 / span 2; align-self: center; font-family: var(--display); font-size: 8px; padding: 8px 8px; color: var(--ink); background: var(--gold); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); cursor: pointer; white-space: nowrap; }
+.gr .gb.quit { color: var(--fg); background: var(--panel); }
+.gr.done { opacity: 0.55; }
+.gr.done .gn::before { content: "✓ "; color: var(--cyan); }
+.gr.on { border-color: var(--gold); box-shadow: inset 0 0 0 2px var(--gold); }
+.gr.locked { opacity: 0.5; }
+.gr .pips { grid-column: 2 / 4; }
+.glMore { margin: 4px 2px; padding: 6px 2px; font-family: var(--display); font-size: 8px; color: var(--muted); background: none; border: 0; cursor: pointer; text-align: left; }
+.ach img { width: 70%; height: 70%; image-rendering: pixelated; display: block; margin: auto; }
 .achRow h3 { margin: 0 0 6px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; align-items: baseline; font-family: var(--display); font-weight: 400; font-size: 8px; line-height: 1.5; color: var(--gold); }
 .achRow h3 em { min-width: 0; margin-left: auto; font-style: normal; font-family: var(--body); font-size: 15px; color: var(--muted); text-align: right; }
 .achRow h3.done em { color: var(--cyan); }
@@ -820,7 +841,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.32.1";
+const VERSION = "1.33.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -921,6 +942,24 @@ const ACH = [
   { id: "a_owl", name: "Night Owl", how: "Play between midnight and 4 a.m.", secret: true, ok: () => new Date().getHours() < 4 },
   { id: "a_hoard", name: "Brim Full", how: "Bank the tray by hand when it's one coin from full", secret: true, ok: () => S("hoard") >= 1 },
   { id: "a_all", name: "Completionist", how: "Get every other achievement", secret: true, ok: () => ACH.every(a => a.id === "a_all" || achDone[a.id]) },
+  // row 7: playing by hand
+  { id: "a_hot", name: "On Fire", how: "Max out your Hot Hand", ok: () => S("hotMax") >= 40 },
+  { id: "a_mark", name: "Sharpshooter", how: "Land 100 coins under the bonus marker", ok: () => S("markerHits") >= 100 },
+  { id: "a_mark1k", name: "Deadeye", how: "Land 1,000 coins under the bonus marker", ok: () => S("markerHits") >= 1000 },
+  { id: "a_prize", name: "Prize Winner", how: "Win 5 prizes off the pusher", ok: () => S("prizesWon") >= 5 },
+  { id: "a_prize25", name: "Claw Master", how: "Win 25 prizes off the pusher", ok: () => S("prizesWon") >= 25 },
+  { id: "a_pocket", name: "Deep Pockets", how: "Fill a coin pocket", ok: () => S("pockets") >= 1 },
+  { id: "a_tilt", name: "Tilt!", how: "Use TILT 25 times", ok: () => S("tilts") >= 25 },
+  { id: "a_major", name: "Top of the Stack", how: "Win the Coin Stacker MAJOR", ok: () => S("stackMajor") >= 1 },
+  // row 8: the long game
+  { id: "a_layouts", name: "Redecorator", how: "Play on all four board layouts", ok: () => ["classic", "lanes", "fortune", "golden"].every(k => stats["lay_" + k]) },
+  { id: "a_reb50", name: "Born Again", how: "Rebirth 50 times", ok: () => rebirths >= 50 },
+  { id: "a_asc10", name: "Sky High", how: "Ascend 10 times", ok: () => ascensions >= 10 },
+  { id: "a_mark10", name: "Mark Ten", how: "Reach Machine Mark 10", ok: () => rebuilds >= 9 },
+  { id: "a_forge", name: "Forged", how: "Own 10 levels of Forge upgrades", ok: () => wl("overclock") + wl("gemforge") + wl("tokmint") + wl("lathe") >= 10 },
+  { id: "a_ch6", name: "Beyond Five", how: "Beat a challenge past level 5", ok: () => CHALLENGES.some(c => chHas(c.id) >= 6) },
+  { id: "a_ch60", name: "Glutton", how: "Beat 60 challenge levels", ok: () => chLevelsTotal() >= 60 },
+  { id: "a_earn1t", name: "Trillionaire", how: "Earn 1 trillion coins in total", ok: () => earned >= 1e12 },
 ];
 const ACH_ROWS = [
   { name: "First Steps", reward: "+5% payouts" },
@@ -929,11 +968,13 @@ const ACH_ROWS = [
   { name: "Arcade Regular", reward: "+10% tokens per rebirth" },
   { name: "High Roller", reward: "+10% payouts" },
   { name: "Oddities", reward: "+15% payouts" },
+  { name: "Hands On", reward: "+10% payouts" },
+  { name: "The Long Game", reward: "+15% gems per ascension" },
 ];
 let lastDropPlay = stats.playTime || 0; // for Patience
 function achRow(r) { for (let i = r * 8; i < r * 8 + 8; i++) if (!achDone[ACH[i].id]) return false; return true; }
 function achCount() { let n = 0; for (const a of ACH) if (achDone[a.id]) n++; return n; }
-function achPayMult() { return (1 + 0.01 * achCount()) * (achRow(0) ? 1.05 : 1) * (achRow(4) ? 1.1 : 1) * (achRow(5) ? 1.15 : 1); }
+function achPayMult() { return (1 + 0.01 * achCount()) * (achRow(6) ? 1.1 : 1) * (achRow(0) ? 1.05 : 1) * (achRow(4) ? 1.1 : 1) * (achRow(5) ? 1.15 : 1); }
 let achQuiet = true; // the first check after loading re-awards what you already qualify for, without a pile of pop-ups
 function checkAch() {
   const quiet = achQuiet; achQuiet = false;
@@ -1348,6 +1389,7 @@ const layoutOpen = k => LAYOUTS[k].ok({ aup: typeof aups !== "undefined" ? aups 
 let layout = saved && LAYOUTS[saved.layout] && LAYOUTS[saved.layout].ok(saved) ? saved.layout : "classic";
 BOARD.slots = LAYOUTS[layout].slots.slice();
 const SLOT_KIND = BOARD.slots.slice();
+if (saved && saved.stats) saved.stats["lay_" + layout] = 1;
 const SLOT_COLORS = { 0: "#0c0c0e", 1: "#00000066", 3: "#1f6a66", 5: "#a8600a" };
 const boardCanvas = document.createElement("canvas");
 boardCanvas.width = PLATE_HALF * 2 * PX; boardCanvas.height = Math.round((PLATE_TOP - PLATE_BOTTOM) * PX);
@@ -1782,7 +1824,8 @@ function updateBoardCoins() {
 // ---------- Bonus marker ----------
 // After your first rebirth a ×2 marker drifts back and forth above the slots. Time your drop so the coin lands
 // in the slot it's over.
-const markerOn = () => rebirths > 0 || ascensions > 0 || rebuilds > 0;
+const markerOn = () => lvl("marker") > 0;
+const prizesOn = () => rebirths > 0 || ascensions > 0 || rebuilds > 0;
 const markerMult = () => 2 + rl("bullseye");
 let markerT = Math.random() * 100, markerX = 0, markerMesh = null, markerShown = "";
 function markerSlot() { let best = 0; board.centers.forEach((c, j) => { if (Math.abs(c - markerX) < Math.abs(board.centers[best] - markerX)) best = j; }); return best; }
@@ -1877,11 +1920,12 @@ let warm = false, lastDrop = 0, holding = false;
 const HOT_MAX = 40;
 let hot = 0, lastManual = -1e9, hotShown = "";
 const hotCap = () => 0.25 + 0.1 * rl("hotstreak");          // the most it adds: +25%, more with Hot Streak
-const hotMult = () => 1 + hotCap() * hot / HOT_MAX;
+const hotOn = () => lvl("hothand") > 0;
+const hotMult = () => hotOn() ? 1 + hotCap() * hot / HOT_MAX : 1;
 function updateHot(dt) {
   if (performance.now() - lastManual > 1500) hot = Math.max(0, hot - 6 * dt);
   const box = $("hotBox"), txt = "×" + hotMult().toFixed(2);
-  box.hidden = hot <= 0 && dropped < 30;
+  box.hidden = !hotOn();
   if (txt !== hotShown) { hotShown = txt; $("hotVal").textContent = txt; $("hotFill").style.width = (hot / HOT_MAX * 100) + "%"; box.classList.toggle("max", hot >= HOT_MAX - 0.01); }
 }
 function dropCoin(manual = true) {
@@ -1894,7 +1938,7 @@ function dropCoin(manual = true) {
   let value = coinValue();
   if (eventOn("frenzy") || Math.random() < freeDrop()) { popAt(new THREE.Vector3(aimX, BOARD.dropY + 0.5, BOARD_Z), "FREE", ""); if (!eventOn("frenzy")) sfx.free(); }
   else { const price = chOn("tax") ? 2 : 1; value = Math.max(1, Math.min(value, Math.floor(bank / price))); bank = Math.max(0, bank - value * price); }
-  if (manual) { hot = Math.min(HOT_MAX, hot + 1); lastManual = now; stats.hotMax = Math.max(S("hotMax"), Math.round(hot)); }
+  if (manual && hotOn()) { hot = Math.min(HOT_MAX, hot + 1); lastManual = now; stats.hotMax = Math.max(S("hotMax"), Math.round(hot)); }
   const bc = boardDrop(board, aimX + (Math.random() - 0.5) * 0.04); bc.v = value; bc.hh = hotMult();
   if (Math.random() < doubleDrop()) setTimeout(() => { boardDrop(board, (Math.random() - 0.5) * BOARD.aimMax * 2).v = coinValue(); popAt(new THREE.Vector3(0, BOARD.dropY + 0.4, BOARD_Z), "FREE COIN", ""); sfx.extra(); }, 180);
   sfx.drop();
@@ -2205,6 +2249,8 @@ const UPGRADES = [
   { id: "coinspeed", name: "Coin Speed", x: 1, y: 0, parent: "regen", max: 8, base: 4, grow: 1.6, text: l => `Coins fall ${pct(coinSpeed(l))} speed` },
   { id: "pusher", name: "Pusher Speed", x: 2, y: 0, parent: "coinspeed", max: 8, base: 10, grow: 1.65, text: l => `One push every ${pushPeriod(l).toFixed(2)}s` },
   { id: "rails", name: "Side Rails", x: 3, y: 0, parent: "pusher", max: 1, base: 150, grow: 1, text: l => l ? "No coins lost off the sides" : "Coins can fall off the sides" },
+  { id: "hothand", name: "Hot Hand", x: -3, y: 1, parent: "double", max: 1, base: 60, grow: 1, text: l => l ? `Dropping by hand heats up: a hot hand's coins are worth up to +${Math.round(100 * hotCap())}%` : "Hand drops and auto drops pay the same" },
+  { id: "marker", name: "Bonus Marker", x: 2, y: -3, parent: "wide", max: 1, base: 200, grow: 1, text: l => l ? `A ×${markerMult()} marker glides over the slots: land a coin under it for the bonus` : "No bonus marker" },
   { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 3.0, text: l => l ? `An event about every ${Math.round(eventGap(Math.max(l, rl("eventstart"))))}s` : "No random events" },
   { id: "wheel", name: "Prize Wheel", x: 3, y: 1, parent: "eventlen", max: 1, base: 200, grow: 1, text: l => l ? "Earning charges the prize wheel" : "Unlocks the prize wheel" },
   { id: "wheelfast", name: "Fast Charge", x: 3, y: 2, parent: "wheel", max: 5, base: 150, grow: 2, text: l => `The wheel charges ${pct(1 + 0.2 * l)} as fast` },
@@ -2263,7 +2309,7 @@ const ASC_AT = 30; // tokens earned since the last ascension
 const ASC_TREE = 15;
 const rebLevels = () => RUPGRADES.reduce((a, u) => a + rl(u.id), 0);
 const ascGateOk = () => ascensions > 0 || rebLevels() >= ASC_TREE;
-const gemGain = () => tokensAsc < ASC_AT || !ascGateOk() ? 0 : Math.floor(3 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1) * (1 + 0.5 * wl("gempress")) * Math.pow(1.2, wl("gemforge")));
+const gemGain = () => tokensAsc < ASC_AT || !ascGateOk() ? 0 : Math.floor(3 * Math.sqrt(tokensAsc / ASC_AT) * (msHas("asc3") ? 1.15 : 1) * (msHas("gems50") ? 1.15 : 1) * (1 + 0.5 * wl("gempress")) * Math.pow(1.2, wl("gemforge")) * (achRow(7) ? 1.15 : 1));
 const AUPGRADES = [
   { id: "shine", name: "Gem Shine", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.8, text: l => `All payouts +${50 * l}%` },
   { id: "fountain", name: "Token Fountain", x: 1, y: 0, parent: "shine", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% tokens per rebirth` },
@@ -2790,7 +2836,11 @@ const ACH_PROG = {
   a_hold1k: () => [stats.maxBank, 1e4], a_777: () => [S("reel777"), 3], a_asc: () => [ascensions, 2], a_gem10: () => [gemsTotal, 30],
   a_earn100k: () => [earned, 1e7], a_max: () => [UPGRADES.filter(u => u.max > 1 && lvl(u.id) >= u.max).length, 5],
   a_gold6: () => [Math.min(6, lvl("goldpeg")) + Math.min(2, lvl("doublepeg")), 8], a_streak8: () => [stats.bestStreak, 10],
-  a_5h: () => [Math.floor(S("playTime") / 3600), 10], a_all: () => [ACH.filter(a => a.id !== "a_all" && achDone[a.id]).length, ACH.length - 1],
+  a_5h: () => [Math.floor(S("playTime") / 3600), 10],
+  a_hot: () => [S("hotMax"), 40], a_mark: () => [S("markerHits"), 100], a_mark1k: () => [S("markerHits"), 1000], a_prize: () => [S("prizesWon"), 5],
+  a_prize25: () => [S("prizesWon"), 25], a_tilt: () => [S("tilts"), 25], a_layouts: () => [["classic", "lanes", "fortune", "golden"].filter(k => stats["lay_" + k]).length, 4],
+  a_reb50: () => [rebirths, 50], a_asc10: () => [ascensions, 10], a_mark10: () => [rebuilds + 1, 10],
+  a_forge: () => [wl("overclock") + wl("gemforge") + wl("tokmint") + wl("lathe"), 10], a_ch60: () => [chLevelsTotal(), 60], a_earn1t: () => [earned, 1e12], a_all: () => [ACH.filter(a => a.id !== "a_all" && achDone[a.id]).length, ACH.length - 1],
 };
 const achProg = a => { const f = ACH_PROG[a.id]; if (!f || achDone[a.id] || (a.secret && a.id !== "a_all")) return null; const [v, g] = f(); return [Math.min(Math.floor(v || 0), g), g]; };
 function renderAch() {
@@ -2822,7 +2872,8 @@ function renderAch() {
     for (let i = 0; i < 8; i++) {
       const a = ACH[r * 8 + i], b = document.createElement("button"); b.type = "button";
       b.className = "ach" + (achDone[a.id] ? " got" : "") + (achSel === a.id ? " sel" : "");
-      b.textContent = a.secret && !achDone[a.id] ? "?" : String(r * 8 + i + 1);
+      if (a.secret && !achDone[a.id]) b.textContent = "?";
+      else { const im = new Image(); im.alt = ""; im.src = iconURL(ACH_ICON[a.id] || "coin", achDone[a.id] ? "#2a1a04" : "#6b778a", achDone[a.id] ? "#7a4a10" : "#3a4458"); b.appendChild(im); }
       b.setAttribute("aria-label", a.secret && !achDone[a.id] ? "Secret achievement" : a.name);
       const pr = achProg(a); // a thin bar along the bottom of the tile shows how close it is
       if (pr && pr[0] > 0) { const bar = document.createElement("i"); bar.className = "ap"; const f = document.createElement("i"); f.style.width = (pr[0] / pr[1] * 100) + "%"; bar.appendChild(f); b.appendChild(bar); }
@@ -2956,12 +3007,12 @@ function renderHelp() {
       "THIS RUN at the top counts the coins you've earned since your last rebirth.",
     ]],
     ["Playing by hand", [
-      "Hot Hand: every coin you drop yourself heats your hand up (the Auto Dropper doesn't). A hot hand's coins are worth up to +25% more, shown in the HOT HAND box. Stop for a moment and it cools off. Hot Streak (Rebirth tree) raises the cap.",
-      "Bonus marker: after your first rebirth a ×2 marker glides above the slots, pausing over each one. A coin that lands in the slot under it is worth double. Bullseye (Rebirth tree) makes it ×3 or ×4.",
+      "Hot Hand (Upgrades tree, off the Double Drop branch): every coin you drop yourself heats your hand up (the Auto Dropper doesn't). A hot hand's coins are worth up to +25% more, shown in the HOT HAND box. Stop for a moment and it cools off. Hot Streak (Rebirth tree) raises the cap.",
+      "Bonus Marker (Upgrades tree, past Wide Jackpot): a ×2 frame glides along the slots, pausing over each one. A coin that lands in the slot under it is worth double. Bullseye (Rebirth tree) makes it ×3 or ×4.",
       "Coin Pockets (Ascension tree): the ×0 slots catch coins instead of swallowing them, and every 8 coins pay out together at ×3 or more. The slot shows how full it is.",
       "Board layouts: Second Board (Ascension tree) opens Lucky Lanes, and rebuilding opens Fortune Row (1 rebuild) and Golden Mile (3 rebuilds). Pick one in Menu → Style.",
       "Tilt Bar (Workshop): a TILT button by the tray (or the T key) shoves the whole pile forward. Edge Magnet (Workshop) tugs coins sitting at the front edge over it.",
-      "Prizes: every few minutes a prize drops onto the pusher: a big gold coin, a token bundle (green T), or once you've ascended a gem chip (teal gem). Push it off the front to win it. Off the sides, it's gone. Prize Hunter (Rebirth tree) makes them come more often.",
+      "Prizes (after your first rebirth): every few minutes a prize drops onto the pusher: a big gold coin, a token bundle (green T), or once you've ascended a gem chip (teal gem). Push it off the front to win it. Off the sides, it's gone. Prize Hunter (Rebirth tree) makes them come more often.",
     ]],
     ["The coin tray", [
       "Coins that fall off the pusher pile up in the tray. They aren't yours to spend until you press BANK.",
@@ -3312,48 +3363,130 @@ function card(cls, title, lines) {
   return c;
 }
 function progressBar(frac) { const d = document.createElement("div"); d.className = "prog"; const i = document.createElement("i"); i.style.width = Math.round(Math.min(1, frac) * 100) + "%"; d.appendChild(i); return d; }
+// ---------- Achievement icons ----------
+// Little 9×9 pixel pictures, one per kind of goal. '#' is the icon, '+' a lighter accent.
+const ICON_PIX = {
+  coin:   ["..#####..", ".#.....#.", "#..###..#", "#.#...#.#", "#.#.....#", "#.#...#.#", "#..###..#", ".#.....#.", "..#####.."],
+  drop:   ["...###...", "...###...", "...###...", "...###...", ".#######.", "..#####..", "...###...", "....#....", "........."],
+  bank:   [".........", ".#######.", "#.......#", "#########", "#...#...#", "#..###..#", "#.......#", "#########", "........."],
+  stack:  [".........", ".#######.", "#########", ".#######.", "#########", ".#######.", "#########", ".#######.", "........."],
+  up:     ["....#....", "...###...", "..#####..", ".#######.", "...###...", "...###...", "...###...", "...###...", "........."],
+  star:   ["....#....", "....#....", "...###...", "#########", ".#######.", "..#####..", "..##.##..", ".##...##.", "........."],
+  lost:   ["##.....##", ".##...##.", "..##.##..", "...###...", "...###...", "..##.##..", ".##...##.", "##.....##", "........."],
+  tray:   [".........", "..#.#.#..", ".#.#.#.#.", "#########", "#.......#", "#.......#", "#.......#", "#########", "........."],
+  gear:   ["...#.#...", ".#######.", ".##...##.", "###.#.###", "##.###.##", "###.#.###", ".##...##.", ".#######.", "...#.#..."],
+  run:    ["...##....", "...##....", ".#####...", "#.##.##..", "..##.....", "..###....", ".#..##...", ".#...##..", "........."],
+  peg:    ["....#....", ".........", "..#...#..", ".........", "#...#...#", ".........", "..#...#..", ".........", "#...#...#"],
+  split:  ["##.....##", ".##...##.", "..##.##..", "...###...", "....#....", "....#....", "....#....", "...###...", "........."],
+  double: ["#...#.###", ".#.#....#", "..#...###", ".#.#..#..", "#...#.###", ".........", ".........", ".........", "........."],
+  reel:   ["#########", "#.......#", "#.#####.#", "#.....#.#", "#....#..#", "#...#...#", "#...#...#", "#.......#", "#########"],
+  flip:   ["..#####..", ".##+++##.", "##+++++##", "##+++++##", "##+++++##", "##+++++##", "##+++++##", ".##+++##.", "..#####.."],
+  big:    ["..#####..", ".#++#++#.", "#+#+#+#+#", "#++###++#", "#+++#+++#", "#++###++#", "#+#+#+#+#", ".#++#++#.", "..#####.."],
+  reborn: ["..####...", ".#....#..", "#......#.", "#.....###", "#......#.", "#........", ".#....#..", "..####...", "........."],
+  bolt:   ["....###..", "...###...", "..###....", ".#######.", "....###..", "...###...", "..###....", ".##......", "........."],
+  wheel:  ["..#####..", ".#..#..#.", "#.#.#.#.#", "#..###..#", "#########", "#..###..#", "#.#.#.#.#", ".#..#..#.", "..#####.."],
+  myst:   ["..####...", ".##..##..", ".....##..", "....##...", "...##....", "...##....", ".........", "...##....", "...##...."],
+  token:  ["#########", "#########", "...###...", "...###...", "...###...", "...###...", "...###...", "...###...", "........."],
+  gem:    ["..#####..", ".#+#+#+#.", "#########", ".#+++++#.", "..#+++#..", "...#+#...", "....#....", ".........", "........."],
+  clock:  ["..#####..", ".#..#..#.", "#...#...#", "#...#...#", "#...###.#", "#.......#", "#.......#", ".#.....#.", "..#####.."],
+  trophy: ["#########", "##+++++##", ".#+++++#.", ".#+++++#.", "..#+++#..", "...###...", "....#....", "..#####..", "..#####.."],
+  hand:   ["..#.#....", ".##.#.#..", ".##.#.#..", ".#######.", ".#######.", "########.", ".######..", "..####...", "........."],
+  target: ["..#####..", ".#.....#.", "#..###..#", "#.#...#.#", "#.#.#.#.#", "#.#...#.#", "#..###..#", ".#.....#.", "..#####.."],
+  gift:   ["...#.#...", "..#.#.#..", "#########", "#...#...#", "#########", ".#..#..#.", ".#..#..#.", ".#######.", "........."],
+  pocket: ["#.......#", "#.......#", "#.......#", "#.#####.#", "#.#+++#.#", "#.#+++#.#", "#.......#", ".#######.", "........."],
+  tilt:   ["#........", "##.......", "#.#......", "#..#.....", "#...#....", "#....#...", "#.....#..", "#########", "........."],
+  moon:   ["...####..", "..##.....", ".##......", ".##......", ".##......", ".##......", "..##.....", "...####..", "........."],
+  layout: ["#########", "#.#.#.#.#", "#########", "#.......#", "#.#.#.#.#", "#.......#", "#.#.#.#.#", "#########", "........."],
+  forge:  [".........", ".........", "#########", "#########", "..#####..", "...###...", "..#####..", ".#######.", "........."],
+  mark:   ["#.......#", "##.....##", "#.#...#.#", "#..#.#..#", "#...#...#", "#.......#", "#.......#", "#.......#", "........."],
+  chal:   ["##.......", "#######..", "#+++++##.", "#++++++##", "#######..", "##.......", "##.......", "##.......", "####....."],
+};
+const ACH_ICON = {
+  a_drop: "drop", a_bank: "bank", a_hold25: "stack", a_buy: "up", a_jack: "star", a_lost: "lost", a_full: "tray", a_lv10: "gear",
+  a_run1k: "run", a_gold: "peg", a_split: "split", a_doubler: "double", a_reel: "reel", a_flip: "flip", a_coin25: "big", a_jack25: "star",
+  a_reb: "reborn", a_event: "bolt", a_wheel: "wheel", a_myst10: "myst", a_myst0: "myst", a_bank30: "bank", a_earn10k: "coin", a_half: "gear",
+  a_streak5: "flip", a_reb5: "reborn", a_chal: "chal", a_tok25: "token", a_hold1k: "stack", a_777: "reel", a_auto: "drop", a_speed: "run",
+  a_asc: "gem", a_gem10: "gem", a_earn100k: "coin", a_max: "up", a_gold6: "peg", a_streak8: "flip", a_5h: "clock", a_chal6: "forge",
+  a_idle: "clock", a_unlucky: "lost", a_side100: "lost", a_penny: "coin", a_allin: "flip", a_owl: "moon", a_hoard: "tray", a_all: "trophy",
+  a_hot: "hand", a_mark: "target", a_mark1k: "target", a_prize: "gift", a_prize25: "gift", a_pocket: "pocket", a_tilt: "tilt", a_major: "stack",
+  a_layouts: "layout", a_reb50: "reborn", a_asc10: "gem", a_mark10: "mark", a_forge: "forge", a_ch6: "chal", a_ch60: "chal", a_earn1t: "coin",
+};
+const iconCache = new Map();
+// an icon as an image URL, drawn in the given colours
+function iconURL(name, ink, accent) {
+  const key = name + ink + accent; if (iconCache.has(key)) return iconCache.get(key);
+  const pix = ICON_PIX[name] || ICON_PIX.coin, cv = document.createElement("canvas"); cv.width = cv.height = 9;
+  const g = cv.getContext("2d");
+  pix.forEach((row, y) => [...row].forEach((c, x) => { if (c === "#" || c === "+") { g.fillStyle = c === "+" ? accent : ink; g.fillRect(x, y, 1, 1); } }));
+  const url = cv.toDataURL(); iconCache.set(key, url); return url;
+}
+
+const MS_ICON = u => /earned/.test(u) && /gems/.test(u) ? "gem" : /coins earned|held/.test(u) ? "coin" : /dropped/.test(u) ? "drop" : /×5/.test(u) ? "star" : /rebirth/.test(u) ? "reborn"
+  : /ascension/.test(u) ? "gem" : /challenge/.test(u) ? "chal" : /achievement/.test(u) ? "trophy" : /rebuild/.test(u) ? "forge" : /flip/.test(u) ? "flip" : /bank/.test(u) ? "bank" : "coin";
+const goalsWrap = () => { const area = $("treeArea"); area.style.width = "auto"; area.style.height = "auto"; area.textContent = ""; const w = document.createElement("div"); w.className = "gl"; area.appendChild(w); return w; };
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const gBar = f => { const b = el("i", "gbar"), i = el("i"); i.style.width = Math.min(100, f * 100) + "%"; b.appendChild(i); return b; };
+let showDoneMs = false;
 function renderGoals() {
-  const w = cardsWrap(`Milestones are permanent and pay out automatically. ${Object.keys(msDone).length} of ${MILESTONES.length} done.`);
-  for (const m of MILESTONES) {
-    const done = msHas(m.id), v = Math.min(m.val(), m.goal);
-    const c = card(done ? "done" : "", (done ? "✓ " : "") + m.name, [["Goal: ", `${fmt(m.goal)} ${m.unit}`], ["Reward: ", m.reward]]);
-    c.appendChild(progressBar(v / m.goal));
-    const p = document.createElement("p"); p.textContent = done ? "Done" : `${fmt(v)} / ${fmt(m.goal)}`; c.appendChild(p);
-    w.appendChild(c);
+  const w = goalsWrap(), done = MILESTONES.filter(m => msHas(m.id));
+  const h = el("p", "glHead"); h.innerHTML = "<b></b> "; h.firstChild.textContent = `${done.length} / ${MILESTONES.length} DONE`; h.append("Permanent rewards that pay out the moment you reach them."); w.appendChild(h);
+  // the ones you're working on first, closest to done at the top
+  const open = MILESTONES.filter(m => !msHas(m.id)).sort((a, b) => Math.min(1, b.val() / b.goal) - Math.min(1, a.val() / a.goal));
+  const row = (m, isDone) => {
+    const r = el("div", "gr" + (isDone ? " done" : ""));
+    const img = new Image(); img.src = iconURL(MS_ICON(m.unit), isDone ? "#8ff0e0" : "#ffd24a", "#fff2a6"); img.alt = "";
+    r.append(img, el("span", "gn", m.name), el("span", "gw", m.reward));
+    const v = Math.min(m.val(), m.goal);
+    r.append(el("span", "gd", isDone ? `${fmt(m.goal)} ${m.unit}` : `${fmt(v)} / ${fmt(m.goal)} ${m.unit}`));
+    if (!isDone) r.appendChild(gBar(v / m.goal));
+    w.appendChild(r);
+  };
+  open.forEach(m => row(m, false));
+  if (done.length) {
+    const t = el("button", "glMore", showDoneMs ? `▾ HIDE ${done.length} DONE` : `▸ SHOW ${done.length} DONE`); t.type = "button";
+    t.addEventListener("click", () => { showDoneMs = !showDoneMs; renderTree(); }); w.appendChild(t);
+    if (showDoneMs) done.forEach(m => row(m, true));
   }
 }
 let chArmed = { id: null, t: 0 };
+let showChHelp = false;
 function renderChallenges() {
-  const w = cardsWrap(`Starting a challenge restarts your run with a handicap. You don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Each challenge has 5 levels: same handicap, a bigger goal each time, and its reward again every level.${chEndless() ? " Since your first rebuild they never end: level 6 and up, each goal 2.5× the last, each reward at half strength." : " After your first rebuild, challenges keep going past level 5."} ${chLevelsTotal()} of ${CHALLENGES.length * 5} levels beaten.`);
-  for (const c of CHALLENGES) {
-    const lv = chHas(c.id), all = chMaxed(c.id), on = chOn(c.id), locked = rebirths < c.need || ascensions < (c.needAsc || 0);
-    const cd = card(all ? "done" : on ? "active" : locked ? "locked" : "", `${all ? "✓ " : ""}${c.name} · ${lv > 5 ? "level " + lv : lv + "/5"}`,
-      [["Rule: ", c.rule], all ? ["Every level beaten", ""] : ["Level " + (lv + 1) + " goal: ", `earn ${fmt(chGoal(c))} coins in the run`],
-       ["Reward each level: ", c.reward + (lv > 5 ? ` (you have it ×${chRw(c.id)}: levels past 5 count half)` : lv ? ` (you have it ×${lv})` : "")]]);
-    const pips = document.createElement("div"); pips.className = "pips";
-    for (let i = 0; i < CH_LEVELS.length; i++) { const d = document.createElement("i"); if (i < lv) d.className = "on"; pips.appendChild(d); }
-    if (lv > 5) { const x = document.createElement("span"); x.className = "pipMore"; x.textContent = `+${lv - 5}`; pips.appendChild(x); }
-    cd.appendChild(pips);
+  const w = goalsWrap();
+  const h = el("p", "glHead"); h.innerHTML = "<b></b> "; h.firstChild.textContent = chEndless() ? `${chLevelsTotal()} LEVELS BEATEN` : `${chLevelsTotal()} / ${CHALLENGES.length * 5} LEVELS`;
+  h.append("Beat a run with a handicap for a permanent reward, again at every level."); w.appendChild(h);
+  const hb = el("button", "glMore", showChHelp ? "▾ HOW CHALLENGES WORK" : "▸ HOW CHALLENGES WORK"); hb.type = "button";
+  hb.addEventListener("click", () => { showChHelp = !showChHelp; renderTree(); }); w.appendChild(hb);
+  if (showChHelp) w.appendChild(el("p", "glHead", `Starting one restarts your run with its handicap; you don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Each level keeps the handicap with a bigger goal (×2.5 or so) and gives the reward again. ${chEndless() ? "Since your first rebuild they never end: past level 5 each reward counts half." : "After your first rebuild they keep going past level 5."}`));
+  const order = c => chOn(c.id) ? 0 : (rebirths < c.need || ascensions < (c.needAsc || 0)) ? 3 : chMaxed(c.id) ? 2 : 1;
+  let lastGroup = -1;
+  for (const c of CHALLENGES.slice().sort((a, b) => order(a) - order(b))) {
+    const lv = chHas(c.id), all = chMaxed(c.id), on = chOn(c.id), locked = rebirths < c.need || ascensions < (c.needAsc || 0), g = order(c);
+    if (g !== lastGroup && g >= 2) w.appendChild(el("p", "glSub", g === 2 ? "ALL LEVELS BEATEN" : "LOCKED"));
+    lastGroup = g;
+    const r = el("div", "gr" + (on ? " on" : all ? " done" : locked ? " locked" : ""));
+    const img = new Image(); img.src = iconURL("chal", on ? "#ffd24a" : "#8ff0e0", "#fff2a6"); img.alt = "";
+    r.append(img, el("span", "gn", `${c.name} · ${lv > 5 ? "level " + lv : lv + "/5"}`));
     if (on) {
-      cd.appendChild(progressBar(runEarned / chGoal(c)));
-      const p = document.createElement("p"); p.textContent = `${fmt(runEarned)} / ${fmt(chGoal(c))} earned`; cd.appendChild(p);
-      const q = document.createElement("button"); q.type = "button"; q.className = "quit"; q.textContent = "GIVE UP";
-      q.addEventListener("click", () => { chActive = null; applyUpgrades(); save(); renderTree(); });
-      cd.appendChild(q);
-    } else if (locked) {
-      const p = document.createElement("p"); p.textContent = c.needAsc ? `Unlocks after ${c.needAsc} ascension${c.needAsc > 1 ? "s" : ""}.` : `Unlocks after ${c.need} rebirth${c.need > 1 ? "s" : ""}.`; cd.appendChild(p);
-    } else if (!chActive && !all) {
-      const b = document.createElement("button"); b.type = "button";
-      const armed = chArmed.id === c.id && Date.now() - chArmed.t < 3000;
-      b.textContent = armed ? "CLICK TO START" : `START LEVEL ${lv + 1}`;
-      b.addEventListener("click", () => {
+      const q = el("button", "gb quit", "GIVE UP"); q.type = "button";
+      q.addEventListener("click", () => { chActive = null; applyUpgrades(); save(); renderTree(); }); r.appendChild(q);
+    } else if (!locked && !chActive && !all) {
+      const armed = chArmed.id === c.id && Date.now() - chArmed.t < 3000, bt = el("button", "gb", armed ? "TAP TO START" : `START LV ${lv + 1}`); bt.type = "button";
+      bt.addEventListener("click", () => {
         if (!(chArmed.id === c.id && Date.now() - chArmed.t < 3000)) { chArmed = { id: c.id, t: Date.now() }; renderTree(); setTimeout(renderTree, 3100); return; }
         store.set(SAVE_KEY, freshRun({ bank: c.start != null ? c.start : startCoins(), chActive: c.id }));
         saveBlocked = true; location.reload();
       });
-      cd.appendChild(b);
-    }
-    w.appendChild(cd);
+      r.appendChild(bt);
+    } else r.appendChild(el("span"));
+    r.appendChild(el("span", "gd", c.rule));
+    const pips = el("div", "pips");
+    for (let i = 0; i < CH_LEVELS.length; i++) { const d = el("i"); if (i < lv) d.className = "on"; pips.appendChild(d); }
+    if (lv > 5) pips.appendChild(el("span", "pipMore", `+${lv - 5}`));
+    r.appendChild(pips);
+    r.appendChild(el("span", "gd", locked ? (c.needAsc ? `Unlocks after ${c.needAsc} ascension${c.needAsc > 1 ? "s" : ""}.` : `Unlocks after ${c.need} rebirth${c.need > 1 ? "s" : ""}.`)
+      : `${all ? "" : `Level ${lv + 1}: earn ${fmt(chGoal(c))} · `}Reward: ${c.reward}${lv ? ` (×${lv > 5 ? chRw(c.id) : lv})` : ""}`));
+    if (on) { r.appendChild(gBar(runEarned / chGoal(c))); r.appendChild(el("span", "gd", `${fmt(runEarned)} / ${fmt(chGoal(c))} earned`)); }
+    w.appendChild(r);
   }
 }
 
@@ -3911,7 +4044,7 @@ function spawnPrize(kind) {
   return c;
 }
 function updatePrizes(dt) {
-  if (!markerOn() || titleOpen) return;
+  if (!prizesOn() || titleOpen) return;
   if ((prizeT += dt) < nextPrize) return;
   prizeT = 0; nextPrize = prizeGap();
   if (coins.filter(c => c.prize || c.value >= 25 * coinValue()).length >= 3) return; // don't flood the shelf
