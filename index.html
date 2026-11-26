@@ -785,7 +785,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.26.0";
+const VERSION = "1.26.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1976,11 +1976,11 @@ function stepPhysics(counting) {
       if (t.z > FLOOR_FRONT - 0.3 && Math.abs(t.x) < HALF_W) {
         const mult = c.mystery ? rollMystery() : 1;
         const v = c.value * mult * payoutMult();
-        if (c.mystery) { popAt(new THREE.Vector3(t.x, 0.6, FLOOR_FRONT + 0.4), `? = ×${mult}`, mult >= 5 ? "big" : mult === 0 ? "lost" : ""); if (mult === 0) sfx.sad(); else if (mult >= 5) sfx.fanfare(); }
         wheelCharge += v;
         earned += v; runEarned += v; rateEarn += v; // counts as earned now; spendable once it's banked from the tray
-        popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), "+" + fmtV(v), v > 1 ? "big" : "");
-        if (v > 0) flyToVault(new THREE.Vector3(t.x, t.y, t.z), v, c.value);
+        popAt(new THREE.Vector3(t.x, 0, FLOOR_FRONT + 0.4), c.mystery ? "+?" : "+" + fmtV(v), v > 1 || c.mystery ? "big" : "");
+        if (c.mystery) flyToVault(new THREE.Vector3(t.x, t.y, t.z), v, c.value, { mult });
+        else if (v > 0) flyToVault(new THREE.Vector3(t.x, t.y, t.z), v, c.value);
         stats.bestCoin = Math.max(S("bestCoin"), v); if (c.mystery && mult >= 25) stats.myst25 = S("myst25") + 1; if (c.mystery && mult === 0) stats.myst0n = S("myst0n") + 1;
         sfx.win(v);
       } else {
@@ -2580,9 +2580,6 @@ function renderArcade() {
   const openPanel = id => { if (innerWidth <= 760) setPanel(false); for (const pid of ["flip", "wheel", "towerPanel", "scratchPanel"]) $(pid).hidden = pid !== id; if (id === "towerPanel") renderTower(); if (id === "scratchPanel") renderScratch(); };
   tile("Coin Stacker", ups.tower > 0, "tower", `Stop the sliding blocks on top of each other. MINOR prize ×${ST_PAY.minor}, MAJOR prize ×${ST_PAY.major} at the top.`, "PLAY", () => openPanel("towerPanel"));
   tile("Scratch Cards", ups.scratch > 0, "scratch", `Buy a card for ${fmt(scratchCost())} and scratch three symbols. Three alike pays up to ×200. One card every ${SCRATCH_CD} seconds.`, "PLAY", () => openPanel("scratchPanel"));
-  tile("Flip Gates", ups.flipgate > 0, "flipgate", `${pct(0.08 * (ups.flipgate || 0))} of coins hit a gate in their slot and flip: heads ×2, tails ×½.`);
-  tile("Slot Reels", ups.reels > 0, "reels", "Every ×5 hit spins the reels. Three 7s pay big.");
-  tile("Mystery Coins", ups.mystery > 0, "mystery", "Some coins hide their value until they pay out: anything from ×0 to ×25.");
   const pegTile = (title, unlocked, how, text, btn, fn, off) => {
     const t = document.createElement("div"); t.className = "tile" + (unlocked ? "" : " lock");
     t.innerHTML = "<h3></h3><p></p>"; t.querySelector("h3").textContent = title; t.querySelector("p").textContent = unlocked ? text : how;
@@ -2592,7 +2589,6 @@ function renderArcade() {
   if (ascensions > 0 || al("pegshuffle")) pegTile("Peg Shuffle", al("pegshuffle") > 0, "Unlock it with Peg Shuffle in the Ascension tree.", "Every special peg jumps to a new random spot.",
     shuffleLeft() > 0 ? `READY IN ${dur(shuffleLeft())}` : "SHUFFLE", shufflePegs, shuffleLeft() > 0);
   if (rebuilds > 0 || wl("pegmover")) pegTile("Peg Mover", wl("pegmover") > 0, "Unlock it with Peg Mover in the Workshop.", "Pick up any special peg and put it wherever you like.", "MOVE PEGS", () => { if (innerWidth <= 760) setPanel(false); startMoving(); });
-  tile("Random Events", ups.events > 0, "events", "Gold Rush, Frenzy, Coin Shower and Jackpot Magnet turn up every few minutes.");
   area.appendChild(wrap);
 }
 // ---------- Cosmetics: unlocked by playing ----------
@@ -2685,12 +2681,12 @@ function renderHelp() {
       "Machine upgrades reset when you rebirth. Use the LIST tab to see everything at once.",
     ]],
     ["Arcade", [
-      "The Arcade holds the extras. Each one is unlocked by an upgrade in the Upgrades tree:",
+      "The Arcade holds the games you play yourself. Each one is unlocked by an upgrade in the Upgrades tree:",
       "Double or Nothing: bet coins on a flip and keep doubling, then cash out before you miss.",
       "Prize Wheel: charges up as you earn. Spin it for a pile of coins or a free event.",
       "Coin Stacker: a row of blocks slides side to side; stop it on top of the row below. Overhang falls off, and the row shrinks from 3 to 2 to 1 and speeds up as you climb. Reach the MINOR line (row 8) to take ×2 your bet, or risk it for the MAJOR (×20) at row 12.",
       "Scratch Cards: three matching symbols pay up to ×200. You can buy one card every 20 seconds.",
-      "Flip Gates, Slot Reels and Mystery Coins change how coins pay out on the board.",
+      "Some luck upgrades work on the board by themselves instead: Flip Gates (coins flip for ×2 or ×½ in their slot), Slot Reels (every ×5 hit spins the reels) and Mystery Coins (? coins that only show their value once they land in your tray).",
       "Random Events (Gold Rush, Frenzy, Coin Shower, Jackpot Magnet) turn up every few minutes. A bar shows when the next one is due.",
     ]],
     ["Special pegs", [
@@ -3179,13 +3175,13 @@ let TRAY_CAP = 40; // kept in step with trayCap() every frame
 let RC = 6; // coin radius in tray pixels: sized so a full tray looks packed, like a jar of pennies
 let bankedFx = 0;
 const trayLive = () => coinTray.filter(c => !c.out);
-const trayValue = () => { let n = 0; for (const c of coinTray) if (!c.out) n += c.v; return n; };
-function addTrayCoin(v, x, faceVal = v, face = null, y = null, vy = 40) {
+const trayValue = () => { let n = 0; for (const c of coinTray) if (!c.out && !c.myst) n += c.v; return n; };
+function addTrayCoin(v, x, faceVal = v, face = null, y = null, vy = 40, myst = null) {
   const R = Math.min(JW, TRAY_RIGHT);
   const xx = x == null ? RC + 4 + Math.random() * (R - 2 * RC - 8) : Math.min(R - RC - 4, Math.max(RC + 4, x));
   // each coin settles at its own tilt and angle, some nearer the glass than others (depth: 0 = back, 1 = front)
   coinTray.push({ v, x: xx, y: y != null ? Math.min(y, FLOOR - RC) : -RC, vx: (Math.random() - 0.5) * 30, vy: Math.min(vy, 400), face: face || flyFace(Math.max(1, Math.round(faceVal))), out: false,
-    tilt: 0.25 + Math.random() * 0.7, ang: (Math.random() - 0.5) * 0.9, depth: Math.random() });
+    tilt: 0.25 + Math.random() * 0.7, ang: (Math.random() - 0.5) * 0.9, depth: Math.random(), myst, mt: 0 });
   if (!settings.seenBank) { settings.seenBank = true; saveSettings(); showToast("YOUR COIN TRAY", "Coins land in the tray. Press BANK to spend them."); }
   if (trayLive().length >= (rl("quickbank") ? Math.ceil(TRAY_CAP / 2) : TRAY_CAP)) bankTray(true);
   updateTrayHud();
@@ -3239,7 +3235,8 @@ function updateJar(dt) {
       if (rv < 0) { const imp = -rv * 0.5; a.vx -= imp * nx; a.vy -= imp * ny; b.vx += imp * nx; b.vy += imp * ny; }
     }
   }
-  for (let i = coinTray.length - 1; i >= 0; i--) if (coinTray[i].out && coinTray[i].y > JH + RC * 2) coinTray.splice(i, 1);
+  for (const c of coinTray) if (c.myst && ((c.mt += dt) > 0.7 || c.out)) revealMystery(c);
+  for (let i = coinTray.length - 1; i >= 0; i--) if ((coinTray[i].out && coinTray[i].y > JH + RC * 2) || (coinTray[i].dud && (coinTray[i].mt += dt) > 1.6)) coinTray.splice(i, 1);
   // draw: back coins first and darker, each one its own face tilted at its own angle, with a thin rim
   jg.clearRect(0, 0, JW, JH);
   jg.fillStyle = "#ffffff0d"; jg.fillRect(3, 3, JW - 6, FLOOR - 3);
@@ -3267,15 +3264,26 @@ function sizeFly() { fly.width = innerWidth; fly.height = innerHeight; flyG.imag
 sizeFly(); addEventListener("resize", sizeFly);
 const flyFaces = new Map();
 const flyFace = v => { const k = Math.min(v, 1e6); if (!flyFaces.has(k)) flyFaces.set(k, valueFace(k).image); return flyFaces.get(k); };
-function flyToVault(worldPos, v, faceVal = v) {
+let mystFaceImg = null;
+const mystFace = () => mystFaceImg || (mystFaceImg = valueFace("?").image);
+// a mystery coin flips over in the tray to show what it was worth
+function revealMystery(c) {
+  const m = c.myst; c.myst = null; if (!m) return;
+  if (!c.out) c.face = c.v > 0 ? flyFace(Math.max(1, Math.round(c.v))) : mystFace();
+  if (c.v <= 0) c.dud = true;
+  updateTrayHud(); bankedFx = 1.6; // hold the message for a moment
+  $("jarUnit").textContent = m.mult === 0 ? "? coin: ×0. Nothing!" : `? coin: ×${m.mult} = +${fmtV(c.v)}`;
+  if (m.mult === 0) sfx.sad(); else if (m.mult >= 5) sfx.fanfare(); else sfx.bonus();
+}
+function flyToVault(worldPos, v, faceVal = v, myst = null) {
   const r = jar.getBoundingClientRect();
   // can't animate it (sim, hidden, minimised, or a flood of coins): it just arrives
-  if (location.hash === "#sim" || !r.width || flyers.length > 40 || compactOn || document.hidden) { addTrayCoin(v, null, faceVal); return; }
+  if (location.hash === "#sim" || !r.width || flyers.length > 40 || compactOn || document.hidden) { if (v > 0) addTrayCoin(v, null, faceVal); return; }
   tmpV.copy(worldPos).project(camera);
   const sx = (tmpV.x + 1) / 2 * innerWidth, sy = (1 - tmpV.y) / 2 * innerHeight;
   // carries on falling from where the 3D coin was, straight down into the pile
   const x = Math.min(r.right - 18, Math.max(r.left + 18, sx)), ey = r.top + r.height * 0.55;
-  flyers.push({ x, y: sy, vy: 260, ey, v, face: flyFace(Math.max(1, Math.round(faceVal))) });
+  flyers.push({ x, y: sy, vy: 260, ey, v, myst, face: myst ? mystFace() : flyFace(Math.max(1, Math.round(faceVal))) });
 }
 function drawFlyers(dt) {
   if (!flyers.length) { if (fly.dataset.dirty) { flyG.clearRect(0, 0, fly.width, fly.height); delete fly.dataset.dirty; } return; }
@@ -3283,7 +3291,7 @@ function drawFlyers(dt) {
   const r = jar.getBoundingClientRect(), k = TRAY_K, size = Math.round(16 * k);
   for (let i = flyers.length - 1; i >= 0; i--) {
     const f = flyers[i]; f.vy += 2200 * dt; f.y += f.vy * dt;
-    if (f.y >= f.ey) { flyers.splice(i, 1); addTrayCoin(f.v, (f.x - r.left) / k, null, f.face, (f.y - r.top) / k, f.vy / k); continue; }
+    if (f.y >= f.ey) { flyers.splice(i, 1); addTrayCoin(f.v, (f.x - r.left) / k, null, f.face, (f.y - r.top) / k, f.vy / k, f.myst); continue; }
     flyG.drawImage(f.face, Math.round(f.x - size / 2), Math.round(f.y - size / 2), size, size);
   }
 }
