@@ -841,7 +841,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.33.0";
+const VERSION = "1.33.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -3012,7 +3012,7 @@ function renderHelp() {
       "Coin Pockets (Ascension tree): the ×0 slots catch coins instead of swallowing them, and every 8 coins pay out together at ×3 or more. The slot shows how full it is.",
       "Board layouts: Second Board (Ascension tree) opens Lucky Lanes, and rebuilding opens Fortune Row (1 rebuild) and Golden Mile (3 rebuilds). Pick one in Menu → Style.",
       "Tilt Bar (Workshop): a TILT button by the tray (or the T key) shoves the whole pile forward. Edge Magnet (Workshop) tugs coins sitting at the front edge over it.",
-      "Prizes (after your first rebirth): every few minutes a prize drops onto the pusher: a big gold coin, a token bundle (green T), or once you've ascended a gem chip (teal gem). Push it off the front to win it. Off the sides, it's gone. Prize Hunter (Rebirth tree) makes them come more often.",
+      "Prizes (after your first rebirth): every few minutes a prize drops onto the pusher: a big gold coin, a token bundle (green T), or once you've ascended a gem chip (teal gem). Push it off the front to win it. Off the sides, it's gone. Prize tokens and gems are yours to spend, but they don't count toward your next ascension or rebuild. Prize Hunter (Rebirth tree) makes them come more often.",
     ]],
     ["The coin tray", [
       "Coins that fall off the pusher pile up in the tray. They aren't yours to spend until you press BANK.",
@@ -4052,8 +4052,9 @@ function updatePrizes(dt) {
   spawnPrize(kind);
 }
 function awardPrize(kind, pos) {
-  if (kind === "gem") { const n = 1 + Math.floor(Math.sqrt(gemsTotal) / 4); gems += n; gemsTotal += n; gemsRb += n; popAt(pos, `+${n} GEM${n > 1 ? "S" : ""}`, "big"); }
-  else { const n = Math.max(2, Math.floor(Math.sqrt(S("tokensTotal")))); tokens += n; tokensAsc += n; stats.tokensTotal = S("tokensTotal") + n; popAt(pos, `+${n} TOKENS`, "big"); }
+  // prize tokens and gems are spending money: they don't count toward your next ascension or rebuild
+  if (kind === "gem") { const n = 1 + Math.floor(Math.sqrt(gemsTotal) / 6); gems += n; popAt(pos, `+${n} GEM${n > 1 ? "S" : ""}`, "big"); }
+  else { const n = Math.max(1, Math.floor(Math.sqrt(S("tokensTotal")) / 2)); tokens += n; popAt(pos, `+${n} TOKEN${n > 1 ? "S" : ""}`, "big"); }
   stats.prizesWon = S("prizesWon") + 1; sfx.fanfare(); refreshHud();
 }
 // ---------- Tilt Bar ----------
