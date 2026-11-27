@@ -315,8 +315,8 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
   #wheelCanvas { width: 160px; height: 160px; }
   .reels.idle { display: none; } /* on phones the reels only show while spinning */
   .reels { top: calc(112px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); padding: 4px 6px; }
-  #reelCanvas { width: 126px; height: 45px; }
-  .reels p { font-size: 14px; }
+  #reelCanvas { width: 105px; height: 38px; }
+  .reels p { font-size: 13px; margin-top: 2px; }
   .flip { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: auto; top: auto;
     bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 8px 10px 10px; gap: 6px; display: grid; grid-template-columns: 76px 1fr; align-items: center; text-align: left; }
   .flip[hidden] { display: none !important; }
@@ -841,7 +841,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.33.1";
+const VERSION = "1.33.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -4173,8 +4173,12 @@ function drawReels() {
   }
   rg.fillStyle = P.gold; rg.fillRect(0, 14, 2, 2); rg.fillRect(rc.width - 2, 14, 2, 2);
 }
+// the reels sit just under the counters (and the challenge badge), however many rows those take up
+let reelPlaceT = 0;
+function placeReels() { const t = document.querySelector(".top"); if (t) $("reels").style.top = Math.round(t.getBoundingClientRect().bottom + 8) + "px"; }
 function updateReels(dt) {
   if ($("reels").hidden) return;
+  if ((reelPlaceT -= dt) <= 0) { reelPlaceT = 0.5; placeReels(); }
   if (reelT < 0 && reelQueue > 0) {
     reelQueue--; reelT = 0; stats.reelSpins = S("reelSpins") + 1; reelRes = [reelPick(), reelPick(), reelPick()];
     $("reels").classList.remove("win"); $("reelMsg").textContent = "Spinning…"; sfx.drop();
