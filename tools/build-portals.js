@@ -5,7 +5,9 @@
 //   node tools/build-portals.js
 //
 // Writes dist/portal/crazygames/ and dist/portal/kongregate/ (index.html at the
-// folder root) and matching .zip files beside those folders.
+// folder root, libraries under lib/ and fonts/) and matching .zip files.
+// Also writes dist/portal/crazygames-flat/ with every file at the root, because
+// the CrazyGames uploader rejects folders inside a zip.
 
 const fs = require("fs");
 const path = require("path");
@@ -128,6 +130,54 @@ function buildOne(portal) {
   return { zip, dir, bytes, count, listing };
 }
 
+// CrazyGames rejects a zip that contains folders. The flat copy puts the
+// libraries and fonts next to index.html and points the loader at those names.
+function flattenHtml(html) {
+  const replacements = [
+    ['new URL("lib/" + f, location.href)', "new URL(f, location.href)"],
+    ['loadScript("lib/" + f)', "loadScript(f)"],
+    ['url("fonts/press-start-2p-latin.woff2")', 'url("press-start-2p-latin.woff2")'],
+    ['url("fonts/vt323-latin.woff2")', 'url("vt323-latin.woff2")'],
+  ];
+  let out = html;
+  for (const [from, to] of replacements) {
+    if (!out.includes(from)) throw new Error("flat rewrite could not find: " + from);
+    out = out.split(from).join(to);
+  }
+  const left = out.match(/.{0,30}(?:lib\/|fonts\/).{0,30}/g);
+  if (left) throw new Error("flat html still has a nested path:\n" + left.join("\n"));
+  return out;
+}
+
+function buildFlat(portal) {
+  const nested = path.join(dist, portal);
+  const dir = path.join(dist, portal + "-flat");
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "index.html"), flattenHtml(fs.readFileSync(path.join(nested, "index.html"), "utf8")));
+  const names = ["favicon.png", "three.module.js", "rapier.es.js", "press-start-2p-latin.woff2", "vt323-latin.woff2", "OFL-PressStart2P.txt", "OFL-VT323.txt"];
+  const from = {
+    "favicon.png": path.join(nested, "favicon.png"),
+    "three.module.js": path.join(nested, "lib", "three.module.js"),
+    "rapier.es.js": path.join(nested, "lib", "rapier.es.js"),
+  };
+  for (const name of ["press-start-2p-latin.woff2", "vt323-latin.woff2", "OFL-PressStart2P.txt", "OFL-VT323.txt"]) {
+    from[name] = path.join(nested, "fonts", name);
+  }
+  for (const name of names) copyFile(from[name], path.join(dir, name));
+  const zip = path.join(dist, portal + "-flat.zip");
+  fs.rmSync(zip, { force: true });
+  execFileSync("zip", ["-X", "-q", zip, ...names, "index.html"], { cwd: dir });
+  const listing = execFileSync("unzip", ["-l", zip], { encoding: "utf8" });
+  const nestedEntry = listing.split("\n").find(l => /\.(html|js|woff2|png|txt)$/.test(l) && l.includes("/"));
+  if (nestedEntry) throw new Error(portal + " flat zip still has a folder:\n" + nestedEntry);
+  if (!listing.includes("index.html") || !listing.includes("three.module.js") || !listing.includes("press-start-2p-latin.woff2")) {
+    throw new Error(portal + " flat zip is missing a root file:\n" + listing);
+  }
+  console.log(portal + "-flat: " + path.relative(root, dir));
+  console.log("  zip " + path.relative(root, zip));
+}
+
 function main() {
   for (const portal of ["crazygames", "kongregate"]) {
     const info = buildOne(portal);
@@ -136,6 +186,7 @@ function main() {
     console.log("  folder " + path.relative(root, info.dir));
     console.log("  zip    " + path.relative(root, info.zip));
   }
+  buildFlat("crazygames");
 }
 
 main();

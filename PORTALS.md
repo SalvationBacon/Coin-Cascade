@@ -11,7 +11,10 @@ node tools/build-portals.js
 | Portal | Folder | Zip |
 | --- | --- | --- |
 | CrazyGames | `dist/portal/crazygames/` | `dist/portal/crazygames.zip` |
+| CrazyGames, flat | `dist/portal/crazygames-flat/` | `dist/portal/crazygames-flat.zip` |
 | Kongregate | `dist/portal/kongregate/` | `dist/portal/kongregate.zip` |
+
+The nested CrazyGames zip keeps `lib/` and `fonts/` folders. CrazyGames' uploader rejects folders, so upload `crazygames-flat.zip` instead. Every file in that zip sits next to `index.html`: `three.module.js`, `rapier.es.js`, the two `.woff2` fonts, the font licenses, and `favicon.png`. The flat `index.html` loads those names directly (`new URL(f, location.href)` and `@font-face` urls with no folder). Kongregate still uses the nested zip.
 
 `dist/` is gitignored. Run the script again after changing the game. Both zips are a few megabytes (the limit that matters is 50MB to start playing, 250MB total, and 1500 files on CrazyGames; Kongregate's upload limit is 1GB).
 
@@ -24,7 +27,8 @@ Both copies:
 - Do not ship `manifest.json` or `sw.js`, and do not offer Install App or the mini window.
 - Do not link to GitHub Pages, itch, or Ko-fi. There is no Ko-fi link in the game today.
 - Do not ask for a phone to be turned upright, and do not lock the screen to portrait. A short landscape window tightens the HUD so an 800×600 desktop iframe still shows the machine. 540×960 uses the existing portrait layout.
-- Gambling-flavoured words are rewritten in the portal copy only, through one phrase list (`portalSay` in `index.html`). The public build keeps the original names. Jackpot becomes Bonus, Double or Nothing becomes Coin Flip, Prize Wheel becomes Bonus Wheel, Scratch Card becomes Reveal Card, High Roller becomes Big Earner, bets and cash-outs become a set amount and Take coins, and the tagline says BUILD THE CASCADE. Save keys and upgrade ids are unchanged.
+- Gambling-flavoured words are rewritten in the portal copy only, through one phrase list (`portalSay` in `index.html`). The public build keeps the original names. Jackpot becomes Bonus, Double or Nothing becomes Coin Flip, Prize Wheel becomes Bonus Wheel, Scratch Card becomes Reveal Card, High Roller becomes Big Earner, bets and cash-outs become a set amount and Take coins, and the tagline says BUILD THE CASCADE. The title-screen subtitle becomes A PEG-BOARD COIN MACHINE. Save keys and upgrade ids are unchanged.
+- A PRIVACY button on the title screen and in Menu → Settings opens an in-game note. It does not link anywhere. The game has no account, no ads, and collects no personal information. Progress stays in the browser, and on CrazyGames it can also use the SDK data module. Questions go to salvationbaconn@gmail.com. The public build hides this button.
 
 CrazyGames only:
 
@@ -68,7 +72,7 @@ The three cover images are generated with `node tools/make-covers.js` (pixel art
 
 Requirements checked against the developer docs (November 2026): [requirements](https://docs.crazygames.com/requirements/intro/), [technical](https://docs.crazygames.com/requirements/technical/), [gameplay](https://docs.crazygames.com/requirements/gameplay/), [account integration](https://docs.crazygames.com/requirements/account-integration/), [SDK](https://docs.crazygames.com/sdk/intro/), [game module](https://docs.crazygames.com/sdk/game/), [data module](https://docs.crazygames.com/sdk/data/), [Basic Launch](https://docs.crazygames.com/resources/basic-launch-metrics/), [covers](https://docs.crazygames.com/requirements/game-covers/).
 
-1. Create a CrazyGames developer account and submit `dist/portal/crazygames.zip` (Basic Launch). Use their preview tool before submitting.
+1. Create a CrazyGames developer account and submit `dist/portal/crazygames-flat.zip` (Basic Launch). That zip has no folders. Use their preview tool before submitting. The nested `crazygames.zip` is only for local testing.
 2. Basic Launch does not allow ads, and this build does not call them. Leave monetization off.
 3. On the progress-save question, choose the SDK data module if you want the save to follow a CrazyGames account across devices. If that toggle is left off, the data module throws and the game uses `localStorage` instead. Guests can play either way.
 4. Set the supported orientations to landscape and portrait. The game plays in both; CrazyGames will ask a phone to rotate when the device is in an orientation you did not enable.
