@@ -841,7 +841,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.33.2";
+const VERSION = "1.34.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2328,6 +2328,7 @@ const AUPGRADES = [
   { id: "pegshuffle", name: "Peg Shuffle", x: 4, y: 0, parent: "pegplus", max: 1, base: 4, grow: 1, text: l => l ? `Re-roll all your special pegs to new random spots (every ${SHUFFLE_CD / 60} minutes). Use it from here or the Arcade.` : "Special pegs stay where they land" },
   { id: "pegplus", name: "Gilded Pegs", x: 3, y: 0, parent: "keeppegs", max: 3, base: 3, grow: 2.5, text: l => `Golden pegs give +${l} more per touch` },
   { id: "goldtray", name: "Golden Tray", x: 3, y: 1, parent: "bigtray", max: 5, base: 2, grow: 2, text: l => `Everything you bank is worth +${5 * l}%` },
+  { id: "quickbuy", name: "Quick Buyer", x: 1, y: 3, parent: "autobuy", max: 3, base: 4, grow: 2, text: l => `Auto Buyer buys ${l >= 3 ? "up to 3 upgrades" : "an upgrade"} every ${[2, 1, 0.5, 0.5][l]}s` },
   { id: "autobuy", name: "Auto Buyer", x: 1, y: 2, parent: "autoreb", max: 1, base: 6, grow: 1, text: l => l ? `Buys the cheapest machine upgrade you can afford (${autoBuyOn ? "on" : "off"})` : "You buy every upgrade by hand" },
   { id: "rebbonus", name: "Token Bonus", x: 0, y: 2, parent: "offline", max: 5, base: 3, grow: 2, text: l => `+${l} token${l === 1 ? "" : "s"} on every rebirth` },
   { id: "splitstart", name: "Splitter Start", x: -1, y: 2, parent: "goldstart", max: 2, base: 4, grow: 3, text: l => l ? `Every run starts with ${l} splitter peg${l > 1 ? "s" : ""}` : "Runs start with no splitter pegs" },
@@ -2363,6 +2364,7 @@ const WUPGRADES = [
   { id: "tiltbar", name: "Tilt Bar", x: 2, y: 1, parent: "motor", max: 3, base: 3, grow: 2.5, text: l => l ? `A TILT button by the tray shoves the whole pile forward (every ${tiltCd()}s)` : "No way to give the machine a shove" },
   { id: "edgemag", name: "Edge Magnet", x: 3, y: 1, parent: "tiltbar", max: 3, base: 4, grow: 2.5, text: l => l ? `Coins near the front edge are tugged over it (strength ${l})` : "Coins sit at the edge until pushed" },
   { id: "tokbuyer", name: "Token Buyer", x: -4, y: 0, parent: "autoasc", max: 1, base: 4, grow: 1, text: l => l ? `Buys the cheapest Rebirth tree upgrade you can afford (${tokBuyOn ? "on" : "off"})` : "You spend tokens by hand" },
+  { id: "bulkbuy", name: "Bulk Orders", x: -4, y: 2, parent: "gembuyer", max: 2, base: 6, grow: 2, text: l => l >= 2 ? "Token Buyer and Gem Buyer buy everything you can afford, straight away" : `Token Buyer and Gem Buyer shop every ${[2, 1][l]}s (up to 3 at a time)` },
   { id: "gembuyer", name: "Gem Buyer", x: -4, y: 1, parent: "tokbuyer", max: 1, base: 8, grow: 1, text: l => l ? `Buys the cheapest Ascension tree upgrade you can afford (${gemBuyOn ? "on" : "off"})` : "You spend gems by hand" },
   { id: "autoasc", name: "Auto Ascend", x: -3, y: 0, parent: "gempress", max: 1, base: 6, grow: 1, text: l => l ? (autoAscAt ? `Ascends for you at ${fmt(autoAscAt)} gems` : "Ascends for you at the best rate") : "You ascend by hand" },
 ];
@@ -3065,6 +3067,7 @@ function renderHelp() {
       "Rebirth tree: Automation unlocks the Auto Dropper; Auto From Start gives it to you every run.",
       "Ascension tree: Auto Rebirth rebirths for you (at a token amount you pick, or at the best rate), and Auto Buyer buys machine upgrades.",
       "Workshop: Auto Ascend ascends for you (at a gem amount, or at the best rate); Token Buyer and Gem Buyer spend your tokens and gems on the Rebirth and Ascension trees.",
+      "Speed: Quick Buyer (Ascension tree, after Auto Buyer) makes Auto Buyer shop every 1s, then every 0.5s three at a time. Bulk Orders (Workshop, after Gem Buyer) makes Token Buyer and Gem Buyer shop every 1s, then buy everything at once.",
       "\"Best rate\" waits until a longer run (or ascension) would earn more slowly, then goes. The buyers never buy automation upgrades, so nothing switches on that you didn't choose. Rebuilding always stays your call.",
     ]],
     ["The endless game", [
@@ -4286,19 +4289,23 @@ let acc = 0, lightT = 0;
 let piggyT = 0, autoBuyT = 0;
 function tick(dt) {
   // Auto Buyer: every 2 seconds, the cheapest machine upgrade you can afford (not while placing or in a challenge's first second)
-  if (al("autobuy") && autoBuyOn && (autoBuyT += dt) >= 2) {
+  // Quick Buyer (Ascension tree) makes it shop more often, and buy up to 3 at a time at the top level
+  if (al("autobuy") && autoBuyOn && (autoBuyT += dt) >= [2, 1, 0.5, 0.5][Math.min(3, al("quickbuy"))]) {
     autoBuyT = 0; const T = TREES.main;
-    const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
-    if (u) { buy(T, u); sfx.tick(); }
+    for (let k = 0; k < (al("quickbuy") >= 3 ? 3 : 1); k++) {
+      const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
+      if (!u) break; buy(T, u); if (!k) sfx.tick();
+    }
   }
   // Token Buyer / Gem Buyer: every 2 seconds, the cheapest prestige-tree upgrade you can afford (never the automation ones)
-  if ((wl("tokbuyer") && tokBuyOn || wl("gembuyer") && gemBuyOn) && (prestBuyT += dt) >= 2) {
+  // Bulk Orders (Workshop): every 1s, then straight away and everything affordable
+  if ((wl("tokbuyer") && tokBuyOn || wl("gembuyer") && gemBuyOn) && (prestBuyT += dt) >= [2, 1, 0.1][Math.min(2, wl("bulkbuy"))]) {
     prestBuyT = 0;
     const SKIP = ["autounlock", "autostart", "autoreb", "autobuy"];
     for (const [key, on] of [["reb", wl("tokbuyer") && tokBuyOn], ["asc", wl("gembuyer") && gemBuyOn]]) {
       if (!on) continue;
       const T = TREES[key];
-      for (let k = 0; k < 3; k++) { // up to three a go, so a big pile of tokens doesn't take ages to spend
+      for (let k = 0; k < (wl("bulkbuy") >= 2 ? 100 : 3); k++) { // up to three a go (everything with Bulk Orders 2)
         const u = T.list.filter(x => !SKIP.includes(x.id) && nodeState(T, x) === "open" && T.lv(x.id) < x.max && T.has() >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
         if (!u) break; buy(T, u); if (!k) sfx.tick();
       }
