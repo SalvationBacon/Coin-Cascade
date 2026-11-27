@@ -4,11 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Coin Cascade</title>
-<meta name="description" content="A pixel-art peg board that feeds a coin pusher. An incremental arcade game.">
+<meta name="description" content="Drop coins through a pixel-art peg board onto a coin pusher. Upgrade the machine, rebirth, and keep the cascade going. Free in your browser.">
+<link rel="canonical" href="https://salvationbacon.github.io/Coin-Cascade/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SalvationBacon Games">
+<meta property="og:title" content="Coin Cascade">
+<meta property="og:description" content="Drop coins through a pixel-art peg board onto a coin pusher. Upgrade the machine, rebirth, and keep the cascade going. Free in your browser.">
+<meta property="og:url" content="https://salvationbacon.github.io/Coin-Cascade/">
+<meta property="og:image" content="https://salvationbacon.github.io/Coin-Cascade/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Coin Cascade, a pixel-art peg board feeding a coin pusher full of coins.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Coin Cascade">
+<meta name="twitter:description" content="Drop coins through a pixel-art peg board onto a coin pusher. Upgrade the machine, rebirth, and keep the cascade going. Free in your browser.">
+<meta name="twitter:image" content="https://salvationbacon.github.io/Coin-Cascade/preview.png">
+<meta name="twitter:image:alt" content="Coin Cascade, a pixel-art peg board feeding a coin pusher full of coins.">
 <meta name="theme-color" content="#11161f">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script data-goatcounter="https://salvationbacon.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4409,8 +4425,23 @@ function openTitle() {
   $("title").hidden = false;
   setTimeout(() => $("tContinue").focus(), 50);
 }
+// One GoatCounter event when play begins. The script counts the visit on its own.
+// count.js loads async and has no queue, so wait briefly if the player starts first.
+function countGameStart() {
+  const vars = { path: "coin-cascade-start", title: "Game started", event: true };
+  let tries = 0;
+  const send = () => {
+    const gc = window.goatcounter;
+    if (!gc || typeof gc.count !== "function") return false;
+    try { gc.count(vars); } catch {}
+    return true;
+  };
+  if (send()) return;
+  const timer = setInterval(() => { if (send() || ++tries >= 40) clearInterval(timer); }, 250);
+}
 function startGame() {
   titleOpen = false; $("title").hidden = true;
+  countGameStart();
   try { const n = sessionStorage.getItem("cc_rebuilt"); if (n) { sessionStorage.removeItem("cc_rebuilt"); setTimeout(() => { sfx.rebuilt(); showToast("MACHINE REBUILT", `+${n} part${n === "1" ? "" : "s"}: spend them in the Workshop`); }, 700); } } catch {}
   try { sessionStorage.setItem("cc_inGame", "1"); } catch {}
   sfx.unlock(); sfx.bonus();
