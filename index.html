@@ -113,6 +113,10 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); overfl
   position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8, 5, 18, 0.7);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
+#privacy { z-index: 60; }
+#privacy .card { max-width: min(460px, calc(100vw - 32px)); text-align: left; max-height: min(78vh, 520px); overflow: auto; }
+#privacy .card h2 { text-align: center; }
+#privacy .card p { text-align: left; margin: 0 0 12px; }
 .card { padding: 20px 22px; text-align: center; max-width: 340px; }
 .card h2 { margin: 0 0 12px; font-family: var(--display); font-weight: 400; font-size: 16px; line-height: 1.4; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }
 .card p { margin: 0 0 16px; color: var(--muted); font-size: 20px; line-height: 1.15; }
@@ -673,6 +677,7 @@ html[data-portal] .rotate { display: none !important; }
       <button class="mbtn alt" id="tLoad" type="button" role="menuitem">IMPORT SAVE</button>
       <button class="mbtn alt" id="tCopy" type="button" role="menuitem">EXPORT SAVE</button>
       <button class="mbtn alt" id="tMusic" type="button" role="menuitem">MUSIC: ON</button>
+      <button class="mbtn alt" id="tPrivacy" type="button" role="menuitem" hidden>PRIVACY</button>
       <button class="mbtn alt" id="tMini" type="button" role="menuitem" hidden>MINI WINDOW</button>
       <button class="mbtn alt" id="tInstall" type="button" role="menuitem" hidden>INSTALL APP</button>
     </div>
@@ -681,6 +686,7 @@ html[data-portal] .rotate { display: none !important; }
   </div>
   <span class="ver" id="ver"></span>
 </div>
+<div class="overlay" id="privacy" hidden><div class="card box"><h2>Privacy</h2><div id="privacyBody"></div><button id="privacyClose" type="button">CLOSE</button></div></div>
 <div class="overlay" id="elsewhere" hidden><div class="card box"><h2>Open in another window</h2><p>Coin Cascade was opened in another tab or window, so this copy has paused and stopped saving. That way the two can't overwrite each other's progress.</p><button id="elseReload" type="button">PLAY HERE INSTEAD</button></div></div>
 <div class="overlay" id="away" hidden><div class="card box"><h2>In the mini window</h2><p>Coin Cascade is running in its small window, so this one is paused. Close the mini window, or bring it back here.</p><button id="awayBack" type="button">BRING IT BACK HERE</button></div></div>
 <div class="overlay xfer" id="recvBox" hidden><div class="card box"><h2 id="recvTitle">Load progress from another device?</h2><p id="recvMsg"></p>
@@ -750,6 +756,7 @@ const PORTAL = window.CC_PORTAL || "";
 // Portal copies only. Longest phrases first. Replacements must not contain a phrase from this list,
 // or the rewrite would run twice. The public build never calls this.
 const PORTAL_SAY = [
+  ["A PEG-BOARD COIN PUSHER", "A PEG-BOARD COIN MACHINE"],
   ["Double or Nothing", "Coin Flip"],
   ["Jackpot Junkie", "Bonus Fan"],
   ["Jackpot Legend", "Bonus Legend"],
@@ -3459,7 +3466,13 @@ function renderSettings() {
   tb.addEventListener("click", () => { $("tree").hidden = true; save(); openTitle(); });
   const tt = document.createElement("button"); tt.type = "button"; tt.textContent = "SHOW TUTORIAL";
   tt.addEventListener("click", () => { setPanel(false); setTimeout(startTut, 250); });
-  ti.append(tb, tt); w.appendChild(ti);
+  ti.append(tb, tt);
+  if (PORTAL) {
+    const pv = document.createElement("button"); pv.type = "button"; pv.textContent = "PRIVACY";
+    pv.addEventListener("click", openPrivacy);
+    ti.appendChild(pv);
+  }
+  w.appendChild(ti);
   // reset
   const rs = card("", "Delete game", [["Wipe all your progress and start again from nothing. This can't be undone.", ""]]);
   const rb = document.createElement("button"); rb.type = "button"; rb.className = "quit"; rb.textContent = "DELETE MY GAME";
@@ -4646,6 +4659,7 @@ function openTitle() {
   const has = !!saved || earned > 0;
   $("tContinue").textContent = has ? "CONTINUE" : "START";
   $("tCopy").hidden = !has; updateTitleCloud();
+  $("tPrivacy").hidden = !PORTAL;
   $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
   $("tInfo").textContent = has ? `Save: ${fmt(bank)} coins · ${fmt(earned)} earned · ${rebirths} rebirth${rebirths === 1 ? "" : "s"}${ascensions ? ` · ${ascensions} ascension${ascensions === 1 ? "" : "s"}` : ""}` : "No save yet: press START.";
   $("menu").hidden = false;
@@ -4695,6 +4709,28 @@ $("tCloud").addEventListener("click", async () => {
   if (syncReady() && !fbUser) await cloudSignIn(); else if (fbUser) await cloudSync(true);
   $("tInfo").textContent = cloudStatus(); updateTitleCloud();
 });
+function privacyLines() {
+  const lines = [
+    "Coin Cascade does not ask you to create an account, does not show ads, and does not collect personal information.",
+    "Your progress is saved in this browser, on this device.",
+  ];
+  if (PORTAL === "crazygames") lines.push("On CrazyGames, progress can also be stored with the CrazyGames SDK data module. That save follows a CrazyGames account when you are signed in there. Guests keep the browser save. CrazyGames' own privacy policy covers the CrazyGames website and app. This game does not open that policy.");
+  lines.push("Questions: salvationbaconn@gmail.com");
+  return lines;
+}
+function openPrivacy() {
+  const body = $("privacyBody");
+  body.replaceChildren();
+  for (const line of privacyLines()) {
+    const p = document.createElement("p");
+    p.textContent = line;
+    body.appendChild(p);
+  }
+  $("privacy").hidden = false;
+  $("privacyClose").focus();
+}
+$("tPrivacy").addEventListener("click", openPrivacy);
+$("privacyClose").addEventListener("click", () => { $("privacy").hidden = true; });
 // keyboard: arrows move between menu buttons, Enter presses
 $("title").addEventListener("keydown", e => {
   const btns = [...$("title").querySelectorAll(".mbtn")].filter(b => b.offsetParent && !b.disabled);
