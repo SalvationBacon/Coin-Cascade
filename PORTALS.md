@@ -24,7 +24,7 @@ Both copies:
 - Do not ship `manifest.json` or `sw.js`, and do not offer Install App or the mini window.
 - Do not link to GitHub Pages, itch, or Ko-fi. There is no Ko-fi link in the game today.
 - Do not ask for a phone to be turned upright, and do not lock the screen to portrait. A short landscape window tightens the HUD so an 800×600 desktop iframe still shows the machine. 540×960 uses the existing portrait layout.
-- The cabinet sign says BONUS instead of JACKPOT, the reel toast matches, and the tagline says BUILD THE CASCADE. See the wording note below.
+- Gambling-flavoured words are rewritten in the portal copy only, through one phrase list (`portalSay` in `index.html`). The public build keeps the original names. Jackpot becomes Bonus, Double or Nothing becomes Coin Flip, Prize Wheel becomes Bonus Wheel, Scratch Card becomes Reveal Card, High Roller becomes Big Earner, bets and cash-outs become a set amount and Take coins, and the tagline says BUILD THE CASCADE. Save keys and upgrade ids are unchanged.
 
 CrazyGames only:
 
@@ -56,24 +56,13 @@ Then open a page that contains, for example:
 
 The title screen should offer Continue or Start, Import Save, Export Save, and Music. It should not offer Cloud Save, Install App, or Mini Window. In the browser network panel, the CrazyGames copy may request `sdk.crazygames.com`. It should not request Google, Firebase, fonts.googleapis.com, jsDelivr, unpkg, GoatCounter, or github.io. The Kongregate copy should not request another site at all.
 
-## Wording that was left as-is
+## Wording
 
-Renaming every gambling-flavoured string would touch upgrade names, milestones, challenges, and the arcade games, and those names are part of the game on the public build as well. Only the cabinet sign, the reel toast, the magnet event banner, the tagline, and one tutorial line change in the portal copy.
-
-Still visible in both portal copies:
-
-- Double or Nothing, Bet, Cash Out, Heads / Tails
-- Prize Wheel and Spin
-- Scratch Card, Buy Card
-- Coin Stacker, Minor / Major
-- Upgrade and milestone names such as Jackpot Value, Wide Jackpot, Jackpot Junkie, Jackpot Legend, High Roller
-- Challenge names such as Jackpot Only and All or Nothing
-
-Say if those should be renamed for the portal zips only. It is a content pass, not a small switch.
+`portalSay` rewrites visible text, canvas labels, tooltips, and the all-caps toasts. It does not rename save fields or upgrade ids, so a portal save still loads in the public build and the other way around. The phrase list is in `index.html` next to `PORTAL`.
 
 ## What you still do in the portal dashboards
 
-Covers and the upload itself are account steps. This repo does not include store covers.
+The three cover images are generated with `node tools/make-covers.js` (pixel art drawn in the page, no image generator) and are uploaded separately from the game zip.
 
 ### CrazyGames
 
@@ -83,8 +72,8 @@ Requirements checked against the developer docs (November 2026): [requirements](
 2. Basic Launch does not allow ads, and this build does not call them. Leave monetization off.
 3. On the progress-save question, choose the SDK data module if you want the save to follow a CrazyGames account across devices. If that toggle is left off, the data module throws and the game uses `localStorage` instead. Guests can play either way.
 4. Set the supported orientations to landscape and portrait. The game plays in both; CrazyGames will ask a phone to rotate when the device is in an orientation you did not enable.
-5. Upload three covers: 1920×1080, 800×1200, and 800×800. Title text only. No "Play", borders, or store logos.
-6. Upload two silent preview videos, 15–20 seconds, under 50MB, no black bars, no cursor, no "Play now" card: landscape 1920×1080 (16:9) and portrait 1080p at 2:3. The first frame should match the cover. See below for clips recorded from this build; they are raw gameplay, not finished covers.
+5. Upload the three covers from `node tools/make-covers.js`: `cover-landscape-1920x1080.png`, `cover-portrait-800x1200.png`, and `cover-square-800x800.png`. Title text only.
+6. Upload the two silent preview clips (15–20 seconds, the cabinet filling the frame). They are gameplay, so the first frame is not the cover. CrazyGames asks the hover video to open on the cover; swap the first frame for the cover image if their QA asks for that.
 7. Game description and controls: mouse or touch to aim, click / tap / Space to drop, B to bank the tray. English is the only language.
 8. Full Launch (only if they invite you later) also wants the data module for real, the user module, and ad breaks. Ads are intentionally not in this build. `muteAudio` is already honoured.
 
@@ -98,11 +87,8 @@ Checked against Kongregate's developer help (2026): HTML5 upload is one `index.h
 4. Tick the boxes that the game has no third-party ads and no outside login. There are no microtransactions.
 5. Add an English description, instructions, screenshots, and the age and AI declarations the form asks for.
 
-## Preview videos
+## Covers and preview videos
 
-Two silent clips of the CrazyGames build were recorded with the cursor hidden and no extra captions. They are drafts, not finished store covers, and they are not produced by the build script:
+`node tools/make-covers.js` draws the three covers in the game's pixel style (Press Start 2P plus a pegboard painted with rectangles). The only words are COIN CASCADE. They are not part of the game zip.
 
-- Landscape 1920×1080, about 17.5 seconds, about 2MB
-- Portrait 1080×1620 (2:3), 18 seconds, about 2.5MB
-
-Both show the cabinet with its normal HUD. The landscape clip has empty space on either side because the cabinet is portrait; CrazyGames allows that for a portrait game, and their video rules specifically call out black bars on the top and bottom. The first frame is gameplay, not a designed cover. Make the three cover images (1920×1080, 800×1200, 800×800) and, if you want the hover video to open on that cover, replace the first frame before upload. The clips are attached to the pull request. They are not committed.
+The preview clips are silent, 18 seconds, with the cursor hidden. They are recorded from the cabinet with the counters and side menu hidden, then scaled so the machine fills the frame. Landscape is a 16:9 crop of that view. They are not produced by `build-portals.js` and they are not committed. The pull request attaches the latest zips, covers, and clips.

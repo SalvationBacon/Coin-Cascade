@@ -747,10 +747,132 @@ const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
 // Empty on the public web build. Portal zips set this to "crazygames" or "kongregate".
 const PORTAL = window.CC_PORTAL || "";
+// Portal copies only. Longest phrases first. Replacements must not contain a phrase from this list,
+// or the rewrite would run twice. The public build never calls this.
+const PORTAL_SAY = [
+  ["Double or Nothing", "Coin Flip"],
+  ["Jackpot Junkie", "Bonus Fan"],
+  ["Jackpot Legend", "Bonus Legend"],
+  ["Jackpot Value", "Bonus Value"],
+  ["Jackpot Fever", "Bonus Fever"],
+  ["JACKPOT MAGNET", "BONUS MAGNET"],
+  ["Jackpot Magnet", "Bonus Magnet"],
+  ["Jackpot Funk", "Cascade Funk"],
+  ["Wide Jackpot", "Wide Bonus"],
+  ["Sticky Jackpot", "Sticky Bonus"],
+  ["×10 Jackpot", "×10 Bonus"],
+  ["No Jackpot", "No Bonus"],
+  ["Jackpot Only", "Bonus Only"],
+  ["High Roller", "Big Earner"],
+  ["Prize Wheel", "Bonus Wheel"],
+  ["prize wheel", "bonus wheel"],
+  ["Prize Hunter", "Bonus Hunter"],
+  ["Prize Winner", "Bonus Winner"],
+  ["Prize Counter", "Ticket Booth"],
+  ["Scratch Cards", "Reveal Cards"],
+  ["Scratch Card", "Reveal Card"],
+  ["scratch cards", "reveal cards"],
+  ["scratch card", "reveal card"],
+  ["Scratch all three", "Reveal all three"],
+  ["scratch all three", "reveal all three"],
+  ["scratch three", "reveal three"],
+  ["Slot Reels", "Bonus Reels"],
+  ["slot reels", "bonus reels"],
+  ["Slot reels", "Bonus reels"],
+  ["Casino Royale", "Emerald Hall"],
+  ["All or Nothing", "All or Zero"],
+  ["All In", "Last Coin"],
+  ["flip odds", "flip chance"],
+  ["Fortune Row", "Ribbon Row"],
+  ["Golden Mile", "Gold Lane"],
+  ["Lucky Sevens", "Triple Sevens"],
+  ["Nothing Ventured", "Zero Mystery"],
+  ["Heads Up", "Flip Wins"],
+  ["Spin City", "Reel Regular"],
+  ["On a Roll", "Six Straight"],
+  ["On the line", "In play"],
+  ["at stake", "in play"],
+  ["Cashing out of", "Collecting from"],
+  ["TAKE MINOR", "TAKE LOW"],
+  ["CASH OUT", "TAKE COINS"],
+  ["Cash out", "Take coins"],
+  ["cash out", "take coins"],
+  ["Cashed out", "Took home"],
+  ["your bet", "your amount"],
+  ["that bet", "that amount"],
+  ["Bet coins", "Set coins"],
+  ["bet coins", "set coins"],
+  ["Bet:", "Set:"],
+  ["bet ", "set "],
+  ["JACKPOT!", "BONUS!"],
+  ["JACKPOT", "BONUS"],
+  ["Jackpot", "Bonus"],
+  ["jackpot", "bonus"],
+  ["SPIN!", "TURN!"],
+  ["Spinning", "Turning"],
+  ["Spin ", "Turn "],
+  ["spins the reels", "turns the reels"],
+  ["to spin", "to turn"],
+  ["SPIN", "TURN"],
+  ["WHEEL ", "BONUS "],
+  ["BUY CARD", "REVEAL"],
+  ["Scratch", "Reveal"],
+  ["HEADS", "GOLD"],
+  ["TAILS", "SILVER"],
+  ["MINOR", "LOW"],
+  ["MAJOR", "TOP"],
+];
+// Toasts shout names in capitals, so each phrase also matches its uppercase form.
+const PORTAL_SAY_ALL = [];
+for (const pair of PORTAL_SAY) {
+  PORTAL_SAY_ALL.push(pair);
+  const up = pair[0].toUpperCase();
+  if (up !== pair[0]) PORTAL_SAY_ALL.push([up, pair[1].toUpperCase()]);
+}
+function portalSay(s) {
+  if (!PORTAL || typeof s !== "string" || s.length < 3) return s;
+  let t = s;
+  for (let i = 0; i < PORTAL_SAY_ALL.length; i++) {
+    const from = PORTAL_SAY_ALL[i][0];
+    if (t.includes(from)) t = t.split(from).join(PORTAL_SAY_ALL[i][1]);
+  }
+  return t;
+}
 if (PORTAL) {
   document.documentElement.dataset.portal = PORTAL;
   const tag = document.querySelector(".marquee small");
   if (tag) tag.textContent = "BUILD THE CASCADE";
+  const fill = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, max) {
+    return fill.call(this, typeof text === "string" ? portalSay(text) : text, x, y, max);
+  };
+  const skip = { SCRIPT: 1, STYLE: 1 };
+  const rewriteNode = node => {
+    if (!node || skip[node.tagName]) return;
+    if (node.nodeType === 3) {
+      const next = portalSay(node.nodeValue);
+      if (next !== node.nodeValue) node.nodeValue = next;
+      return;
+    }
+    if (node.nodeType === 1) {
+      for (const attr of ["title", "aria-label", "alt"]) {
+        const v = node.getAttribute(attr);
+        if (!v) continue;
+        const next = portalSay(v);
+        if (next !== v) node.setAttribute(attr, next);
+      }
+      for (const child of node.childNodes) rewriteNode(child);
+    }
+  };
+  rewriteNode(document.body);
+  const mo = new MutationObserver(records => {
+    for (const rec of records) {
+      if (rec.type === "characterData") rewriteNode(rec.target);
+      else if (rec.type === "attributes") rewriteNode(rec.target);
+      else rec.addedNodes.forEach(rewriteNode);
+    }
+  });
+  mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["title", "aria-label", "alt"] });
 }
 // CrazyGames SDK state. Unused unless this is the CrazyGames zip and the SDK initialises.
 const cg = { sdk: null, data: null, mute: false, playing: false, applyMute() {} };
