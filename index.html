@@ -49,7 +49,7 @@
 [hidden] { display: none !important; }
 * { -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
-body { background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; touch-action: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-touch-callout: none; }
 #game { position: fixed; inset: 0; cursor: pointer; }
 #game canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
 
@@ -562,6 +562,22 @@ body.compact > *:not(#compact) { display: none !important; }
 @keyframes rotPhone { 0%, 30% { transform: rotate(90deg); } 60%, 100% { transform: rotate(0deg); } }
 @media (prefers-reduced-motion: reduce) { .rotIcon { animation: none; } }
 @media (orientation: landscape) and (pointer: coarse) and (max-height: 520px) { .rotate { display: flex; } }
+/* Portal copies (set on <html data-portal>) play in a desktop landscape iframe. The site asks phones to rotate, so this copy does not cover the game. Short landscape windows tighten the HUD so the machine still fits. */
+html[data-portal] .rotate { display: none !important; }
+@media (max-height: 680px) {
+  html[data-portal] .marquee { font-size: 14px; }
+  html[data-portal] .marquee small { margin-top: 3px; font-size: 7px; }
+  html[data-portal] .counter { padding: 3px 6px 2px; min-width: 54px; }
+  html[data-portal] .counter b { font-size: 12px; }
+  html[data-portal] .counter span { margin-top: 2px; font-size: 12px; }
+  html[data-portal] .vault { height: 64px; }
+  html[data-portal] .rail { width: 72px; gap: 4px; padding-top: 8px; padding-bottom: 8px; }
+  html[data-portal] .rb { padding: 6px 0 4px; gap: 3px; }
+  html[data-portal] .rb b svg { width: 18px; height: 18px; }
+  html[data-portal] .titleInner { gap: 8px; }
+  html[data-portal] .logo { font-size: clamp(22px, 6vh, 36px); gap: 4px; }
+  html[data-portal] .mbtn { padding: 8px; font-size: 11px; }
+}
 
 #towerCanvas { width: 175px; height: 300px; image-rendering: pixelated; touch-action: none; cursor: pointer; }
 .scratchRow { display: flex; gap: 8px; }
@@ -710,12 +726,14 @@ window.addEventListener("error", function (e) { ccFail(friendly(e.message || Str
 window.addEventListener("unhandledrejection", function (e) { ccFail(friendly(String((e.reason && e.reason.message) || e.reason))); });
 function friendly(m) {
   if (/WebGL/i.test(m)) return "Your browser couldn't start 3D graphics (WebGL). Try turning on hardware acceleration in your browser settings, updating your graphics driver, or using Chrome or Edge. (" + m + ")";
-  if (/import|fetch|module|load/i.test(m)) return "The game engine couldn't be downloaded. An ad blocker or network filter may be blocking cdn.jsdelivr.net and unpkg.com. Try allowing them, or a different network. (" + m + ")";
+  if (/import|fetch|module|load/i.test(m)) return (window.CC_PORTAL
+    ? "The game engine couldn't be loaded from this copy of the game."
+    : "The game engine couldn't be downloaded. An ad blocker or network filter may be blocking cdn.jsdelivr.net and unpkg.com. Try allowing them, or a different network.") + " (" + m + ")";
   return "Something went wrong: " + m;
 }
 </script>
 <script type="module">
-// Load each library from jsDelivr, falling back to unpkg if that's blocked.
+// Load each library from the copy shipped with the game, then from a public CDN if this file is on its own.
 async function loadFrom(urls) {
   let err;
   for (const u of urls) { try { return await import(u); } catch (e) { err = e; } }
@@ -727,21 +745,212 @@ const setLoad = (msg, frac) => {
 };
 const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
-// The GitHub Pages copy ships its own copies of the libraries (and works offline); the artifact uses the CDNs.
+// Empty on the public web build. Portal zips set this to "crazygames" or "kongregate".
+const PORTAL = window.CC_PORTAL || "";
+// Portal copies only. Longest phrases first. Replacements must not contain a phrase from this list,
+// or the rewrite would run twice. The public build never calls this.
+const PORTAL_SAY = [
+  ["Double or Nothing", "Coin Flip"],
+  ["Jackpot Junkie", "Bonus Fan"],
+  ["Jackpot Legend", "Bonus Legend"],
+  ["Jackpot Value", "Bonus Value"],
+  ["Jackpot Fever", "Bonus Fever"],
+  ["JACKPOT MAGNET", "BONUS MAGNET"],
+  ["Jackpot Magnet", "Bonus Magnet"],
+  ["Jackpot Funk", "Cascade Funk"],
+  ["Wide Jackpot", "Wide Bonus"],
+  ["Sticky Jackpot", "Sticky Bonus"],
+  ["×10 Jackpot", "×10 Bonus"],
+  ["No Jackpot", "No Bonus"],
+  ["Jackpot Only", "Bonus Only"],
+  ["High Roller", "Big Earner"],
+  ["Prize Wheel", "Bonus Wheel"],
+  ["prize wheel", "bonus wheel"],
+  ["Prize Hunter", "Bonus Hunter"],
+  ["Prize Winner", "Bonus Winner"],
+  ["Prize Counter", "Ticket Booth"],
+  ["Scratch Cards", "Reveal Cards"],
+  ["Scratch Card", "Reveal Card"],
+  ["scratch cards", "reveal cards"],
+  ["scratch card", "reveal card"],
+  ["Scratch all three", "Reveal all three"],
+  ["scratch all three", "reveal all three"],
+  ["scratch three", "reveal three"],
+  ["Slot Reels", "Bonus Reels"],
+  ["slot reels", "bonus reels"],
+  ["Slot reels", "Bonus reels"],
+  ["Casino Royale", "Emerald Hall"],
+  ["All or Nothing", "All or Zero"],
+  ["All In", "Last Coin"],
+  ["flip odds", "flip chance"],
+  ["Fortune Row", "Ribbon Row"],
+  ["Golden Mile", "Gold Lane"],
+  ["Lucky Sevens", "Triple Sevens"],
+  ["Nothing Ventured", "Zero Mystery"],
+  ["Heads Up", "Flip Wins"],
+  ["Spin City", "Reel Regular"],
+  ["On a Roll", "Six Straight"],
+  ["On the line", "In play"],
+  ["at stake", "in play"],
+  ["Cashing out of", "Collecting from"],
+  ["TAKE MINOR", "TAKE LOW"],
+  ["CASH OUT", "TAKE COINS"],
+  ["Cash out", "Take coins"],
+  ["cash out", "take coins"],
+  ["Cashed out", "Took home"],
+  ["your bet", "your amount"],
+  ["that bet", "that amount"],
+  ["Bet coins", "Set coins"],
+  ["bet coins", "set coins"],
+  ["Bet:", "Set:"],
+  ["bet ", "set "],
+  ["JACKPOT!", "BONUS!"],
+  ["JACKPOT", "BONUS"],
+  ["Jackpot", "Bonus"],
+  ["jackpot", "bonus"],
+  ["SPIN!", "TURN!"],
+  ["Spinning", "Turning"],
+  ["Spin ", "Turn "],
+  ["spins the reels", "turns the reels"],
+  ["to spin", "to turn"],
+  ["SPIN", "TURN"],
+  ["WHEEL ", "BONUS "],
+  ["BUY CARD", "REVEAL"],
+  ["Scratch", "Reveal"],
+  ["HEADS", "GOLD"],
+  ["TAILS", "SILVER"],
+  ["MINOR", "LOW"],
+  ["MAJOR", "TOP"],
+];
+// Toasts shout names in capitals, so each phrase also matches its uppercase form.
+const PORTAL_SAY_ALL = [];
+for (const pair of PORTAL_SAY) {
+  PORTAL_SAY_ALL.push(pair);
+  const up = pair[0].toUpperCase();
+  if (up !== pair[0]) PORTAL_SAY_ALL.push([up, pair[1].toUpperCase()]);
+}
+function portalSay(s) {
+  if (!PORTAL || typeof s !== "string" || s.length < 3) return s;
+  let t = s;
+  for (let i = 0; i < PORTAL_SAY_ALL.length; i++) {
+    const from = PORTAL_SAY_ALL[i][0];
+    if (t.includes(from)) t = t.split(from).join(PORTAL_SAY_ALL[i][1]);
+  }
+  return t;
+}
+if (PORTAL) {
+  document.documentElement.dataset.portal = PORTAL;
+  const tag = document.querySelector(".marquee small");
+  if (tag) tag.textContent = "BUILD THE CASCADE";
+  const fill = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, max) {
+    return fill.call(this, typeof text === "string" ? portalSay(text) : text, x, y, max);
+  };
+  const skip = { SCRIPT: 1, STYLE: 1 };
+  const rewriteNode = node => {
+    if (!node || skip[node.tagName]) return;
+    if (node.nodeType === 3) {
+      const next = portalSay(node.nodeValue);
+      if (next !== node.nodeValue) node.nodeValue = next;
+      return;
+    }
+    if (node.nodeType === 1) {
+      for (const attr of ["title", "aria-label", "alt"]) {
+        const v = node.getAttribute(attr);
+        if (!v) continue;
+        const next = portalSay(v);
+        if (next !== v) node.setAttribute(attr, next);
+      }
+      for (const child of node.childNodes) rewriteNode(child);
+    }
+  };
+  rewriteNode(document.body);
+  const mo = new MutationObserver(records => {
+    for (const rec of records) {
+      if (rec.type === "characterData") rewriteNode(rec.target);
+      else if (rec.type === "attributes") rewriteNode(rec.target);
+      else rec.addedNodes.forEach(rewriteNode);
+    }
+  });
+  mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["title", "aria-label", "alt"] });
+}
+// CrazyGames SDK state. Unused unless this is the CrazyGames zip and the SDK initialises.
+const cg = { sdk: null, data: null, mute: false, playing: false, applyMute() {} };
+function persistGet(key) {
+  if (cg.data) { try { return cg.data.getItem(key); } catch { return null; } }
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function persistSet(key, value) {
+  const s = String(value);
+  if (cg.data) { try { cg.data.setItem(key, s); return; } catch {} }
+  localStorage.setItem(key, s);
+}
+function persistRemove(key) {
+  if (cg.data) { try { cg.data.removeItem(key); return; } catch {} }
+  try { localStorage.removeItem(key); } catch {}
+}
+function cgCall(fn) {
+  if (PORTAL !== "crazygames" || !cg.sdk) return;
+  try { fn(cg.sdk); } catch {}
+}
+function cgPlay(on) {
+  on = !!on;
+  if (on === cg.playing) return;
+  cg.playing = on;
+  cgCall(SDK => { if (on) SDK.game.gameplayStart(); else SDK.game.gameplayStop(); });
+}
+function cgHappy() { cgCall(SDK => SDK.game.happytime()); }
+async function bootPortalSdk() {
+  if (PORTAL !== "crazygames") return;
+  const SDK = window.CrazyGames && window.CrazyGames.SDK;
+  if (!SDK) return;
+  try {
+    await Promise.race([
+      SDK.init(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("CrazyGames SDK init timed out")), 8000)),
+    ]);
+    cg.sdk = SDK;
+    try { SDK.game.loadingStart(); } catch {}
+    try {
+      SDK.data.getItem("cc_save_v4");
+      cg.data = SDK.data;
+      // One-time copy so a save made before the data module was enabled is not dropped.
+      for (const k of ["cc_save_v4", "cc_settings", "cc_backups", "cc_save_before_reset"]) {
+        try {
+          if (cg.data.getItem(k) == null) {
+            const v = localStorage.getItem(k);
+            if (v != null) cg.data.setItem(k, v);
+          }
+        } catch {}
+      }
+    } catch { cg.data = null; }
+    const readMute = s => { cg.mute = !!(s && s.muteAudio); cg.applyMute(); };
+    try { readMute(SDK.game.settings); SDK.game.addSettingsChangeListener(readMute); } catch {}
+  } catch {}
+}
+// The public web build ships its own copies of the libraries (and works offline). A bare copy of this file uses the CDNs.
+// Portal zips always use the local copies and never the CDNs.
 const HOSTED = !!document.querySelector('link[rel="manifest"]');
-const local = f => HOSTED ? [new URL("lib/" + f, location.href).href] : [];
+const BUNDLED = HOSTED || !!PORTAL;
+const local = f => BUNDLED ? [new URL("lib/" + f, location.href).href] : [];
+let THREE_CDN = [], RAPIER_CDN = [];
+if (!PORTAL) {
+  /*PORTAL_EXTERNAL*/
+  THREE_CDN = [
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "https://unpkg.com/three@0.160.0/build/three.module.js",
+  ];
+  RAPIER_CDN = [
+    "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
+    "https://unpkg.com/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
+  ];
+  /*END_PORTAL_EXTERNAL*/
+}
+await bootPortalSdk();
 setLoad("Loading the 3D engine…", 0);
-const THREE = await loadFrom([
-  ...local("three.module.js"),
-  "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "https://unpkg.com/three@0.160.0/build/three.module.js",
-]);
+const THREE = await loadFrom([...local("three.module.js"), ...THREE_CDN]);
 setLoad("Loading the physics engine…", 0.1);
-const RAPIER = (await loadFrom([
-  ...local("rapier.es.js"),
-  "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
-  "https://unpkg.com/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
-])).default;
+const RAPIER = (await loadFrom([...local("rapier.es.js"), ...RAPIER_CDN])).default;
 await RAPIER.init();
 setLoad("Setting up the machine…", 0.25);
 {
@@ -829,7 +1038,7 @@ Object.assign(PALETTES, {
     gold: "#ffc93c", text1: "#ffffff", text2: "#2ec4b6", backdrop: "dots",
     silver: { base: "#f4f2ee", mid: "#c6c0b6", rim: "#7c766c", hi: "#ffffff", ink: "#9c968c" }, silverSide: "#b4aea4" },
 });
-const chosenTheme = (() => { try { return (JSON.parse(localStorage.getItem("cc_settings")) || {}).theme; } catch { return null; } })();
+const chosenTheme = (() => { try { return (JSON.parse(persistGet("cc_settings")) || {}).theme; } catch { return null; } })();
 const P = PALETTES[(location.hash.match(/p-(\w+)/) || [])[1]] || PALETTES[chosenTheme] || PALETTES.midnight;
 const hex = c => parseInt(c.slice(1), 16);
 {
@@ -852,8 +1061,8 @@ const STEP = 1 / 60;         // physics step
 
 // ---------- Save data (per-browser convenience only) ----------
 const store = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  get(k, d) { try { const v = persistGet(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { persistSet(k, JSON.stringify(v)); } catch {} },
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
@@ -861,8 +1070,9 @@ const VERSION = "1.35.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
-const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(localStorage.getItem("cc_settings")) || {}; } catch { return {}; } })());
-const saveSettings = () => { try { localStorage.setItem("cc_settings", JSON.stringify(settings)); } catch {} };
+const settings = Object.assign({ sound: true, volume: 0.7, music: true, musicVol: 0.5, theme: "midnight", coinStyle: "classic", seenCos: [], calm: matchMedia("(prefers-reduced-motion: reduce)").matches }, (() => { try { return JSON.parse(persistGet("cc_settings")) || {}; } catch { return {}; } })());
+if (cg.mute) { settings.sound = false; settings.music = false; }
+const saveSettings = () => { try { persistSet("cc_settings", JSON.stringify(settings)); } catch {} };
 const saved = store.get(SAVE_KEY, null);
 let bank = saved ? saved.bank : 0, earned = saved ? saved.earned : 0, dropped = saved ? saved.dropped : 0;
 const ups = (saved && saved.up) || {};
@@ -998,7 +1208,7 @@ function checkAch() {
     achDone[a.id] = true; if (quiet) continue;
     showToast("ACHIEVEMENT: " + a.name.toUpperCase(), a.how);
     const r = Math.floor(ACH.indexOf(a) / 8);
-    if (achRow(r)) setTimeout(() => showToast("ROW COMPLETE: " + ACH_ROWS[r].name.toUpperCase(), ACH_ROWS[r].reward), 3600);
+    if (achRow(r)) { cgHappy(); setTimeout(() => showToast("ROW COMPLETE: " + ACH_ROWS[r].name.toUpperCase(), ACH_ROWS[r].reward), 3600); }
     save();
   }
 }
@@ -1503,7 +1713,7 @@ function drawBoard() {
   g.fillStyle = P.accentA; g.fillRect(0, by(PLATE_TOP), boardCanvas.width, (PLATE_TOP - 8.95) * PX);
   g.textAlign = "center"; g.textBaseline = "middle";
   g.font = '12px "Press Start 2P", monospace';
-  g.fillStyle = P.signShadow; g.fillText(`★ ×${BOARD.slots[(BOARD.slots.length - 1) / 2]} JACKPOT ★`, bx(0), by(9.12));
+  g.fillStyle = P.signShadow; g.fillText(`★ ×${BOARD.slots[(BOARD.slots.length - 1) / 2]} ${PORTAL ? "BONUS" : "JACKPOT"} ★`, bx(0), by(9.12));
   // slots with their multipliers
   BOARD.slots.forEach((m, k) => {
     const x0 = board.edges[k], w = board.edges[k + 1] - x0;
@@ -2165,10 +2375,16 @@ const music = (() => {
     },
     stop() { if (!timer) return; clearInterval(timer); timer = null; out.disconnect(); out = null; },
     volume() { if (out) out.gain.value = settings.music ? settings.musicVol * 0.9 : 0; },
-    toggle(on) { settings.music = on; saveSettings(); if (on) { sfx.unlock(); this.start(sfx.ctx); } this.volume(); },
+    toggle(on) { if (cg.mute) on = false; settings.music = on; saveSettings(); if (on) { sfx.unlock(); this.start(sfx.ctx); } this.volume(); },
     skip() { if (!ac) return; pick(true); nextT = ac.currentTime + 0.1; },
   };
 })();
+cg.applyMute = () => {
+  if (!cg.mute) return;
+  settings.sound = false; settings.music = false;
+  try { music.stop(); } catch {}
+};
+cg.applyMute();
 
 // Go silent when the game is out of sight (app switched away, phone locked, tab in the background) and carry on when it's back.
 // Phones otherwise keep an installed web app's audio running after you leave it.
@@ -3132,7 +3348,9 @@ function renderHelp() {
       "The game saves itself every few seconds on this device.",
       "Menu → Settings → Backups keeps older copies (the newest few, plus your best ever) that you can restore.",
       "Export Save File downloads your save to keep somewhere safe; Import Save File loads one back.",
-      "Cloud Save (sign in with Google, completely optional) keeps your game online and syncs it between your phone and computer. It's the best protection if your browser data ever gets cleared.",
+      PORTAL
+        ? "Progress stays on this device. There is no account sign-in in this version."
+        : "Cloud Save (sign in with Google, completely optional) keeps your game online and syncs it between your phone and computer. It's the best protection if your browser data ever gets cleared.",
       "Only one copy of the game plays at a time. If you open it in another tab or window, the older one pauses so they can't overwrite each other.",
     ]],
   ];
@@ -3158,13 +3376,14 @@ function parseSaveCode(text) {
   try { data = JSON.parse(decodeURIComponent(escape(atob(t)))); } catch { try { data = JSON.parse(t); } catch { data = null; } }
   return data && typeof data.bank === "number" ? data : null;
 }
-const exportCode = () => { save(); try { return btoa(unescape(encodeURIComponent(localStorage.getItem(SAVE_KEY) || ""))); } catch { return ""; } };
+const exportCode = () => { save(); try { return btoa(unescape(encodeURIComponent(persistGet(SAVE_KEY) || ""))); } catch { return ""; } };
 function renderSettings() {
   const w = cardsWrap("");
   // sound
   const snd = card("", "Sound", [["Chiptune sound effects for drops, pegs and payouts.", ""]]);
   const tg = document.createElement("button"); tg.type = "button"; tg.textContent = settings.sound ? "SOUND: ON" : "SOUND: OFF";
-  tg.addEventListener("click", () => { settings.sound = !settings.sound; saveSettings(); sfx.unlock(); sfx.click(); renderTree(); });
+  tg.addEventListener("click", () => { if (cg.mute) return; settings.sound = !settings.sound; saveSettings(); sfx.unlock(); sfx.click(); renderTree(); });
+  if (cg.mute) { tg.disabled = true; tg.textContent = "SOUND: OFF"; }
   const lab = document.createElement("label"); lab.className = "vol"; lab.htmlFor = "volSlider"; lab.textContent = `Volume ${Math.round(settings.volume * 100)}%`;
   const vol = document.createElement("input"); vol.type = "range"; vol.id = "volSlider"; vol.min = "0"; vol.max = "1"; vol.step = "0.05"; vol.value = settings.volume;
   vol.addEventListener("input", () => { settings.volume = +vol.value; lab.textContent = `Volume ${Math.round(settings.volume * 100)}%`; saveSettings(); });
@@ -3187,7 +3406,8 @@ function renderSettings() {
   // music
   const mu = card("", "Music", [[`Five original chiptune tracks that shuffle: ${TRACKS.map(t => t.name).join(", ")}.`, ""]]);
   const mt = document.createElement("button"); mt.type = "button"; mt.textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
-  mt.addEventListener("click", () => { music.toggle(!settings.music); renderTree(); });
+  mt.addEventListener("click", () => { if (cg.mute) return; music.toggle(!settings.music); renderTree(); });
+  if (cg.mute) { mt.disabled = true; mt.textContent = "MUSIC: OFF"; }
   const ml = document.createElement("label"); ml.className = "vol"; ml.htmlFor = "musicSlider"; ml.textContent = `Music volume ${Math.round(settings.musicVol * 100)}%`;
   const mv = document.createElement("input"); mv.type = "range"; mv.id = "musicSlider"; mv.min = "0"; mv.max = "1"; mv.step = "0.05"; mv.value = settings.musicVol;
   mv.addEventListener("input", () => { settings.musicVol = +mv.value; ml.textContent = `Music volume ${Math.round(settings.musicVol * 100)}%`; saveSettings(); music.volume(); });
@@ -3196,24 +3416,26 @@ function renderSettings() {
   sk.addEventListener("click", () => { sfx.unlock(); music.skip(); });
   mu.append(mt, ml, mv, np, sk); w.appendChild(mu);
   // save file
-  const bk = card("", "Save file", [["Download your progress as a file to keep somewhere safe, or load one back in." + (HOSTED ? "" : " Downloads only work in the app or on the GitHub page."), ""]]);
+  const bk = card("", "Save file", [["Download your progress as a file to keep somewhere safe, or load one back in." + (BUNDLED ? "" : " Downloads only work in the app or on the GitHub page."), ""]]);
   const row = document.createElement("div"); row.className = "row";
   const ex = document.createElement("button"); ex.type = "button"; ex.textContent = "EXPORT SAVE FILE";
-  ex.addEventListener("click", () => { if (HOSTED && exportSaveFile()) ex.textContent = "DOWNLOADED"; });
+  ex.addEventListener("click", () => { if (BUNDLED && exportSaveFile()) ex.textContent = "DOWNLOADED"; });
   const im = document.createElement("button"); im.type = "button"; im.className = "quit"; im.textContent = "IMPORT SAVE FILE";
   im.addEventListener("click", importSaveFile);
   row.append(ex, im); bk.appendChild(row);
-  // cloud save
-  const cs = card("", "Cloud save", [[cloudStatus(), ""]]);
-  cs.querySelector("p").id = "cloudStatus";
-  const crow = document.createElement("div"); crow.className = "row";
-  if (!syncReady()) { /* explained in the status line */ }
-  else if (!fbUser) { const si = document.createElement("button"); si.type = "button"; si.textContent = "SIGN IN WITH GOOGLE"; si.addEventListener("click", cloudSignIn); crow.appendChild(si); }
-  else {
-    const sn = document.createElement("button"); sn.type = "button"; sn.textContent = "SYNC NOW"; sn.addEventListener("click", () => cloudSync(true)); crow.appendChild(sn);
-    const so = document.createElement("button"); so.type = "button"; so.className = "quit"; so.textContent = "SIGN OUT"; so.addEventListener("click", cloudSignOut); crow.appendChild(so);
+  // cloud save (omitted on portal copies: no external account)
+  if (!PORTAL) {
+    const cs = card("", "Cloud save", [[cloudStatus(), ""]]);
+    cs.querySelector("p").id = "cloudStatus";
+    const crow = document.createElement("div"); crow.className = "row";
+    if (!syncReady()) { /* explained in the status line */ }
+    else if (!fbUser) { const si = document.createElement("button"); si.type = "button"; si.textContent = "SIGN IN WITH GOOGLE"; si.addEventListener("click", cloudSignIn); crow.appendChild(si); }
+    else {
+      const sn = document.createElement("button"); sn.type = "button"; sn.textContent = "SYNC NOW"; sn.addEventListener("click", () => cloudSync(true)); crow.appendChild(sn);
+      const so = document.createElement("button"); so.type = "button"; so.className = "quit"; so.textContent = "SIGN OUT"; so.addEventListener("click", cloudSignOut); crow.appendChild(so);
+    }
+    cs.appendChild(crow); w.appendChild(cs);
   }
-  cs.appendChild(crow); w.appendChild(cs);
   w.appendChild(bk);
   // backups kept on this device
   const bl = getBackups();
@@ -3299,6 +3521,7 @@ const CHALLENGES = [
 // a fresh run keeps everything permanent and resets the machine
 function doRebirth() {
   const n = tokenGain(); if (n < 1) return;
+  cgHappy();
   tokens += n; tokensAsc += n; rebirths++; stats.tokensTotal = (stats.tokensTotal || 0) + n;
   if (runTime < 300) stats.fastReb5 = 1;
   store.set(SAVE_KEY, freshRun({ bank: startCoins(), chActive: null }));
@@ -3307,6 +3530,7 @@ function doRebirth() {
 // the third reset: everything up to and including gems and the ascension tree, for Parts
 function doRebuild() {
   const n = partGain(); if (n < 1) return;
+  cgHappy();
   parts += n; partsTotal += n; rebuilds++; gemsRb = 0; ascT = S("playTime"); ascPk = 0;
   gems = 0; tokens = 0; tokensAsc = 0;
   for (const k in rups) delete rups[k];
@@ -3318,6 +3542,7 @@ function doRebuild() {
 }
 function doAscend() {
   const g = gemGain(); if (g < 1) return;
+  cgHappy();
   gems += g; gemsTotal += g; gemsRb += g; ascensions++; tokensAsc = 0; tokens = Math.floor(tokens * 0.1 * wl("tokvault"));
   ascT = S("playTime"); ascPk = 0;
   for (const k in rups) delete rups[k];
@@ -3536,7 +3761,7 @@ const EVENTS = [
   { id: "gold", name: "GOLD RUSH", desc: "Coins are worth double", dur: 10 },
   { id: "frenzy", name: "FRENZY", desc: "Fast drops, and they're free", dur: 8 },
   { id: "shower", name: "COIN SHOWER", desc: "Free coins rain onto the board", dur: 4 },
-  { id: "magnet", name: "JACKPOT MAGNET", desc: "Every coin reaching the middle stays in it", dur: 10 },
+  { id: "magnet", name: PORTAL ? "BONUS MAGNET" : "JACKPOT MAGNET", desc: "Every coin reaching the middle stays in it", dur: 10 },
 ];
 let ev = null, evEnd = 0, nextEv = 0, evFrom = 0, showerT = 0;
 const eventOn = id => ev && ev.id === id;
@@ -3574,7 +3799,7 @@ function updateEvents(dt) {
 
 // ---------- Save ----------
 let saveBlocked = false;
-const SID = Math.random().toString(36).slice(2), IS_MINI_PAGE = location.hash === "#mini";
+const SID = Math.random().toString(36).slice(2), IS_MINI_PAGE = !PORTAL && location.hash === "#mini";
 // someone else saved since this copy last did (the app and a browser tab, or a copy waking up from the background)
 let lastSaveT = (saved && saved.t) || 0;
 const savedElsewhere = () => { if (IS_MINI_PAGE || location.hash === "#sim") return false; const cur = store.get(SAVE_KEY, null); return !!(cur && (cur.t || 0) > lastSaveT + 1 && cur.sid !== SID); };
@@ -3604,7 +3829,7 @@ const slimSave = d => { // the coins on the machine and in the tray come along a
   o.bank = (o.bank || 0) + (o.tray || []).reduce((a, v) => a + v, 0) + (o.inflight || 0);
   delete o.coins; delete o.tray; delete o.inflight; delete o.pusherT; return o;
 };
-const getBackups = () => { try { return JSON.parse(localStorage.getItem(BK_KEY)) || []; } catch { return []; } };
+const getBackups = () => { try { return JSON.parse(persistGet(BK_KEY)) || []; } catch { return []; } };
 function backupSave(reason, data) {
   try {
     const d = data || store.get(SAVE_KEY, null);
@@ -3615,13 +3840,13 @@ function backupSave(reason, data) {
     else list.unshift(e);
     const best = list.reduce((b, x) => (x.earned > b.earned ? x : b), list[0]);
     list = list.slice(0, 6); if (!list.includes(best)) list.push(best);
-    try { localStorage.setItem(BK_KEY, JSON.stringify(list)); }
-    catch { localStorage.setItem(BK_KEY, JSON.stringify([list[0], best].filter((x, i, a) => a.indexOf(x) === i))); } // storage nearly full
+    try { persistSet(BK_KEY, JSON.stringify(list)); }
+    catch { persistSet(BK_KEY, JSON.stringify([list[0], best].filter((x, i, a) => a.indexOf(x) === i))); } // storage nearly full
   } catch {}
 }
 if (location.hash !== "#sim") {
   // the copy kept by the old delete button becomes a backup too
-  try { const old = localStorage.getItem("cc_save_before_reset"); if (old) { const d = JSON.parse(old); if (d) { backupSave("before deleting", d); } localStorage.removeItem("cc_save_before_reset"); } } catch {}
+  try { const old = persistGet("cc_save_before_reset"); if (old) { const d = JSON.parse(old); if (d) { backupSave("before deleting", d); } persistRemove("cc_save_before_reset"); } } catch {}
   if (saved) backupSave("opened the game", saved);
   setInterval(() => { if (!saveBlocked) { save(); backupSave("autosave"); } }, 600000);
   // ask the browser not to clear this site's storage when space runs low
@@ -4171,6 +4396,7 @@ if (saved && saved.coins) {
 }
 warm = true;
 $("loading").hidden = true;
+cgCall(SDK => SDK.game.loadingStop());
 refreshHud();
 
 // ---------- Mystery coins ----------
@@ -4231,9 +4457,9 @@ function updateReels(dt) {
       const mult = reelPayout(reelRes), win = mult * coinValue() * payoutMult();
       if (win > 0) {
         bank += win; earned += win; runEarned += win; rateEarn += win; wheelCharge += win;
-        $("reels").classList.add("win"); $("reelMsg").textContent = `${mult >= 30 ? "JACKPOT! " : ""}+${fmtV(win)} coins`;
+        $("reels").classList.add("win"); $("reelMsg").textContent = `${mult >= 30 ? (PORTAL ? "BONUS! " : "JACKPOT! ") : ""}+${fmtV(win)} coins`;
         if (mult >= 100) stats.reel777 = (stats.reel777 || 0) + 1;
-        if (mult >= 15) showToast(mult >= 100 ? "777 JACKPOT!" : "BIG REEL WIN", `+${fmt(win)} coins`); else sfx.win(mult);
+        if (mult >= 15) showToast(mult >= 100 ? (PORTAL ? "777 BONUS!" : "777 JACKPOT!") : "BIG REEL WIN", `+${fmt(win)} coins`); else sfx.win(mult);
         refreshHud();
       } else $("reelMsg").textContent = "No match";
     }
@@ -4415,6 +4641,7 @@ function frame() {
 let newArmed = 0;
 function openTitle() {
   titleOpen = true; holding = false;
+  cgPlay(false);
   $("ver").textContent = `v${VERSION}`;
   const has = !!saved || earned > 0;
   $("tContinue").textContent = has ? "CONTINUE" : "START";
@@ -4425,9 +4652,11 @@ function openTitle() {
   $("title").hidden = false;
   setTimeout(() => $("tContinue").focus(), 50);
 }
-// One GoatCounter event when play begins. The script counts the visit on its own.
-// count.js loads async and has no queue, so wait briefly if the player starts first.
+// One visit-counter event when play begins. The script counts the visit on its own.
+// It loads async and has no queue, so wait briefly if the player starts first.
 function countGameStart() {
+  if (PORTAL) return;
+  /*PORTAL_EXTERNAL*/
   const vars = { path: "coin-cascade-start", title: "Game started", event: true };
   let tries = 0;
   const send = () => {
@@ -4438,9 +4667,11 @@ function countGameStart() {
   };
   if (send()) return;
   const timer = setInterval(() => { if (send() || ++tries >= 40) clearInterval(timer); }, 250);
+  /*END_PORTAL_EXTERNAL*/
 }
 function startGame() {
   titleOpen = false; $("title").hidden = true;
+  cgPlay(true);
   countGameStart();
   try { const n = sessionStorage.getItem("cc_rebuilt"); if (n) { sessionStorage.removeItem("cc_rebuilt"); setTimeout(() => { sfx.rebuilt(); showToast("MACHINE REBUILT", `+${n} part${n === "1" ? "" : "s"}: spend them in the Workshop`); }, 700); } } catch {}
   try { sessionStorage.setItem("cc_inGame", "1"); } catch {}
@@ -4452,10 +4683,13 @@ function startGame() {
 const goInGame = () => { try { sessionStorage.setItem("cc_inGame", "1"); } catch {} };
 $("tContinue").addEventListener("click", startGame);
 $("tCopy").addEventListener("click", () => {
-  if (!HOSTED) { $("tInfo").textContent = "Save files can only be downloaded in the app or on the GitHub page."; return; }
+  if (!BUNDLED) { $("tInfo").textContent = "Save files can only be downloaded in the app or on the GitHub page."; return; }
   $("tInfo").textContent = exportSaveFile() ? "Save file downloaded. Keep it somewhere safe." : "Your browser blocked the download.";
 });
-$("tMusic").addEventListener("click", () => { music.toggle(!settings.music); $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF"; });
+$("tMusic").addEventListener("click", () => {
+  if (cg.mute) { $("tInfo").textContent = "Sound is muted by the site."; return; }
+  music.toggle(!settings.music); $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
+});
 $("tLoad").addEventListener("click", importSaveFile);
 $("tCloud").addEventListener("click", async () => {
   if (syncReady() && !fbUser) await cloudSignIn(); else if (fbUser) await cloudSync(true);
@@ -4473,7 +4707,6 @@ $("title").addEventListener("keydown", () => sfx.unlock());
 // ---------- Send to another device ----------
 // Your progress packed into a link (and a QR code of it). Open it on another phone or computer and the game there
 // offers to load it. No accounts or servers: the save travels inside the link itself.
-const GAME_URL = "https://salvationbacon.github.io/Coin-Cascade/";
 function transferSave() {
   save(); const d = store.get(SAVE_KEY, null); if (!d) return null;
   const out = Object.assign({}, d);
@@ -4505,11 +4738,11 @@ let resetPending = false;
 function askReset() {
   cloudPending = null; recvData = null; resetPending = true;
   $("recvTitle").textContent = "Delete your game?";
-  $("recvMsg").textContent = `This wipes everything: ${saveLine({ earned, rebirths, ascensions })}.${HOSTED ? " A backup file is downloaded first, so you can load it back with IMPORT SAVE." : ""}${fbUser ? " Your cloud save will be replaced too." : ""}`;
+  $("recvMsg").textContent = `This wipes everything: ${saveLine({ earned, rebirths, ascensions })}.${BUNDLED ? " A backup file is downloaded first, so you can load it back with IMPORT SAVE." : ""}${fbUser ? " Your cloud save will be replaced too." : ""}`;
   $("recvYes").textContent = "DELETE EVERYTHING"; $("recvNo").textContent = "KEEP MY GAME"; $("recvYes").hidden = false; $("recvBox").hidden = false;
 }
 function doReset() {
-  if (HOSTED) exportSaveFile();
+  if (BUNDLED) exportSaveFile();
   settings.seenTut = false; settings.seenBank = false; settings.panel = false; saveSettings(); // the new game starts like a first game, tutorial and all
   save(); backupSave("before deleting");
   setTimeout(() => { store.set(SAVE_KEY, null); saveBlocked = true; location.reload(); }, 400);
@@ -4519,7 +4752,7 @@ function doReset() {
 // Export downloads your whole save as a small .json file; import reads one back in (older save codes in a file work too).
 function exportSaveFile() {
   save();
-  const raw = localStorage.getItem(SAVE_KEY) || "{}", d = new Date(), pad = n => String(n).padStart(2, "0");
+  const raw = persistGet(SAVE_KEY) || "{}", d = new Date(), pad = n => String(n).padStart(2, "0");
   try {
     const url = URL.createObjectURL(new Blob([raw], { type: "application/json" })), a = document.createElement("a");
     a.href = url; a.download = `coin-cascade-save-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
@@ -4541,7 +4774,7 @@ $("tFile").addEventListener("change", e => {
   };
   r.readAsText(f);
 });
-function updateTitleCloud() { const b = $("tCloud"); if (b) b.textContent = fbUser ? "CLOUD SAVE: ON" : "CLOUD SAVE"; }
+function updateTitleCloud() { const b = $("tCloud"); if (!b) return; if (PORTAL) { b.hidden = true; return; } b.hidden = false; b.textContent = fbUser ? "CLOUD SAVE: ON" : "CLOUD SAVE"; }
 
 // arriving with a #load= link: offer to swap this device's progress for the one in the link
 let recvData = null;
@@ -4570,16 +4803,22 @@ $("recvNo").addEventListener("click", () => {
   }
 });
 
-// ---------- Cloud save (Firebase, free plan) ----------
-// Sign in with Google once per device; the save then syncs on its own. Each upload carries a revision number, so a
+// ---------- Cloud save (optional account sync) ----------
+// Sign in once per device; the save then syncs on its own. Each upload carries a revision number, so a
 // device only overwrites the cloud if it has seen the latest revision. If two devices both moved on, you choose.
-// the web app's Firebase settings (public by design: the Firestore rules are what keep each player's save private)
-const FIREBASE = { apiKey: "AIzaSyDHU6U6jmZYNurHGe63jIcavoV7_NfWTQQ", authDomain: "coin-cascade-a4967.firebaseapp.com", projectId: "coin-cascade-a4967",
-  storageBucket: "coin-cascade-a4967.firebasestorage.app", messagingSenderId: "1011669328996", appId: "1:1011669328996:web:fe4f4941ee518ea6b8ab71" };
-const FB_SDK = "https://cdn.jsdelivr.net/npm/firebase@10.12.2/";
+// Portal zips leave this unset: they keep the save on the device (and, on CrazyGames, in the SDK data module).
+let FIREBASE = null, FB_SDK = "";
+if (!PORTAL) {
+  /*PORTAL_EXTERNAL*/
+  // Public by design; Firestore rules keep each player's save private.
+  FIREBASE = { apiKey: "AIzaSyDHU6U6jmZYNurHGe63jIcavoV7_NfWTQQ", authDomain: "coin-cascade-a4967.firebaseapp.com", projectId: "coin-cascade-a4967",
+    storageBucket: "coin-cascade-a4967.firebasestorage.app", messagingSenderId: "1011669328996", appId: "1:1011669328996:web:fe4f4941ee518ea6b8ab71" };
+  FB_SDK = "https://cdn.jsdelivr.net/npm/firebase@10.12.2/";
+  /*END_PORTAL_EXTERNAL*/
+}
 let fb = null, fbUser = null, fbLoading = null, lastUp = "", cloudBusy = false, cloudMsg = "";
 const syncMeta = { get() { try { return JSON.parse(localStorage.getItem("cc_sync") || "{}"); } catch { return {}; } }, set(m) { try { localStorage.setItem("cc_sync", JSON.stringify(m)); } catch {} } };
-const syncReady = () => !!(FIREBASE && HOSTED);
+const syncReady = () => !!(FIREBASE && HOSTED && !PORTAL);
 function cloudStatus() {
   if (!FIREBASE) return "Cloud save isn't switched on for this copy of the game yet.";
   if (!HOSTED) return "Cloud save works in the installed app and on the GitHub page, not here.";
@@ -4666,7 +4905,9 @@ const TUT = [
   { title: "Drop coins", text: () => matchMedia("(pointer: coarse)").matches ? "Tap the board to drop a coin, or hold to keep dropping. The gold coin at the top fills up when your next drop is ready." : "Click the board or press Space to drop a coin; hold to keep dropping. The gold coin at the top fills up when your next drop is ready.", spot: "drop" },
   { title: "Your coins", text: "Each drop costs coins, and regen slowly tops you up. THIS RUN counts what you've earned since your last rebirth.", spot: ".top .counters" },
   { title: "The coin tray", text: "Coins that fall off the pusher land in the tray. Press BANK to turn them into coins you can spend. A full tray banks itself.", spot: "#vault" },
-  { title: "The menus", text: "Upgrades makes the machine better, Arcade has the gambles, Goals has achievements and challenges, Prestige is for rebirths, and Menu has settings and cloud save.", spot: "#rail" },
+  { title: "The menus", text: PORTAL
+    ? "Upgrades makes the machine better, Arcade has the mini-games, Goals has achievements and challenges, Prestige is for rebirths, and Menu has settings."
+    : "Upgrades makes the machine better, Arcade has the gambles, Goals has achievements and challenges, Prestige is for rebirths, and Menu has settings and cloud save.", spot: "#rail" },
   { title: "The aim of the game", text: "Earn 1,000 coins in a run, then rebirth for tokens. Tokens buy permanent upgrades, so every run goes further than the last. Later you'll ascend for gems. Have fun!" },
 ];
 let tutI = -1;
@@ -4704,32 +4945,36 @@ addEventListener("resize", () => { if (tutI >= 0) showTut(tutI); });
 
 // ---------- Portrait only on phones ----------
 // Installed apps and full-screen pages can lock the screen; elsewhere the "turn your phone upright" screen covers the game.
-try { if (matchMedia("(pointer: coarse)").matches && screen.orientation && screen.orientation.lock) screen.orientation.lock("portrait").catch(() => {}); } catch {}
+if (!PORTAL) try { if (matchMedia("(pointer: coarse)").matches && screen.orientation && screen.orientation.lock) screen.orientation.lock("portrait").catch(() => {}); } catch {}
 
 // ---------- Install button ----------
 // Chrome and Edge hand us an install prompt; on iPhone and iPad it's Share, then Add to Home Screen.
 let installEvt = null;
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-function updateInstall() { $("tInstall").hidden = !HOSTED || isStandalone() || !(installEvt || isIOS()); }
+function updateInstall() { $("tInstall").hidden = !!PORTAL || !HOSTED || isStandalone() || !(installEvt || isIOS()); }
 addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; updateInstall(); });
 addEventListener("appinstalled", () => { installEvt = null; updateInstall(); });
 $("tInstall").addEventListener("click", async () => {
   if (installEvt) { const e = installEvt; installEvt = null; try { e.prompt(); await e.userChoice; } catch {} updateInstall(); return; }
   $("tInfo").textContent = "In Safari, tap Share (the square with an arrow), then Add to Home Screen. It then opens full screen like an app.";
 });
-if (HOSTED && "serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => {});
+if (!PORTAL && HOSTED && "serviceWorker" in navigator && isSecureContext) {
+  /*PORTAL_EXTERNAL*/
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  /*END_PORTAL_EXTERNAL*/
+}
 updateInstall();
 
 // ---------- Mini window ----------
 // On a computer, the game can run in a small phone-shaped window to keep in a corner while you work.
 // Chrome and Edge use an always-on-top picture-in-picture window; other browsers get a plain popup.
 // Only one window plays at a time: this one stops saving while the mini one runs, then reloads its save.
-const IS_MINI = location.hash === "#mini";
+const IS_MINI = !PORTAL && location.hash === "#mini";
 const MINI_W = 380, MINI_H = 700;
 const chan = "BroadcastChannel" in window ? new BroadcastChannel("cc_mini") : null;
 let miniWin = null;
-function canMini() { return !IS_MINI && innerWidth >= 700 && !matchMedia("(pointer: coarse)").matches; }
+function canMini() { return !PORTAL && !IS_MINI && innerWidth >= 700 && !matchMedia("(pointer: coarse)").matches; }
 function updateMini() { $("tMini").hidden = !canMini(); }
 function goAway(win) {
   miniWin = win; awayOn = true; saveBlocked = true; titleOpen = true; holding = false;
@@ -4745,6 +4990,7 @@ function comeBack() {
   goInGame(); setTimeout(() => location.reload(), 300); // give the mini window a moment to save
 }
 async function openMini() {
+  if (PORTAL) return;
   save();
   const url = location.href.split("#")[0] + "#mini";
   if ("documentPictureInPicture" in window) {
