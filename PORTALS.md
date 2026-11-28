@@ -22,7 +22,7 @@ The nested CrazyGames zip keeps `lib/` and `fonts/` folders. CrazyGames' uploade
 
 Both copies:
 
-- Keep the save on the device (`localStorage`). Export and import of a save file still work.
+- Keep the save on the device (`localStorage`). On CrazyGames the SDK data module is used first when it is available. If the browser blocks storage and the data module is not available, progress is kept in `window.name` until the tab closes, and the title screen says to use Export Save in Settings. That notice does not name any other site. Export and import of a save file still work.
 - Do not load Firebase, Google sign-in, GoatCounter, the Google Fonts CDN, jsDelivr, or unpkg. Press Start 2P and VT323 are embedded (SIL Open Font License; see `fonts/OFL-*.txt` in the zip).
 - Do not ship `manifest.json` or `sw.js`, and do not offer Install App or the mini window.
 - Do not link to GitHub Pages, itch, or Ko-fi. There is no Ko-fi link in the game today.

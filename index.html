@@ -883,9 +883,8 @@ if (PORTAL) {
 }
 // CrazyGames SDK state. Unused unless this is the CrazyGames zip and the SDK initialises.
 const cg = { sdk: null, data: null, mute: false, playing: false, applyMute() {} };
-// Some browsers block storage inside an embedded frame (Opera on itch.io, for one). Then the save is kept in the
-// page's window.name instead: it survives the game's own reloads (rebirth, ascend...) but not closing the tab, and
-// the player is told so.
+// Some browsers block storage inside an embedded frame. Then the save is kept in the page's window.name instead:
+// it survives the game's own reloads (rebirth, ascend...) but not closing the tab, and the player is told so.
 const lsOk = (() => { try { localStorage.setItem("cc_test", "1"); localStorage.removeItem("cc_test"); return true; } catch { return false; } })();
 const memSave = (() => {
   let o = {}; try { if (typeof window.name === "string" && window.name.startsWith("ccmem:")) o = JSON.parse(window.name.slice(6)); } catch {}
@@ -2226,7 +2225,7 @@ gameEl.addEventListener("contextmenu", e => e.preventDefault());
 gameEl.addEventListener("selectstart", e => e.preventDefault());
 addEventListener("pointerup", () => { holding = false; });
 addEventListener("pointercancel", () => { holding = false; });
-// released outside the game (e.g. outside itch.io's frame), switched tab or window: stop dropping
+// released outside the game's frame, switched tab or window: stop dropping
 const letGo = () => { holding = false; for (const k in keys) keys[k] = false; };
 gameEl.addEventListener("lostpointercapture", () => { holding = false; });
 addEventListener("blur", letGo);
@@ -4680,7 +4679,13 @@ function frame() {
 // ---------- Title screen ----------
 // Shown when the game is opened; rebirths, theme changes and loads inside a session skip it.
 let newArmed = 0;
-const storageWarning = () => lsOk || cg.data ? "" : "Your browser is blocking saves on this page, so progress only lasts until you close the tab. To keep it, play at salvationbacon.github.io/Coin-Cascade, allow cookies/site data for this site, or use Cloud Save or Export Save in Settings.";
+const storageWarning = () => {
+  if (lsOk || cg.data) return ""; // CrazyGames data module, or working browser storage, needs no warning
+  if (PORTAL) return "Your browser is blocking saves on this page, so progress only lasts until you close the tab. To keep it, use Export Save in Settings.";
+  /*PORTAL_EXTERNAL*/
+  return "Your browser is blocking saves on this page, so progress only lasts until you close the tab. To keep it, play at salvationbacon.github.io/Coin-Cascade, allow cookies/site data for this site, or use Cloud Save or Export Save in Settings.";
+  /*END_PORTAL_EXTERNAL*/
+};
 function openTitle() {
   titleOpen = true; holding = false;
   cgPlay(false);
