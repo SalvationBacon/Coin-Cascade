@@ -883,17 +883,28 @@ if (PORTAL) {
 }
 // CrazyGames SDK state. Unused unless this is the CrazyGames zip and the SDK initialises.
 const cg = { sdk: null, data: null, mute: false, playing: false, applyMute() {} };
+// Some browsers block storage inside an embedded frame (Opera on itch.io, for one). Then the save is kept in the
+// page's window.name instead: it survives the game's own reloads (rebirth, ascend...) but not closing the tab, and
+// the player is told so.
+const lsOk = (() => { try { localStorage.setItem("cc_test", "1"); localStorage.removeItem("cc_test"); return true; } catch { return false; } })();
+const memSave = (() => {
+  let o = {}; try { if (typeof window.name === "string" && window.name.startsWith("ccmem:")) o = JSON.parse(window.name.slice(6)); } catch {}
+  return { o, flush() { try { window.name = "ccmem:" + JSON.stringify(o); } catch {} } };
+})();
 function persistGet(key) {
   if (cg.data) { try { return cg.data.getItem(key); } catch { return null; } }
+  if (!lsOk) return key in memSave.o ? memSave.o[key] : null;
   try { return localStorage.getItem(key); } catch { return null; }
 }
 function persistSet(key, value) {
   const s = String(value);
   if (cg.data) { try { cg.data.setItem(key, s); return; } catch {} }
+  if (!lsOk) { memSave.o[key] = s; memSave.flush(); return; }
   localStorage.setItem(key, s);
 }
 function persistRemove(key) {
   if (cg.data) { try { cg.data.removeItem(key); return; } catch {} }
+  if (!lsOk) { delete memSave.o[key]; memSave.flush(); return; }
   try { localStorage.removeItem(key); } catch {}
 }
 function cgCall(fn) {
@@ -1073,7 +1084,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.36.0";
+const VERSION = "1.36.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2202,6 +2213,7 @@ function dropCoin(manual = true) {
   refreshHud();
 }
 
+const keys = {};
 const gameEl = $("game");
 gameEl.addEventListener("pointermove", aimFromPointer);
 gameEl.addEventListener("pointerdown", e => {
@@ -2214,7 +2226,12 @@ gameEl.addEventListener("contextmenu", e => e.preventDefault());
 gameEl.addEventListener("selectstart", e => e.preventDefault());
 addEventListener("pointerup", () => { holding = false; });
 addEventListener("pointercancel", () => { holding = false; });
-const keys = {};
+// released outside the game (e.g. outside itch.io's frame), switched tab or window: stop dropping
+const letGo = () => { holding = false; for (const k in keys) keys[k] = false; };
+gameEl.addEventListener("lostpointercapture", () => { holding = false; });
+addEventListener("blur", letGo);
+document.addEventListener("visibilitychange", () => { if (document.hidden) letGo(); });
+addEventListener("pointermove", e => { if (holding && e.pointerType === "mouse" && !e.buttons) holding = false; }); // came back with the button already up
 addEventListener("keydown", e => {
   keys[e.code] = true;
   if (e.code === "Space") { e.preventDefault(); sfx.unlock(); if (!$("towerPanel").hidden && stk.phase === "move") { if (!e.repeat) stStop(); return; } dropCoin(); }
@@ -4663,6 +4680,7 @@ function frame() {
 // ---------- Title screen ----------
 // Shown when the game is opened; rebirths, theme changes and loads inside a session skip it.
 let newArmed = 0;
+const storageWarning = () => lsOk || cg.data ? "" : "Your browser is blocking saves on this page, so progress only lasts until you close the tab. To keep it, play at salvationbacon.github.io/Coin-Cascade, allow cookies/site data for this site, or use Cloud Save or Export Save in Settings.";
 function openTitle() {
   titleOpen = true; holding = false;
   cgPlay(false);
@@ -4673,6 +4691,7 @@ function openTitle() {
   $("tPrivacy").hidden = !PORTAL;
   $("tMusic").textContent = settings.music ? "MUSIC: ON" : "MUSIC: OFF";
   $("tInfo").textContent = has ? `Save: ${fmt(bank)} coins · ${fmt(earned)} earned · ${rebirths} rebirth${rebirths === 1 ? "" : "s"}${ascensions ? ` · ${ascensions} ascension${ascensions === 1 ? "" : "s"}` : ""}` : "No save yet: press START.";
+  if (storageWarning()) $("tInfo").textContent = storageWarning(); // blocked storage matters more than the save line
   $("menu").hidden = false;
   $("title").hidden = false;
   setTimeout(() => $("tContinue").focus(), 50);
