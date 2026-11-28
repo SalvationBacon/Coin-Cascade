@@ -1073,7 +1073,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.35.0";
+const VERSION = "1.35.1";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1103,6 +1103,7 @@ const wl = id => wups[id] || 0;
 let parts = (saved && saved.parts) || 0, partsTotal = (saved && saved.partsTotal) || 0, rebuilds = (saved && saved.rebuilds) || 0, gemsRb = (saved && saved.gemsRb) || 0;
 let autoAscOn = saved ? saved.autoAscOn !== false : true, autoAscAt = saved && saved.autoAscAt != null ? saved.autoAscAt : 5;
 // Token Buyer and Gem Buyer (Workshop) spend tokens and gems on the prestige trees for you
+let quickBankOn = saved ? saved.quickBankOn !== false : true;
 let tokBuyOn = saved ? saved.tokBuyOn !== false : true, gemBuyOn = saved ? saved.gemBuyOn !== false : true, prestBuyT = 0;
 // "best rate" for Auto Ascend: when the last ascension began (play time), and the best gems-per-second seen since
 let ascT = saved && saved.ascT != null ? saved.ascT : (saved && saved.stats && saved.stats.playTime) || 0, ascPk = (saved && saved.ascPk) || 0, rebPk = 0;
@@ -1728,7 +1729,7 @@ function drawBoard() {
     g.fillRect(bx(x0), by(BOARD.slotTop), w * PX, (BOARD.slotTop - BOARD.exitY) * PX);
     // shrink the label until it fits its slot (a big jackpot like ×11 in the narrow middle slot)
     // too long for a readable size? drop the × and show just the number, as big as fits
-    let pk = null; try { if (m === 0 && SLOT_KIND[k] === 0 && al("pockets")) pk = (pockets[k] || [0])[0] + "/" + pocketSize(); } catch {}
+    let pk = null; try { if (SLOT_KIND[k] === 0 && al("pockets") && !chOn("jackonly") && !chOn("edgeonly")) pk = (pockets[k] || [0])[0] + "/" + pocketSize(); } catch {}
     const num = String(Math.round(m * 10) / 10), room = w * PX - 4, top = w < 0.7 ? 10 : 12;
     let label = pk || "×" + num, fs = top;
     const fits = (t, f) => { g.font = f + 'px "Press Start 2P", monospace'; return g.measureText(t).width <= room; };
@@ -1770,7 +1771,8 @@ const PEG_TYPES = {
   double: { name: "Doubler Peg", up: "doublepeg", color: 0xff5a5a },
   magnet: { name: "Magnet Peg", count: () => wl("magnetpeg"), color: 0x5fe0b0 }, // Workshop: coins that touch it get pulled toward the jackpot
 };
-const pegCount = type => PEG_TYPES[type].count ? PEG_TYPES[type].count() : lvl(PEG_TYPES[type].up);
+const pegBonus = type => { try { return type === "gold" ? al("goldstart") : type === "split" ? al("splitstart") : 0; } catch { return 0; } };
+const pegCount = type => PEG_TYPES[type].count ? PEG_TYPES[type].count() : lvl(PEG_TYPES[type].up) + pegBonus(type);
 const specialGroup = new THREE.Group(); scene.add(specialGroup);
 const specialGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.34, 10); specialGeo.rotateX(Math.PI / 2);
 const haloGeo = new THREE.RingGeometry(0.17, 0.22, 16);
@@ -2122,18 +2124,19 @@ function onSlot(c, mult, slot) {
   const g = boardMeshes.get(c); if (g) { scene.remove(g); boardMeshes.delete(c); }
   const at = new THREE.Vector3(c.x, BOARD.exitY + 0.3, BOARD_Z);
   let base = BASE_SLOTS[slot];
+  // Coin Pockets: a ×0 slot always catches the coin (whatever No More Zeros or Lucky Zero would do)
+  if (al("pockets") && base === 0 && !chOn("jackonly") && !chOn("edgeonly")) { // (not while a challenge says only certain slots pay)
+    const pk = pockets[slot] || (pockets[slot] = [0, 0]); pk[0]++; pk[1] += (c.v || 1) * (c.hh || 1);
+    if (pk[0] >= pocketSize()) {
+      _eq.setFromAxisAngle(new THREE.Vector3(0, 0, 1), c.a).multiply(_qx);
+      const win = pk[1] * pocketMult(); pockets[slot] = [0, 0];
+      const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, win, 0, _eq.clone()); coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
+      popAt(at, `POCKET ×${pocketMult()} = ${fmtV(win)}`, "big"); sfx.fanfare(); stats.pockets = S("pockets") + 1;
+    } else { popAt(at, `POCKET ${pk[0]}/${pocketSize()}`, ""); sfx.click(); }
+    drawBoard(); return;
+  }
   if (mult === 0) {
     if (Math.random() < luckyZero()) { mult = 1; base = 1; popAt(at, "SAVED", ""); sfx.lucky(); }
-    else if (al("pockets") && BASE_SLOTS[slot] === 0) {
-      const pk = pockets[slot] || (pockets[slot] = [0, 0]); pk[0]++; pk[1] += (c.v || 1) * (c.hh || 1);
-      if (pk[0] >= pocketSize()) {
-        _eq.setFromAxisAngle(new THREE.Vector3(0, 0, 1), c.a).multiply(_qx);
-        const win = pk[1] * pocketMult(); pockets[slot] = [0, 0];
-        const coin = spawnCoin(c.x, BOARD.exitY, BOARD_Z, win, 0, _eq.clone()); coin.body.setLinvel({ x: c.vx, y: c.vy, z: 0.6 }, true);
-        popAt(at, `POCKET ×${pocketMult()} = ${fmtV(win)}`, "big"); sfx.fanfare(); stats.pockets = S("pockets") + 1;
-      } else { popAt(at, `POCKET ${pk[0]}/${pocketSize()}`, ""); sfx.click(); }
-      drawBoard(); return;
-    }
     else { popAt(at, "×0", "lost"); sfx.lost(); return; }
   }
   // Hand the coin to the pusher, standing on edge, now worth its multiplier
@@ -2459,7 +2462,7 @@ function stepPhysics(counting) {
 const BASE_SLOTS = BOARD.slots.slice();
 // Coin Pockets: a ×0 slot holds on to the coins it catches, then pays them all out at once
 const pocketSize = () => 8;
-const pocketMult = () => 2 + al("pockets");
+const pocketMult = () => 2 + al("pockets") + wl("zeros"); // No More Zeros adds to pockets instead of replacing them
 const pockets = (saved && saved.pockets) || {}; // slot -> [coins caught, their value]
 const lvl = id => ups[id] || 0;
 const rl = id => rups[id] || 0;
@@ -2475,13 +2478,13 @@ const luckyZero = (l = lvl("lucky")) => 0.1 * l;
 const doubleDrop = (l = lvl("double")) => 0.05 * l;
 const pushPeriod = (l = lvl("pusher")) => PUSH_PERIOD * Math.pow(0.88, l) * Math.pow(0.85, wl("motor")) * Math.pow(0.9, chRw("heavy")) * (chOn("heavy") ? 1.6 * (1 + 0.15 * chSev("heavy")) : 1);
 const coinSpeed = (l = lvl("coinspeed")) => (1 + 0.15 * l) * (chOn("heavy") ? 0.5 * Math.pow(0.9, chSev("heavy")) : 1);
-const eventsLvl = () => Math.max(lvl("events"), rl("eventstart"));
+const eventsLvl = () => lvl("events") + rl("eventstart");
 const eventGap = (l = eventsLvl()) => 150 / (1 + 0.3 * Math.max(0, l - 1)) / (1 + 0.15 * al("evmaster"));
 const eventLen = (l = lvl("eventlen")) => 1 + 0.2 * l;
 const autoOwned = () => lvl("auto") > 0 || rl("autostart") > 0;
 // rebirth tree effects
 const markMult = () => 1 + 0.1 * rebuilds; // Machine Mark: every rebuild adds +10% payouts, forever
-const payoutMult = (l = rl("golden")) => achPayMult() * markMult() * Math.pow(1.25, wl("overclock")) * (1 + 0.5 * wl("plating")) * (1 + 0.25 * l) * (1 + Math.min(tokens * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chRw("leaky")) * (chOn("leaky") ? 0.5 * Math.pow(0.9, chSev("leaky")) : 1);
+const payoutMult = (l = rl("golden")) => achPayMult() * markMult() * Math.pow(1.25, wl("overclock")) * (1 + 0.5 * wl("plating")) * (1 + 0.25 * l) * (1 + Math.min(tokensAsc * 0.01, 0.1 * rl("tokenint"))) * (1 + 0.5 * al("shine")) * (msHas("asc1") ? 1.15 : 1) * (1 + msPayout()) * (1 + 0.15 * chRw("leaky")) * (chOn("leaky") ? 0.5 * Math.pow(0.9, chSev("leaky")) : 1);
 const HEADSTART = [0, 10, 30, 100, 300, 1000];
 const startCoins = (l = rl("headstart")) => HEADSTART[l] + 100 * al("gemstart");
 const tokenMult = (l = rl("tokens")) => Math.pow(1.2, wl("tokmint")) * (1 + wl("tokpress")) * (achRow(3) ? 1.1 : 1) * (msHas("chlv15") ? 1.1 : 1) * (msHas("reb25") ? 1.1 : 1) * (1 + 0.2 * l) * (1 + 0.5 * al("fountain")) * (msHas("reb5") ? 1.1 : 1) * (msHas("gems10") ? 1.1 : 1);
@@ -2510,7 +2513,7 @@ const UPGRADES = [
   { id: "rails", name: "Side Rails", x: 3, y: 0, parent: "pusher", max: 1, base: 150, grow: 1, text: l => l ? "No coins lost off the sides" : "Coins can fall off the sides" },
   { id: "hothand", name: "Hot Hand", x: -3, y: 1, parent: "double", max: 1, base: 60, grow: 1, text: l => l ? `Dropping by hand heats up: a hot hand's coins are worth up to +${Math.round(100 * hotCap())}%` : "Hand drops and auto drops pay the same" },
   { id: "marker", name: "Bonus Marker", x: 2, y: -3, parent: "wide", max: 1, base: 200, grow: 1, text: l => l ? `A ×${markerMult()} marker glides over the slots: land a coin under it for the bonus` : "No bonus marker" },
-  { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 3.0, text: l => l ? `An event about every ${Math.round(eventGap(Math.max(l, rl("eventstart"))))}s` : "No random events" },
+  { id: "events", name: "Random Events", x: 1, y: 1, parent: "coinspeed", max: 5, base: 60, grow: 3.0, text: l => l ? `An event about every ${Math.round(eventGap(l + rl("eventstart")))}s` : "No random events" },
   { id: "wheel", name: "Prize Wheel", x: 3, y: 1, parent: "eventlen", max: 1, base: 200, grow: 1, text: l => l ? "Earning charges the prize wheel" : "Unlocks the prize wheel" },
   { id: "wheelfast", name: "Fast Charge", x: 3, y: 2, parent: "wheel", max: 5, base: 150, grow: 2, text: l => `The wheel charges ${pct(1 + 0.2 * l)} as fast` },
   { id: "eventlen", name: "Longer Events", x: 2, y: 1, parent: "events", max: 5, base: 250, grow: 2.4, text: l => `Events last ${pct(eventLen(l))} as long` },
@@ -2540,11 +2543,11 @@ const RUPGRADES = [
   { id: "autostart", name: "Auto From Start", x: -1, y: 2, parent: "autounlock", max: 1, base: 25, grow: 1, text: l => l ? "Auto Dropper owned every run" : "Buy Auto Dropper each run" },
   { id: "tokens", name: "Token Boost", x: 1, y: 0, parent: "golden", max: 10, base: 2, grow: 1.8, text: l => `${pct(tokenMult(l))} tokens per rebirth` },
   { id: "cheaper", name: "Bulk Discount", x: 2, y: 0, parent: "tokens", max: 5, base: 4, grow: 2, text: l => `Machine upgrades cost ${pct(cheaper(l))}` },
-  { id: "eventstart", name: "Event Pass", x: 1, y: 1, parent: "tokens", max: 1, base: 6, grow: 1, text: l => l ? "Random events from the start" : "Unlock events each run" },
+  { id: "eventstart", name: "Event Pass", x: 1, y: 1, parent: "tokens", max: 1, base: 6, grow: 1, text: l => l ? "Random events from the start, one level better than your Random Events upgrade" : "Unlock events each run" },
   { id: "weighted", name: "Weighted Coin", x: 0, y: -1, parent: "golden", max: 5, base: 3, grow: 2, text: l => `Win ${pct(flipOdds(l))} of coin flips` },
   // tray branch (down)
   { id: "bankbonus", name: "Bank Bonus", x: 0, y: 1, parent: "golden", max: 5, base: 2, grow: 1.8, text: l => l ? `Pressing BANK yourself adds +${3 * l}%` : "No bonus for banking by hand" },
-  { id: "quickbank", name: "Quick Bank", x: 0, y: 2, parent: "bankbonus", max: 1, base: 4, grow: 1, text: l => l ? "The tray banks itself when half full" : "The tray banks itself when full" },
+  { id: "quickbank", name: "Quick Bank", x: 0, y: 2, parent: "bankbonus", max: 1, base: 4, grow: 1, text: l => l ? `The tray banks itself when half full, with Bank Bonus (${quickBankOn ? "on" : "off"})` : "The tray banks itself when full" },
   { id: "piggy", name: "Piggy Bank", x: 0, y: 3, parent: "quickbank", max: 5, base: 6, grow: 2, text: l => l ? `Your coins earn 1% interest a minute (up to ${25 * l}× coin value)` : "No interest on your coins" },
   // board branch (up and left)
   { id: "sparesock", name: "Spare Sockets", x: -1, y: -2, parent: "sticky", max: 2, base: 5, grow: 3, text: l => `Up to ${4 + l + wl("morepegs")} splitter pegs` },
@@ -2559,7 +2562,7 @@ const RUPGRADES = [
   { id: "reelstart", name: "Reel Start", x: 2, y: -1, parent: "luckystreak", max: 1, base: 5, grow: 1, text: l => l ? "Slot reels unlocked from the start of every run" : "Unlock the slot reels each run" },
   { id: "chargedwheel", name: "Charged Wheel", x: 3, y: -1, parent: "reelstart", max: 1, base: 4, grow: 1, text: l => l ? "The prize wheel starts each run half charged" : "The prize wheel starts empty" },
   // long-term branch (right)
-  { id: "tokenint", name: "Token Interest", x: 3, y: 0, parent: "cheaper", max: 5, base: 5, grow: 2.5, text: l => l ? `Every unspent token: +1% payouts (up to +${10 * l}%)` : "Unspent tokens do nothing" },
+  { id: "tokenint", name: "Token Interest", x: 3, y: 0, parent: "cheaper", max: 5, base: 5, grow: 2.5, text: l => l ? `Every token earned this ascension: +1% payouts (up to +${10 * l}%)` : "Tokens earned do nothing" },
   { id: "heirloom", name: "Heirloom", x: 4, y: 0, parent: "tokenint", max: 1, base: 12, grow: 1, text: l => l ? `Keeps ${heir ? (UPGRADES.find(u => u.id === heir) || {}).name || "one upgrade" : "one machine upgrade (pick it below)"} through rebirths` : "Pick one machine upgrade to keep through rebirths" },
   { id: "chprep", name: "Challenge Prep", x: 2, y: 1, parent: "eventstart", max: 5, base: 3, grow: 2, text: l => `Challenge goals ${pct(Math.pow(0.95, l))}` },
 ];
@@ -2578,7 +2581,7 @@ const AUPGRADES = [
   { id: "fever", name: "Jackpot Fever", x: 0, y: -1, parent: "shine", max: 5, base: 3, grow: 2.2, text: l => `Middle slot +${2 * l}` },
   { id: "gemluck", name: "Gem Luck", x: -1, y: -1, parent: "fever", max: 5, base: 2, grow: 2, text: l => `+${5 * l}% Lucky Bounce` },
   { id: "offline", name: "Night Shift", x: 0, y: 1, parent: "shine", max: 5, base: 2, grow: 2, text: l => `Offline earnings ${50 + 10 * l}% of income, for up to ${8 + 2 * l} hours` },
-  { id: "goldstart", name: "Golden Start", x: -1, y: 1, parent: "startups", max: 3, base: 3, grow: 2.5, text: l => l ? `Every run starts with ${l} golden peg${l > 1 ? "s" : ""}` : "Runs start with no golden pegs" },
+  { id: "goldstart", name: "Golden Start", x: -1, y: 1, parent: "startups", max: 3, base: 3, grow: 2.5, text: l => l ? `${l} bonus golden peg${l > 1 ? "s" : ""} every run, on top of the ones you buy (and beyond the cap)` : "No bonus golden pegs" },
   { id: "wheelpro", name: "Wheel Master", x: -2, y: 0, parent: "startups", max: 5, base: 2, grow: 2, text: l => `Prize wheel prizes ${pct(1 + 0.25 * l)}` },
   { id: "pockets", name: "Coin Pockets", x: 1, y: -2, parent: "board2", max: 3, base: 4, grow: 2.5, text: l => l ? `The ×0 slots become pockets: every ${pocketSize()} coins caught pay out together at ×${pocketMult()}` : "The ×0 slots just swallow coins" },
   { id: "board2", name: "Second Board", x: 1, y: -1, parent: "fever", max: 1, base: 5, grow: 1, text: l => l ? "Choose between two slot layouts" : "Only the classic slot layout" },
@@ -2590,7 +2593,7 @@ const AUPGRADES = [
   { id: "quickbuy", name: "Quick Buyer", x: 1, y: 3, parent: "autobuy", max: 3, base: 4, grow: 2, text: l => `Auto Buyer buys ${l >= 3 ? "up to 3 upgrades" : "an upgrade"} every ${[2, 1, 0.5, 0.5][l]}s` },
   { id: "autobuy", name: "Auto Buyer", x: 1, y: 2, parent: "autoreb", max: 1, base: 6, grow: 1, text: l => l ? `Buys the cheapest machine upgrade you can afford (${autoBuyOn ? "on" : "off"})` : "You buy every upgrade by hand" },
   { id: "rebbonus", name: "Token Bonus", x: 0, y: 2, parent: "offline", max: 5, base: 3, grow: 2, text: l => `+${l} token${l === 1 ? "" : "s"} on every rebirth` },
-  { id: "splitstart", name: "Splitter Start", x: -1, y: 2, parent: "goldstart", max: 2, base: 4, grow: 3, text: l => l ? `Every run starts with ${l} splitter peg${l > 1 ? "s" : ""}` : "Runs start with no splitter pegs" },
+  { id: "splitstart", name: "Splitter Start", x: -1, y: 2, parent: "goldstart", max: 2, base: 4, grow: 3, text: l => l ? `${l} bonus splitter peg${l > 1 ? "s" : ""} every run, on top of the ones you buy (and beyond the cap)` : "No bonus splitter pegs" },
   { id: "gemstart", name: "Gem Purse", x: -2, y: 1, parent: "goldstart", max: 5, base: 1, grow: 2, text: l => `Every run starts with +${100 * l} coins` },
   { id: "luck7", name: "Lucky Sevens", x: -3, y: 0, parent: "wheelpro", max: 4, base: 2, grow: 2, text: l => `7s and 10s on the reels ${pct(1 + 0.25 * l)} as often` },
   { id: "mystmaster", name: "Mystery Master", x: -2, y: -1, parent: "gemluck", max: 3, base: 3, grow: 2.5, text: l => `Mystery coins pay ×0 ${pct(Math.pow(0.75, l))} as often` },
@@ -2604,14 +2607,14 @@ const WUPGRADES = [
   { id: "plating", name: "Gold Plating", x: 0, y: 0, parent: null, max: 10, base: 1, grow: 1.7, text: l => `All payouts +${50 * l}%` },
   { id: "jack10", name: "×10 Jackpot", x: 0, y: -1, parent: "plating", max: 1, base: 3, grow: 1, text: l => l ? "The jackpot slot is a ×10" : "The jackpot slot is a ×5" },
   { id: "edges", name: "Golden Edges", x: -1, y: -1, parent: "jack10", max: 3, base: 3, grow: 2, text: l => `The ×3 slots pay +${l} more` },
-  { id: "zeros", name: "No More Zeros", x: 1, y: -1, parent: "jack10", max: 2, base: 4, grow: 2, text: l => `The ×0 slots pay ×${l}` },
+  { id: "zeros", name: "No More Zeros", x: 1, y: -1, parent: "jack10", max: 2, base: 4, grow: 2, text: l => `The ×0 slots pay ×${l} (with Coin Pockets: pockets pay +${l}× instead)` },
   { id: "press", name: "Coin Press", x: 1, y: 0, parent: "plating", max: 5, base: 2, grow: 2, text: l => `Every coin you drop is worth +${l}` },
   { id: "motor", name: "Pusher Motor", x: 2, y: 0, parent: "press", max: 3, base: 2, grow: 2, text: l => `The pusher moves ${pct(1 / Math.pow(0.85, l))} as fast` },
   { id: "morepegs", name: "Peg Sockets", x: 0, y: 1, parent: "plating", max: 3, base: 3, grow: 2, text: l => `Up to ${6 + l} golden, ${4 + rl("sparesock") + l} splitter and ${2 + l} magnet pegs` },
   { id: "blueprints", name: "Blueprints", x: -1, y: 0, parent: "plating", max: 1, base: 4, grow: 1, text: l => l ? "Every run starts with each machine upgrade at level 1" : "Runs start from scratch" },
   { id: "gempress", name: "Gem Press", x: -2, y: 0, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% gems per ascension` },
   { id: "tokpress", name: "Token Press", x: -1, y: 1, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${100 * l}% tokens per rebirth` },
-  { id: "tokvault", name: "Token Vault", x: -1, y: 2, parent: "tokpress", max: 5, base: 3, grow: 2, text: l => `Keep ${10 * l}% of your tokens when you ascend` },
+  { id: "tokvault", name: "Token Vault", x: -1, y: 2, parent: "tokpress", max: 5, base: 3, grow: 2, text: l => `Start each ascension with ${10 * l}% of the tokens you earned in the last one` },
   { id: "pegmover", name: "Peg Mover", x: 1, y: 2, parent: "magnetpeg", max: 1, base: 3, grow: 1, text: l => l ? "Move any special peg wherever you like. Use it from here or the Arcade." : "You can't move special pegs" },
   { id: "magnetpeg", name: "Magnet Pegs", x: 1, y: 1, parent: "morepegs", get max() { return 2 + wl("morepegs"); }, base: 4, grow: 3, text: l => l ? `${l} magnet peg${l > 1 ? "s" : ""} on random pegs: coins that touch one get pulled toward the jackpot` : "No magnet pegs" },
   { id: "neigh", name: "Lucky Neighbours", x: 2, y: -1, parent: "zeros", max: 2, base: 5, grow: 2.5, text: l => l ? `The slots beside the jackpot pay at least ×${1 + l}` : "The slots beside the jackpot pay their usual amount" },
@@ -2783,6 +2786,11 @@ function renderInfo() {
     t.addEventListener("click", () => { set(!get()); save(); renderInfo(); });
     const p = document.createElement("p"); p.className = "c"; p.textContent = "It never buys automation (Automation, Auto From Start, Auto Rebirth, Auto Buyer), so nothing switches on that you didn't choose.";
     info.append(t, p);
+  }
+  if (u.id === "quickbank" && l > 0) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tog";
+    t.textContent = quickBankOn ? "Quick Bank is ON (click to switch off)" : "Quick Bank is OFF (click to switch on)";
+    t.addEventListener("click", () => { quickBankOn = !quickBankOn; save(); renderInfo(); }); info.appendChild(t);
   }
   if (u.id === "autobuy" && l > 0) {
     const t = document.createElement("button"); t.type = "button"; t.className = "tog";
@@ -3556,7 +3564,8 @@ function doRebuild() {
 function doAscend() {
   const g = gemGain(); if (g < 1) return;
   cgHappy();
-  gems += g; gemsTotal += g; gemsRb += g; ascensions++; tokensAsc = 0; tokens = Math.floor(tokens * 0.1 * wl("tokvault"));
+  const earnedT = tokensAsc;
+  gems += g; gemsTotal += g; gemsRb += g; ascensions++; tokensAsc = 0; tokens = Math.floor(earnedT * 0.1 * wl("tokvault")); // Token Vault: a head start from the tokens you earned
   ascT = S("playTime"); ascPk = 0;
   for (const k in rups) delete rups[k];
   store.set(SAVE_KEY, freshRun({ bank: 0, chActive: null }));
@@ -3566,8 +3575,6 @@ function doAscend() {
 function startUps() {
   const u = {}, L = al("startups");
   if (L) for (const id of ["regen", "cooldown", "coinspeed"]) u[id] = Math.min(2 * L, UPGRADES.find(x => x.id === id).max);
-  if (al("goldstart")) u.goldpeg = Math.max(u.goldpeg || 0, al("goldstart"));
-  if (al("splitstart")) { u.goldpeg = Math.max(u.goldpeg || 0, 1); u.splitpeg = Math.max(u.splitpeg || 0, al("splitstart")); }
   if (rl("reelstart")) u.reels = 1;
   if (wl("blueprints")) for (const x of UPGRADES) if (x.max > 1 && !x.peg && !u[x.id]) u[x.id] = 1; // Blueprints
   if (rl("heirloom") && heir && ups[heir]) u[heir] = Math.max(u[heir] || 0, ups[heir]); // Heirloom: one upgrade keeps its level
@@ -3577,7 +3584,7 @@ function startUps() {
 function freshRun(extra) {
   return Object.assign({ bank: startCoins(), earned, dropped, up: startUps(), autoOn, tokens, rebirths, runEarned: 0, rup: rups, inPlay: 0,
     stats, msDone, chDone, ach: achDone, achV: 2, msV: 2, layout, chActive, pegs: al("keeppegs") ? pegMap : {}, gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt,
-    goldRandom: true, pegsRandom: true, runMax: 0, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tokBuyOn, gemBuyOn, ascT, ascPk, wheelCharge: rl("chargedwheel") ? wheelNeed() * 0.5 : 0, t: Date.now(), coins: null }, extra);
+    goldRandom: true, pegsRandom: true, runMax: 0, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, quickBankOn, tokBuyOn, gemBuyOn, ascT, ascPk, wheelCharge: rl("chargedwheel") ? wheelNeed() * 0.5 : 0, t: Date.now(), coins: null }, extra);
 }
 let toastTimer = 0;
 function showToast(title, text) {
@@ -3823,7 +3830,7 @@ function save() {
   const r3 = v => Math.round(v * 1000) / 1000;
   store.set(SAVE_KEY, {
     bank, earned, dropped, up: ups, autoOn, tokens, rebirths, runEarned, rup: rups, inPlay, stats, msDone, chDone, chActive, pegs: pegMap, goldRandom: true, pegsRandom: true, runMax, ach: achDone, achV: 2, msV: 2, layout, heir, autoBuyOn, wup: wups, parts, partsTotal, rebuilds, gemsRb, autoAscOn, autoAscAt, tray: coinTray.filter(c => !c.out).map(c => c.v).concat(flyers.map(f => f.v)),
-    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, tokBuyOn, gemBuyOn, ascT, ascPk, pockets, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
+    gems, ascensions, tokensAsc, gemsTotal, aup: aups, autoRebOn, autoRebAt, runTime, incomeRate, wheelCharge, shuffleAt, scratchAt, quickBankOn, tokBuyOn, gemBuyOn, ascT, ascPk, pockets, t: lastSaveT, sid: SID, pusherT, inflight: board.coins.length,
     coins: coins.map(c => { const t = c.body.translation(), q = c.body.rotation(); return [c.prize ? "p:" + c.prize : c.mystery ? "m" : c.value, c.value, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w)]; }),
   });
 }
@@ -3925,7 +3932,9 @@ function addTrayCoin(v, x, faceVal = v, face = null, y = null, vy = 40, myst = n
   coinTray.push({ v, x: xx, y: y != null ? Math.min(y, FLOOR - RC) : -RC, vx: (Math.random() - 0.5) * 30, vy: Math.min(vy, 400), face: face || flyFace(Math.max(1, Math.round(faceVal))), out: false,
     tilt: 0.25 + Math.random() * 0.7, ang: (Math.random() - 0.5) * 0.9, depth: Math.random(), myst, mt: 0 });
   if (!settings.seenBank) { settings.seenBank = true; saveSettings(); showToast("YOUR COIN TRAY", "Coins land in the tray. Press BANK to spend them."); }
-  if (trayLive().length >= (rl("quickbank") ? Math.ceil(TRAY_CAP / 2) : TRAY_CAP)) bankTray(true);
+  const nLive = trayLive().length;
+  if (nLive >= TRAY_CAP) bankTray(true);
+  else if (rl("quickbank") && quickBankOn && nLive >= Math.ceil(TRAY_CAP / 2)) bankTray("quick"); // Quick Bank counts as your own BANK
   updateTrayHud();
 }
 // empty the tray into your coins: the floor opens and the coins drop out the bottom
@@ -3934,12 +3943,12 @@ function bankTray(auto) {
   let amt = 0;
   for (const c of live) { amt += c.v; c.out = true; c.vy = 30 + Math.random() * 40; c.vx = 0; }
   stats.banks = S("banks") + 1;
-  if (auto) stats.fullBanks = S("fullBanks") + 1;
-  else { stats.bigBank = Math.max(S("bigBank"), live.length); if (live.length === 1) stats.penny = 1; if (live.length === TRAY_CAP - 1) stats.hoard = 1; }
-  const bonus = (auto ? 0 : amt * 0.03 * rl("bankbonus")) + amt * 0.05 * al("goldtray"); // Bank Bonus: pressing BANK yourself pays a little extra
+  if (auto === true) stats.fullBanks = S("fullBanks") + 1;
+  else if (!auto) { stats.bigBank = Math.max(S("bigBank"), live.length); if (live.length === 1) stats.penny = 1; if (live.length === TRAY_CAP - 1) stats.hoard = 1; }
+  const bonus = (auto === true ? 0 : amt * 0.03 * rl("bankbonus")) + amt * 0.05 * al("goldtray"); // Bank Bonus: pressing BANK yourself pays a little extra
   bank += amt + bonus; bankedFx = 1.2;
   if (bonus > 0) setTimeout(() => sfx.kaching(), 120);
-  $("jarUnit").textContent = `${auto ? "Tray full: banked" : "Banked"} +${fmtV(amt + bonus)}${bonus ? ` (bonus ${fmtV(bonus)})` : ""}`;
+  $("jarUnit").textContent = `${auto === true ? "Tray full: banked" : auto ? "Quick Bank:" : "Banked"} +${fmtV(amt + bonus)}${bonus ? ` (bonus ${fmtV(bonus)})` : ""}`;
   sfx.bonus(); refreshHud(); save(); updateTrayHud();
 }
 function updateTrayHud() {
@@ -4569,7 +4578,7 @@ function tick(dt) {
   if (al("autobuy") && autoBuyOn && (autoBuyT += dt) >= [2, 1, 0.5, 0.5][Math.min(3, al("quickbuy"))]) {
     autoBuyT = 0; const T = TREES.main;
     for (let k = 0; k < (al("quickbuy") >= 3 ? 3 : 1); k++) {
-      const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x)).sort((a, b) => T.cost(a) - T.cost(b))[0];
+      const u = UPGRADES.filter(x => nodeState(T, x) === "open" && lvl(x.id) < x.max && bank >= T.cost(x) && !(x.id === "rails" && !(achDone.a_lost && achDone.a_side100))).sort((a, b) => T.cost(a) - T.cost(b))[0];
       if (!u) break; buy(T, u); if (!k) sfx.tick();
     }
   }
