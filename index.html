@@ -1073,7 +1073,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.35.1";
+const VERSION = "1.35.2";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -2610,19 +2610,19 @@ const WUPGRADES = [
   { id: "zeros", name: "No More Zeros", x: 1, y: -1, parent: "jack10", max: 2, base: 4, grow: 2, text: l => `The ×0 slots pay ×${l} (with Coin Pockets: pockets pay +${l}× instead)` },
   { id: "press", name: "Coin Press", x: 1, y: 0, parent: "plating", max: 5, base: 2, grow: 2, text: l => `Every coin you drop is worth +${l}` },
   { id: "motor", name: "Pusher Motor", x: 2, y: 0, parent: "press", max: 3, base: 2, grow: 2, text: l => `The pusher moves ${pct(1 / Math.pow(0.85, l))} as fast` },
-  { id: "morepegs", name: "Peg Sockets", x: 0, y: 1, parent: "plating", max: 3, base: 3, grow: 2, text: l => `Up to ${6 + l} golden, ${4 + rl("sparesock") + l} splitter and ${2 + l} magnet pegs` },
+  { id: "morepegs", name: "Peg Sockets", x: 1, y: 1, parent: "magnetpeg", max: 3, base: 4, grow: 2, text: l => `Up to ${6 + l} golden, ${4 + rl("sparesock") + l} splitter and ${2 + l} magnet pegs` },
   { id: "blueprints", name: "Blueprints", x: -1, y: 0, parent: "plating", max: 1, base: 4, grow: 1, text: l => l ? "Every run starts with each machine upgrade at level 1" : "Runs start from scratch" },
   { id: "gempress", name: "Gem Press", x: -2, y: 0, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${50 * l}% gems per ascension` },
   { id: "tokpress", name: "Token Press", x: -1, y: 1, parent: "blueprints", max: 5, base: 2, grow: 2, text: l => `+${100 * l}% tokens per rebirth` },
   { id: "tokvault", name: "Token Vault", x: -1, y: 2, parent: "tokpress", max: 5, base: 3, grow: 2, text: l => `Start each ascension with ${10 * l}% of the tokens you earned in the last one` },
-  { id: "pegmover", name: "Peg Mover", x: 1, y: 2, parent: "magnetpeg", max: 1, base: 3, grow: 1, text: l => l ? "Move any special peg wherever you like. Use it from here or the Arcade." : "You can't move special pegs" },
-  { id: "magnetpeg", name: "Magnet Pegs", x: 1, y: 1, parent: "morepegs", get max() { return 2 + wl("morepegs"); }, base: 4, grow: 3, text: l => l ? `${l} magnet peg${l > 1 ? "s" : ""} on random pegs: coins that touch one get pulled toward the jackpot` : "No magnet pegs" },
+  { id: "pegmover", name: "Peg Mover", x: 0, y: 2, parent: "magnetpeg", max: 1, base: 3, grow: 1, text: l => l ? "Move any special peg wherever you like. Use it from here or the Arcade." : "You can't move special pegs" },
+  { id: "magnetpeg", name: "Magnet Pegs", x: 0, y: 1, parent: "plating", get max() { return 2 + wl("morepegs"); }, base: 3, grow: 3, text: l => l ? `${l} magnet peg${l > 1 ? "s" : ""} on random pegs: coins that touch one get pulled toward the jackpot` : "No magnet pegs" },
   { id: "neigh", name: "Lucky Neighbours", x: 2, y: -1, parent: "zeros", max: 2, base: 5, grow: 2.5, text: l => l ? `The slots beside the jackpot pay at least ×${1 + l}` : "The slots beside the jackpot pay their usual amount" },
   // the Forge: endless upgrades with no top level, so the Workshop always has something to buy
   { id: "overclock", name: "Overclock", x: 3, y: 0, parent: "motor", max: Infinity, base: 4, grow: 1.5, text: l => `All payouts ×${fmtV(Math.pow(1.25, l))}` },
   { id: "gemforge", name: "Gem Forge", x: -2, y: 1, parent: "gempress", max: Infinity, base: 5, grow: 1.6, text: l => `Gems per ascension ×${fmtV(Math.pow(1.2, l))}` },
   { id: "tokmint", name: "Token Mint", x: -2, y: 2, parent: "tokvault", max: Infinity, base: 4, grow: 1.55, text: l => `Tokens per rebirth ×${fmtV(Math.pow(1.2, l))}` },
-  { id: "lathe", name: "Parts Lathe", x: 0, y: 2, parent: "morepegs", max: Infinity, base: 6, grow: 1.8, text: l => `Parts per rebuild ×${fmtV(Math.pow(1.15, l))}` },
+  { id: "lathe", name: "Parts Lathe", x: 1, y: 2, parent: "morepegs", max: Infinity, base: 6, grow: 1.8, text: l => `Parts per rebuild ×${fmtV(Math.pow(1.15, l))}` },
   { id: "tiltbar", name: "Tilt Bar", x: 2, y: 1, parent: "motor", max: 3, base: 3, grow: 2.5, text: l => l ? `A TILT button by the tray shoves the whole pile forward (every ${tiltCd()}s)` : "No way to give the machine a shove" },
   { id: "edgemag", name: "Edge Magnet", x: 3, y: 1, parent: "tiltbar", max: 3, base: 4, grow: 2.5, text: l => l ? `Coins near the front edge are tugged over it (strength ${l})` : "Coins sit at the edge until pushed" },
   { id: "tokbuyer", name: "Token Buyer", x: -4, y: 0, parent: "autoasc", max: 1, base: 4, grow: 1, text: l => l ? `Buys the cheapest Rebirth tree upgrade you can afford (${tokBuyOn ? "on" : "off"})` : "You spend tokens by hand" },
