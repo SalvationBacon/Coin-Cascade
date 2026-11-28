@@ -1073,7 +1073,7 @@ const store = {
 };
 // Progress lives in one save object (per browser). A new game starts with 0 coins and an empty machine.
 const SAVE_KEY = "cc_save_v4";
-const VERSION = "1.35.2";
+const VERSION = "1.36.0";
 let titleOpen = false, welcomeReady = false, awayOn = false, compactOn = false;
 const coinTray = [], flyers = []; // coins in the tray ({ v, x, y, vx, vy, face, out }) and coins falling into it (see "The tray")
 // (above) title screen state (see "Title screen")
@@ -1224,9 +1224,10 @@ let chActive = (saved && saved.chActive) || null;
 // challenges have 5 levels: chHas(id) is how many you've beaten (0 to 5); older saves stored true for level 1
 const msHas = id => !!msDone[id], chHas = id => Number(chDone[id]) || 0, chOn = id => chActive === id;
 const CH_LEVELS = [1, 2.5, 6, 15, 40]; // goal multiplier for levels 1 to 5
-// after the first rebuild challenges never run out: level 6, 7, 8… each 2.5× the last
-const chEndless = () => rebuilds > 0 || partsTotal > 0;
-const chMaxed = id => !chEndless() && chHas(id) >= CH_LEVELS.length;
+// challenges have 5 levels; Challenge Ladder (Workshop) adds 5 more a level, with no limit. Each goal is 2.5× the last.
+const chCap = () => 5 + 5 * wl("chladder");
+const chEndless = () => chCap() > 5;
+const chMaxed = id => chHas(id) >= chCap();
 const chLvMult = n => n < CH_LEVELS.length ? CH_LEVELS[n] : CH_LEVELS[CH_LEVELS.length - 1] * Math.pow(2.5, n - CH_LEVELS.length + 1);
 // how much of a challenge's reward you have: one per level up to 5, then half a reward per level after that
 const chSev = id => chOn(id) ? chHas(id) : 0;
@@ -2623,6 +2624,7 @@ const WUPGRADES = [
   { id: "gemforge", name: "Gem Forge", x: -2, y: 1, parent: "gempress", max: Infinity, base: 5, grow: 1.6, text: l => `Gems per ascension ×${fmtV(Math.pow(1.2, l))}` },
   { id: "tokmint", name: "Token Mint", x: -2, y: 2, parent: "tokvault", max: Infinity, base: 4, grow: 1.55, text: l => `Tokens per rebirth ×${fmtV(Math.pow(1.2, l))}` },
   { id: "lathe", name: "Parts Lathe", x: 1, y: 2, parent: "morepegs", max: Infinity, base: 6, grow: 1.8, text: l => `Parts per rebuild ×${fmtV(Math.pow(1.15, l))}` },
+  { id: "chladder", name: "Challenge Ladder", x: 0, y: -2, parent: "jack10", max: Infinity, base: 3, grow: 1.7, text: l => `Challenges go up to level ${5 + 5 * l}` },
   { id: "tiltbar", name: "Tilt Bar", x: 2, y: 1, parent: "motor", max: 3, base: 3, grow: 2.5, text: l => l ? `A TILT button by the tray shoves the whole pile forward (every ${tiltCd()}s)` : "No way to give the machine a shove" },
   { id: "edgemag", name: "Edge Magnet", x: 3, y: 1, parent: "tiltbar", max: 3, base: 4, grow: 2.5, text: l => l ? `Coins near the front edge are tugged over it (strength ${l})` : "Coins sit at the edge until pushed" },
   { id: "tokbuyer", name: "Token Buyer", x: -4, y: 0, parent: "autoasc", max: 1, base: 4, grow: 1, text: l => l ? `Buys the cheapest Rebirth tree upgrade you can afford (${tokBuyOn ? "on" : "off"})` : "You spend tokens by hand" },
@@ -3260,7 +3262,7 @@ function renderStats() {
     ["Coins", [["Earned in total: ", fmt(earned)], ["Earned this run: ", fmt(runEarned)], ["In the vault: ", fmt(bank)], ["Biggest vault: ", fmt(stats.maxBank)], ["Income lately: ", `${fmtV(incomeRate * 60)} a minute`]]],
     ["Machine", [["Coins dropped: ", fmt(dropped)], ["×5 hits: ", fmt(stats.jackpots)], ["Best flip streak: ", String(stats.bestStreak)]]],
     ["Progress", [["Rebirths: ", fmt(rebirths)], ["Tokens earned: ", fmt(stats.tokensTotal || 0)], ["Ascensions: ", fmt(ascensions)], ["Gems earned: ", fmt(gemsTotal)], ...(rebuilds ? [["Rebuilds: ", fmt(rebuilds)], ["Machine Mark: ", `${rebuilds + 1} (+${10 * rebuilds}% payouts)`], ["Parts earned: ", fmt(partsTotal)]] : []),
-      ["Milestones: ", `${Object.keys(msDone).length} / ${MILESTONES.length}`], ["Challenge levels: ", chEndless() ? fmt(chLevelsTotal()) : `${chLevelsTotal()} / ${CHALLENGES.length * 5}`]]],
+      ["Milestones: ", `${Object.keys(msDone).length} / ${MILESTONES.length}`], ["Challenge levels: ", `${fmt(chLevelsTotal())} / ${fmt(CHALLENGES.length * chCap())}`]]],
   ];
   for (const [title, lines] of groups) w.appendChild(card("", title, lines));
 }
@@ -3341,7 +3343,7 @@ function renderHelp() {
     ["The endless game", [
       "Coin Cascade never runs out. Once you reach the Workshop, two things keep growing forever:",
       "Machine Mark: every rebuild raises your machine's Mark by one and adds +10% to all payouts, with no limit.",
-      "Endless challenges: after your first rebuild, every challenge keeps going past level 5, each level harder than the last.",
+      "Challenge Ladder (Workshop): every level raises the challenge level cap by 5, with no limit, so challenges keep getting harder as you get stronger.",
       "The Forge: four Workshop upgrades have no top level. Overclock (payouts ×1.25 a level), Gem Forge (gems ×1.2), Token Mint (tokens ×1.2) and Parts Lathe (parts ×1.15). Each level costs more parts, but every level makes the next rebuild come faster.",
     ]],
     ["Milestones", [
@@ -3356,7 +3358,7 @@ function renderHelp() {
     ["Challenges", [
       "Challenges (Goals → Challenges) open after your first rebirth. Starting one restarts your run with a handicap, such as no jackpot slot or no regen.",
       "Reach the goal to beat a level and earn its reward. Each challenge has 5 levels: every level the handicap gets harsher (for example Slow Hands goes from 3× to 5× slower drops) and the goal bigger, and you get the reward again.",
-      "Challenge rewards are permanent. After your first rebuild challenges never end: level 6 and up, each goal 2.5× the last, each new level's reward at half strength.",
+      "Challenge rewards are permanent. Challenge Ladder (Workshop) raises the cap past level 5: each goal 2.5× the last, each level past 5 giving its reward at half strength.",
       "You don't get tokens for the run you leave when you start a challenge, so rebirth first if you have tokens waiting.",
     ]],
     ["Saving and backups", [
@@ -3623,7 +3625,7 @@ function checkGoals() {
     $("bonusbar").textContent = `CHALLENGE ${c.name}: ${fmt(runEarned)} / ${fmt(chGoal(c))} earned`;
     if (runEarned >= chGoal(c)) {
       chDone[c.id] = chHas(c.id) + 1; chActive = null; applyUpgrades();
-      showToast(`CHALLENGE BEATEN: ${c.name.toUpperCase()} ${chHas(c.id) > 5 ? "LEVEL " + chHas(c.id) : chHas(c.id) + "/5"}`, `${c.reward}${chHas(c.id) > 5 ? " (half strength past level 5)" : ""}, forever`); save();
+      showToast(`CHALLENGE BEATEN: ${c.name.toUpperCase()} ${chHas(c.id)}/${chCap()}`, `${c.reward}${chHas(c.id) > 5 ? " (half strength past level 5)" : ""}, forever`); save();
     }
   }
 }
@@ -3632,7 +3634,7 @@ function updateChBadge() {
   const b = $("chBadge"), c = chActive && CHALLENGES.find(x => x.id === chActive);
   b.hidden = !c; if (!c) return;
   const goal = chGoal(c), lv = chHas(c.id) + 1;
-  $("chName").innerHTML = `<span class="chLbl">CHALLENGE · </span>`; $("chName").append(lv > 5 ? `${c.name} level ${lv}` : `${c.name} ${lv}/5`);
+  $("chName").innerHTML = `<span class="chLbl">CHALLENGE · </span>`; $("chName").append(`${c.name} ${lv}/${chCap()}`);
   $("chRule").textContent = chRule(c);
   $("chFill").style.width = Math.min(100, runEarned / goal * 100) + "%";
   $("chProg").textContent = `${fmt(runEarned)} / ${fmt(goal)} earned`;
@@ -3737,11 +3739,11 @@ let chArmed = { id: null, t: 0 };
 let showChHelp = false;
 function renderChallenges() {
   const w = goalsWrap();
-  const h = el("p", "glHead"); h.innerHTML = "<b></b> "; h.firstChild.textContent = chEndless() ? `${chLevelsTotal()} LEVELS BEATEN` : `${chLevelsTotal()} / ${CHALLENGES.length * 5} LEVELS`;
+  const h = el("p", "glHead"); h.innerHTML = "<b></b> "; h.firstChild.textContent = `${fmt(chLevelsTotal())} / ${fmt(CHALLENGES.length * chCap())} LEVELS`;
   h.append("Beat a run with a handicap for a permanent reward, again at every level."); w.appendChild(h);
   const hb = el("button", "glMore", showChHelp ? "▾ HOW CHALLENGES WORK" : "▸ HOW CHALLENGES WORK"); hb.type = "button";
   hb.addEventListener("click", () => { showChHelp = !showChHelp; renderTree(); }); w.appendChild(hb);
-  if (showChHelp) w.appendChild(el("p", "glHead", `Starting one restarts your run with its handicap; you don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Each level makes the handicap a little harsher and the goal bigger (×2.5 or so), and gives the reward again. ${chEndless() ? "Since your first rebuild they never end: past level 5 each reward counts half." : "After your first rebuild they keep going past level 5."}`));
+  if (showChHelp) w.appendChild(el("p", "glHead", `Starting one restarts your run with its handicap; you don't get tokens for the run you leave, so rebirth first if you have tokens waiting. Each level makes the handicap a little harsher and the goal bigger (×2.5 or so), and gives the reward again. ${chEndless() ? `Challenge Ladder lets them go up to level ${chCap()}; past level 5 each reward counts half.` : "Challenge Ladder in the Workshop raises the cap past level 5."}`));
   const order = c => chOn(c.id) ? 0 : (rebirths < c.need || ascensions < (c.needAsc || 0)) ? 3 : chMaxed(c.id) ? 2 : 1;
   let lastGroup = -1;
   for (const c of CHALLENGES.slice().sort((a, b) => order(a) - order(b))) {
@@ -3750,7 +3752,7 @@ function renderChallenges() {
     lastGroup = g;
     const r = el("div", "gr" + (on ? " on" : all ? " done" : locked ? " locked" : ""));
     const img = new Image(); img.src = iconURL("chal", on ? "#ffd24a" : "#8ff0e0", "#fff2a6"); img.alt = "";
-    r.append(img, el("span", "gn", `${c.name} · ${lv > 5 ? "level " + lv : lv + "/5"}`));
+    r.append(img, el("span", "gn", `${c.name} · ${lv}/${chCap()}`));
     if (on) {
       const q = el("button", "gb quit", "GIVE UP"); q.type = "button";
       q.addEventListener("click", () => { chActive = null; applyUpgrades(); save(); renderTree(); }); r.appendChild(q);
